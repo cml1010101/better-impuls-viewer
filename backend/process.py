@@ -1,4 +1,5 @@
 import numpy as np
+from astropy.timeseries import LombScargle
 
 def find_longest_x_campaign(data: np.ndarray, x_threshold: float) -> np.ndarray:
     """
@@ -102,9 +103,7 @@ def calculate_fourier_transform(data: np.ndarray) -> np.ndarray:
     
     return fourier_transform
 
-from astropy.timeseries import LombScargle
-
-def calculate_lomb_scargle(data: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+def calculate_lomb_scargle(data: np.ndarray, samples_per_peak: int = 10) -> tuple[np.ndarray, np.ndarray]:
     """
     Calculate the Lomb-Scargle periodogram of the given data.
     
@@ -112,11 +111,17 @@ def calculate_lomb_scargle(data: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     ----------
     data : np.ndarray
         A 2D numpy array where the first column is the x-axis data (time) and the second column is the y-axis data (flux).
+    samples_per_peak : int, optional
+        The number of frequency samples to use across each significant peak.
+        Increasing this value can help resolve plateaus into sharper peaks
+        by providing a denser frequency grid. Default is 10.
     
     Returns
     -------
-    np.ndarray
-        The Lomb-Scargle periodogram of the y-axis data.
+    tuple[np.ndarray, np.ndarray]
+        A tuple containing:
+        - frequency (np.ndarray): The frequencies at which the periodogram was calculated.
+        - power (np.ndarray): The Lomb-Scargle power at each frequency.
     """
     if data.shape[1] != 2:
         raise ValueError("Input data must be a 2D array with two columns (x and y).")
@@ -124,7 +129,63 @@ def calculate_lomb_scargle(data: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     time = data[:, 0]
     flux = data[:, 1]
     
-    # Calculate Lomb-Scargle periodogram
-    frequency, power = LombScargle(time, flux).autopower()
+    # Calculate Lomb-Scargle periodogram with configurable samples_per_peak
+    # Increasing samples_per_peak generates a denser frequency grid,
+    # which helps in resolving sharp peaks that might appear as plateaus
+    # if the sampling is too coarse.
+    ls = LombScargle(time, flux)
+    frequency, power = ls.autopower(samples_per_peak=samples_per_peak)
     
     return frequency, power
+
+def remove_y_outliers(data: np.ndarray, iqr_multiplier: float = 3.0) -> np.ndarray:
+    """
+    Removes outliers from the y-values of the input data using the
+    Interquartile Range (IQR) method.
+
+    Points are considered outliers if their y-value is below
+    Q1 - iqr_multiplier * IQR or above Q3 + iqr_multiplier * IQR,
+    where Q1 and Q3 are the first and third quartiles, and IQR is the
+    Interquartile Range (Q3 - Q1).
+
+    Args:
+        data (np.ndarray): A NumPy array of shape (n, 2) where each row
+                           is a (x, y) coordinate pair.
+        iqr_multiplier (float): The multiplier for the IQR to define the
+                               outlier bounds. A common value for "mild"
+                               outliers is 1.5, while 3.0 is often used
+                               for "extreme" outliers.
+
+    Returns:
+        np.ndarray: A new NumPy array with outliers removed.
+                    Returns an empty array if the input data is empty
+                    or if all points are removed as outliers.
+    """
+    if data.shape[0] == 0:
+        print("Input data is empty. No outliers to remove.")
+        return np.array([])
+    
+    if data.shape[1] != 2:
+        raise ValueError("Input data must be a 2D array with two columns (x and y).")
+
+    y_data = data[:, 1]
+
+    # Calculate Q1 (25th percentile) and Q3 (75th percentile)
+    Q1 = np.percentile(y_data, 25)
+    Q3 = np.percentile(y_data, 75)
+
+    # Calculate Interquartile Range (IQR)
+    IQR = Q3 - Q1
+
+    # Define outlier bounds
+    lower_bound = Q1 - iqr_multiplier * IQR
+    upper_bound = Q3 + iqr_multiplier * IQR
+
+    # Filter data: keep only points where y-value is within the bounds
+    filtered_indices = np.where((y_data >= lower_bound) & (y_data <= upper_bound))
+    filtered_data = data[filtered_indices]
+
+    if filtered_data.shape[0] == 0:
+        print("All data points were identified as outliers and removed.")
+
+    return filtered_data

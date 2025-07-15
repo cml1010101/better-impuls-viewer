@@ -33,7 +33,7 @@ def plot_data(data: np.ndarray, fourier_results: np.ndarray, periods: np.ndarray
     fig, axes = plt.subplots(1, 3, figsize=(18, 6)) 
 
     # --- Plot Original Data ---
-    axes[0].plot(data[:, 0], data[:, 1], label='Original Data', color='blue')
+    axes[0].scatter(data[:, 0], data[:, 1], label='Original Data', color='blue', s=10)
     axes[0].set_title(f'Star {star_number} - {telescope_name} - Original Data')
     axes[0].set_xlabel('X-axis')
     axes[0].set_ylabel('Y-axis')

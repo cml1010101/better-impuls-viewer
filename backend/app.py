@@ -1,7 +1,7 @@
 import argparse
 import os
 from display import plot_data
-from process import find_longest_x_campaign, sort_data, calculate_fourier_transform, calculate_lomb_scargle
+from process import find_longest_x_campaign, sort_data, calculate_fourier_transform, calculate_lomb_scargle, remove_y_outliers
 import pandas as pd
 import numpy as np
 
@@ -35,6 +35,7 @@ def main(args=None):
         print(data.shape)
         # Crop the largest consecutive segment of data
         data = find_longest_x_campaign(data, 0.1) # Use a threshold of 0.1 for x-axis values
+        data = remove_y_outliers(data)
         # Sort the data based on the first column (x-axis)
         data = sort_data(data)
 
@@ -46,6 +47,10 @@ def main(args=None):
         periods = np.zeros_like(frequencies)
         non_zero_freq_indices = frequencies != 0
         periods[non_zero_freq_indices] = 1.0 / frequencies[non_zero_freq_indices]
+
+        # Remove periods that are too small or too large
+        valid_period_indices = (periods > 0.1) & (periods < 20)
+        periods = periods[valid_period_indices]
 
         # Display the data and Fourier Transform results, passing periods instead of frequencies
         plot_data(data, powers, periods, star_number, telescope_name) # Changed fourier_results to powers
