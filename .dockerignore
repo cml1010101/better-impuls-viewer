@@ -1,0 +1,14 @@
+# Dockerignore file for backend
+.git
+.gitignore
+README.md
+frontend/
+ml-dataset/
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.DS_Store
+.vscode
+.idea
+*.md
