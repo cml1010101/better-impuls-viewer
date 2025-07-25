@@ -49,6 +49,7 @@ const Dashboard: React.FC = () => {
   const [campaignData, setCampaignData] = useState<DataPoint[]>([]);
   const [periodogramData, setPeriodogramData] = useState<PeriodogramPoint[]>([]);
   const [selectedPeriod, setSelectedPeriod] = useState<number | null>(null);
+  const [periodInputValue, setPeriodInputValue] = useState<string>(''); // Add controlled input state
   const [phaseFoldedData, setPhaseFoldedData] = useState<PhaseFoldedPoint[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -188,10 +189,31 @@ const Dashboard: React.FC = () => {
 
   const handlePeriodogramClick = (data: any) => {
     console.log('Periodogram clicked:', data);
-    if (data && data.activePayload && data.activePayload[0] && data.activePayload[0].payload) {
-      const period = data.activePayload[0].payload.period;
+    // Try different ways to access the period data from Recharts onClick
+    let period = null;
+    
+    if (data && data.activeLabel) {
+      // activeLabel often contains the x-axis value (period in our case)
+      period = data.activeLabel;
+    } else if (data && data.activePayload && data.activePayload[0] && data.activePayload[0].payload) {
+      period = data.activePayload[0].payload.period;
+    }
+    
+    if (period) {
       console.log('Selected period:', period);
       setSelectedPeriod(period);
+      setPeriodInputValue(period.toFixed(4)); // Update input field with clicked period
+    }
+  };
+
+  const handlePeriodInputChange = (value: string) => {
+    setPeriodInputValue(value);
+  };
+
+  const handlePeriodSubmit = () => {
+    const value = parseFloat(periodInputValue);
+    if (value && value >= 0.1 && value <= 20) {
+      setSelectedPeriod(value);
     }
   };
 
@@ -323,6 +345,8 @@ const Dashboard: React.FC = () => {
                 step="0.0001"
                 min="0.1"
                 max="20"
+                value={periodInputValue}
+                onChange={(e) => handlePeriodInputChange(e.target.value)}
                 style={{
                   padding: '0.5rem',
                   border: '2px solid #e1e8ed',
@@ -333,21 +357,12 @@ const Dashboard: React.FC = () => {
                 placeholder="e.g., 7.8"
                 onKeyPress={(e) => {
                   if (e.key === 'Enter') {
-                    const value = parseFloat((e.target as HTMLInputElement).value);
-                    if (value && value >= 0.1 && value <= 20) {
-                      setSelectedPeriod(value);
-                    }
+                    handlePeriodSubmit();
                   }
                 }}
               />
               <button
-                onClick={() => {
-                  const input = document.querySelector('input[type="number"]') as HTMLInputElement;
-                  const value = parseFloat(input.value);
-                  if (value && value >= 0.1 && value <= 20) {
-                    setSelectedPeriod(value);
-                  }
-                }}
+                onClick={handlePeriodSubmit}
                 style={{
                   padding: '0.5rem 1rem',
                   background: '#667eea',

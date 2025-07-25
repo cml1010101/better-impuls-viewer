@@ -5,6 +5,9 @@ from typing import List, Dict, Any, Optional
 import os
 import pandas as pd
 import numpy as np
+from functools import lru_cache
+import hashlib
+import time
 from process import find_all_campaigns, sort_data, calculate_lomb_scargle, remove_y_outliers
 
 app = FastAPI(title="Better Impuls Viewer API", version="1.0.0")
@@ -43,26 +46,84 @@ class PhaseFoldedData(BaseModel):
 DEFAULT_DATA_FOLDER = '~/Documents/impuls-data'
 DEFAULT_DATA_FOLDER = os.path.expanduser(DEFAULT_DATA_FOLDER)
 
+# In-memory caches for expensive operations
+_file_cache = {}  # Cache for loaded files
+_campaigns_cache = {}  # Cache for campaigns
+_periodogram_cache = {}  # Cache for periodograms
+_processed_data_cache = {}  # Cache for processed data
+
+def get_file_hash(filepath: str) -> str:
+    """Get a hash of the file for caching purposes"""
+    try:
+        # Use file modification time and size for a quick hash
+        stat = os.stat(filepath)
+        content = f"{filepath}_{stat.st_mtime}_{stat.st_size}"
+        return hashlib.md5(content.encode()).hexdigest()
+    except:
+        return hashlib.md5(filepath.encode()).hexdigest()
+
 def get_data_folder():
     """Get the data folder path"""
     return DEFAULT_DATA_FOLDER
 
 def load_data_file(filepath: str) -> np.ndarray:
-    """Load data from a .tbl file"""
+    """Load data from a .tbl file with caching"""
+    file_hash = get_file_hash(filepath)
+    
+    if file_hash in _file_cache:
+        return _file_cache[file_hash]
+    
     try:
         data = pd.read_table(filepath, header=None, sep=r'\s+', skiprows=[0, 1, 2])
         data_array = data.to_numpy()
         
         # If data has more than 2 columns, use only the first 2 (time, flux)
         if data_array.shape[1] > 2:
-            return data_array[:, :2]
+            result = data_array[:, :2]
+        else:
+            result = data_array
         
-        return data_array
+        # Cache the result
+        _file_cache[file_hash] = result
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error loading data file: {str(e)}")
 
+def get_campaigns_from_data(data: np.ndarray, threshold: float = 1.0) -> List[np.ndarray]:
+    """Get campaigns from data with caching"""
+    # Create a cache key based on data hash and threshold
+    data_hash = hashlib.md5(f"{data.tobytes()}_{threshold}".encode()).hexdigest()
+    
+    if data_hash in _campaigns_cache:
+        return _campaigns_cache[data_hash]
+    
+    # Sort data first
+    sorted_data = sort_data(data)
+    
+    # Find all campaigns
+    campaigns_data = find_all_campaigns(sorted_data, threshold)
+    
+    # Cache the result
+    _campaigns_cache[data_hash] = campaigns_data
+    return campaigns_data
+
 def get_campaigns_for_star_telescope(star_number: int, telescope: str) -> List[CampaignInfo]:
-    """Get the top 3 campaigns for a specific star and telescope from a single data file"""
+    """Get the top 3 campaigns for a specific star and telescope from a single data file with caching"""
+    cache_key = f"campaigns_{star_number}_{telescope}"
+    
+    # Check if we already have this in cache
+    if cache_key in _processed_data_cache:
+        cache_entry = _processed_data_cache[cache_key]
+        # Check if cache is still valid (file hasn't changed)
+        folder = get_data_folder()
+        filename = f"{star_number}-{telescope}.tbl"
+        filepath = os.path.join(folder, filename)
+        
+        if os.path.exists(filepath):
+            current_hash = get_file_hash(filepath)
+            if cache_entry.get('file_hash') == current_hash:
+                return cache_entry['campaigns']
+    
     folder = get_data_folder()
     filename = f"{star_number}-{telescope}.tbl"
     filepath = os.path.join(folder, filename)
@@ -71,13 +132,11 @@ def get_campaigns_for_star_telescope(star_number: int, telescope: str) -> List[C
         return []
     
     try:
-        # Load data from the single file
+        # Load data from the single file (cached)
         data = load_data_file(filepath)
-        data = sort_data(data)
         
-        # Find all campaigns in the data using time threshold
-        # Use 10 day threshold to identify gaps between campaigns (since campaigns are separated by 120 days)
-        campaigns_data = find_all_campaigns(data, 1.0)
+        # Find all campaigns in the data using cached function
+        campaigns_data = get_campaigns_from_data(data, 1.0)
         
         campaigns = []
         for i, campaign_data in enumerate(campaigns_data):
@@ -97,7 +156,16 @@ def get_campaigns_for_star_telescope(star_number: int, telescope: str) -> List[C
         
         # Sort by number of data points (largest first) to get "most massive" campaigns
         campaigns.sort(key=lambda x: x.data_points, reverse=True)
-        return campaigns[:3]  # Return top 3 most massive
+        result = campaigns[:3]  # Return top 3 most massive
+        
+        # Cache the result
+        _processed_data_cache[cache_key] = {
+            'campaigns': result,
+            'file_hash': get_file_hash(filepath),
+            'timestamp': time.time()
+        }
+        
+        return result
         
     except Exception as e:
         print(f"Error processing campaigns for {star_number}-{telescope}: {str(e)}")
@@ -107,6 +175,26 @@ def get_campaigns_for_star_telescope(star_number: int, telescope: str) -> List[C
 async def root():
     """Root endpoint"""
     return {"message": "Better Impuls Viewer API"}
+
+@app.get("/cache/stats")
+async def get_cache_stats():
+    """Get cache statistics for monitoring"""
+    return {
+        "file_cache_size": len(_file_cache),
+        "campaigns_cache_size": len(_campaigns_cache),
+        "periodogram_cache_size": len(_periodogram_cache),
+        "processed_data_cache_size": len(_processed_data_cache)
+    }
+
+@app.post("/cache/clear")
+async def clear_cache():
+    """Clear all caches"""
+    global _file_cache, _campaigns_cache, _periodogram_cache, _processed_data_cache
+    _file_cache.clear()
+    _campaigns_cache.clear()
+    _periodogram_cache.clear()
+    _processed_data_cache.clear()
+    return {"message": "All caches cleared successfully"}
 
 @app.get("/stars")
 async def get_available_stars() -> List[int]:
@@ -158,7 +246,22 @@ async def get_campaigns(star_number: int, telescope: str) -> List[CampaignInfo]:
 
 @app.get("/data/{star_number}/{telescope}/{campaign_id}")
 async def get_campaign_data(star_number: int, telescope: str, campaign_id: str) -> ProcessedData:
-    """Get processed data for a specific campaign"""
+    """Get processed data for a specific campaign with caching"""
+    cache_key = f"data_{star_number}_{telescope}_{campaign_id}"
+    
+    # Check cache first
+    if cache_key in _processed_data_cache:
+        cache_entry = _processed_data_cache[cache_key]
+        # Check if cache is still valid
+        folder = get_data_folder()
+        filename = f"{star_number}-{telescope}.tbl"
+        filepath = os.path.join(folder, filename)
+        
+        if os.path.exists(filepath):
+            current_hash = get_file_hash(filepath)
+            if cache_entry.get('file_hash') == current_hash:
+                return cache_entry['data']
+    
     folder = get_data_folder()
     filename = f"{star_number}-{telescope}.tbl"
     filepath = os.path.join(folder, filename)
@@ -173,10 +276,9 @@ async def get_campaign_data(star_number: int, telescope: str, campaign_id: str) 
         
         # For processing, use only first 2 columns (time, flux)
         data_for_processing = raw_array[:, :2]
-        data_for_processing = sort_data(data_for_processing)
         
-        # Find all campaigns
-        campaigns_data = find_all_campaigns(data_for_processing, 10.0)
+        # Use cached campaigns function
+        campaigns_data = get_campaigns_from_data(data_for_processing, 1.0)
         
         # Extract campaign index from campaign_id (e.g., "c1" -> 0, "c2" -> 1)
         try:
@@ -204,17 +306,41 @@ async def get_campaign_data(star_number: int, telescope: str, campaign_id: str) 
         else:
             error_values = [0.005] * len(campaign_data)
         
-        return ProcessedData(
+        result = ProcessedData(
             time=campaign_data[:, 0].tolist(),
             flux=campaign_data[:, 1].tolist(),
             error=error_values
         )
+        
+        # Cache the result
+        _processed_data_cache[cache_key] = {
+            'data': result,
+            'file_hash': get_file_hash(filepath),
+            'timestamp': time.time()
+        }
+        
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing data: {str(e)}")
 
 @app.get("/periodogram/{star_number}/{telescope}/{campaign_id}")
 async def get_periodogram(star_number: int, telescope: str, campaign_id: str) -> PeriodogramData:
-    """Get Lomb-Scargle periodogram for a specific campaign"""
+    """Get Lomb-Scargle periodogram for a specific campaign with caching"""
+    cache_key = f"periodogram_{star_number}_{telescope}_{campaign_id}"
+    
+    # Check cache first
+    if cache_key in _periodogram_cache:
+        cache_entry = _periodogram_cache[cache_key]
+        # Check if cache is still valid
+        folder = get_data_folder()
+        filename = f"{star_number}-{telescope}.tbl"
+        filepath = os.path.join(folder, filename)
+        
+        if os.path.exists(filepath):
+            current_hash = get_file_hash(filepath)
+            if cache_entry.get('file_hash') == current_hash:
+                return cache_entry['data']
+    
     folder = get_data_folder()
     filename = f"{star_number}-{telescope}.tbl"
     filepath = os.path.join(folder, filename)
@@ -223,12 +349,11 @@ async def get_periodogram(star_number: int, telescope: str, campaign_id: str) ->
         raise HTTPException(status_code=404, detail=f"Data file not found: {filename}")
     
     try:
-        # Load and process data
+        # Load and process data (cached)
         data = load_data_file(filepath)
-        data = sort_data(data)
         
-        # Find all campaigns
-        campaigns_data = find_all_campaigns(data, 1.0)
+        # Find all campaigns (cached)
+        campaigns_data = get_campaigns_from_data(data, 1.0)
         
         # Extract campaign index from campaign_id
         try:
@@ -257,10 +382,19 @@ async def get_periodogram(star_number: int, telescope: str, campaign_id: str) ->
         periods = periods[valid_period_indices]
         powers = powers[valid_period_indices]
         
-        return PeriodogramData(
+        result = PeriodogramData(
             periods=periods.tolist(),
             powers=powers.tolist()
         )
+        
+        # Cache the result
+        _periodogram_cache[cache_key] = {
+            'data': result,
+            'file_hash': get_file_hash(filepath),
+            'timestamp': time.time()
+        }
+        
+        return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error calculating periodogram: {str(e)}")
 
@@ -271,7 +405,7 @@ async def get_phase_folded_data(
     campaign_id: str, 
     period: float
 ) -> PhaseFoldedData:
-    """Get phase-folded data for a specific campaign and period"""
+    """Get phase-folded data for a specific campaign and period using cached data"""
     if period <= 0 or not np.isfinite(period):
         raise HTTPException(status_code=400, detail="Period must be positive and finite")
     
@@ -283,12 +417,11 @@ async def get_phase_folded_data(
         raise HTTPException(status_code=404, detail=f"Data file not found: {filename}")
     
     try:
-        # Load and process data
+        # Load and process data (cached)
         data = load_data_file(filepath)
-        data = sort_data(data)
         
-        # Find all campaigns
-        campaigns_data = find_all_campaigns(data, 1.0)
+        # Find all campaigns (cached)
+        campaigns_data = get_campaigns_from_data(data, 1.0)
         
         # Extract campaign index from campaign_id
         try:
