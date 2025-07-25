@@ -53,6 +53,107 @@ def find_longest_x_campaign(data: np.ndarray, x_threshold: float) -> np.ndarray:
 
     return longest_campaign
 
+def calculate_dynamic_campaign_threshold(data: np.ndarray, multiplier: float = 5.0) -> float:
+    """
+    Calculate a dynamic threshold for campaign detection based on data characteristics.
+    
+    The threshold is determined by analyzing the distribution of time gaps between
+    consecutive observations. Campaigns are separated when gaps are significantly
+    larger than the typical observational cadence.
+    
+    Args:
+        data (np.ndarray): A NumPy array of shape (n, 2) where each row
+                           is a (x, y) coordinate pair.
+        multiplier (float): Factor to multiply the median gap to determine the threshold.
+                           Higher values create fewer, longer campaigns.
+    
+    Returns:
+        float: The calculated threshold for campaign detection.
+    """
+    if data.shape[0] < 2:
+        return 1.0  # Default threshold for minimal data
+    
+    # Calculate gaps between consecutive time points
+    time_gaps = np.diff(data[:, 0])
+    
+    # Remove negative gaps (shouldn't happen with sorted data)
+    time_gaps = time_gaps[time_gaps > 0]
+    
+    if len(time_gaps) == 0:
+        return 1.0
+    
+    # Use the median gap as the base measure
+    median_gap = np.median(time_gaps)
+    
+    # Use multiplier to determine campaign separation threshold
+    # Typical astronomical observations have regular cadence within campaigns
+    # but large gaps between campaigns
+    threshold = median_gap * multiplier
+    
+    # Ensure threshold is reasonable (not too small or too large)
+    threshold = max(threshold, median_gap * 2)  # At least 2x median
+    threshold = min(threshold, np.max(time_gaps) * 0.5)  # At most half the largest gap
+    
+    return threshold
+
+def find_all_campaigns(data: np.ndarray, x_threshold: float = None) -> list[np.ndarray]:
+    """
+    Finds all campaigns (series of consecutive data points) where the x-values
+    are "close" to each other within a specified or dynamically calculated threshold.
+
+    A "campaign" is defined as a sequence of points where the absolute
+    difference between the x-value of the current point and the x-value
+    of the previous point is less than or equal to the x_threshold.
+
+    Args:
+        data (np.ndarray): A NumPy array of shape (n, 2) where each row
+                           is a (x, y) coordinate pair.
+        x_threshold (float, optional): The maximum allowed absolute difference between
+                             consecutive x-values for them to be considered
+                             "close" and part of the same campaign. If None,
+                             a dynamic threshold will be calculated.
+
+    Returns:
+        list[np.ndarray]: A list of NumPy arrays, each representing a campaign.
+                         Returns an empty list if no data or no campaigns are found.
+    """
+    if data.shape[0] == 0:
+        print("Input data is empty.")
+        return []
+
+    if data.shape[0] == 1:
+        print("Input data has only one point. Returning the point as the only campaign.")
+        return [data]
+
+    # Calculate dynamic threshold if not provided
+    if x_threshold is None:
+        x_threshold = calculate_dynamic_campaign_threshold(data)
+        print(f"Using dynamic campaign threshold: {x_threshold:.3f}")
+
+    campaigns = []
+    current_campaign = np.array([data[0]]) # Start with the first point
+
+    # Iterate through the data starting from the second point
+    for i in range(1, data.shape[0]):
+        # Check if the current point's x-value is close to the previous point's x-value
+        if np.abs(data[i, 0] - data[i-1, 0]) <= x_threshold:
+            # If close, add the point to the current campaign
+            current_campaign = np.vstack((current_campaign, data[i]))
+        else:
+            # If not close, the current campaign ends.
+            # Add the current campaign to the list if it has data
+            if len(current_campaign) > 0:
+                campaigns.append(current_campaign)
+
+            # Start a new campaign with the current point
+            current_campaign = np.array([data[i]])
+
+    # After the loop, add the last campaign if it has data
+    if len(current_campaign) > 0:
+        campaigns.append(current_campaign)
+
+    return campaigns
+
 def sort_data(data: np.ndarray) -> np.ndarray:
     """
     Sort the data based on the first column (x-axis data).
@@ -189,3 +290,5 @@ def remove_y_outliers(data: np.ndarray, iqr_multiplier: float = 3.0) -> np.ndarr
         print("All data points were identified as outliers and removed.")
 
     return filtered_data
+
+
