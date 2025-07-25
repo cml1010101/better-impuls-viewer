@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional
 import os
 import pandas as pd
 import numpy as np
-from process import find_longest_x_campaign, find_all_campaigns, sort_data, calculate_lomb_scargle, remove_y_outliers
+from process import find_all_campaigns, sort_data, calculate_lomb_scargle, remove_y_outliers
 
 app = FastAPI(title="Better Impuls Viewer API", version="1.0.0")
 
@@ -77,7 +77,7 @@ def get_campaigns_for_star_telescope(star_number: int, telescope: str) -> List[C
         
         # Find all campaigns in the data using time threshold
         # Use 10 day threshold to identify gaps between campaigns (since campaigns are separated by 120 days)
-        campaigns_data = find_all_campaigns(data, 10.0)
+        campaigns_data = find_all_campaigns(data, 1.0)
         
         campaigns = []
         for i, campaign_data in enumerate(campaigns_data):
@@ -228,7 +228,7 @@ async def get_periodogram(star_number: int, telescope: str, campaign_id: str) ->
         data = sort_data(data)
         
         # Find all campaigns
-        campaigns_data = find_all_campaigns(data, 10.0)
+        campaigns_data = find_all_campaigns(data, 1.0)
         
         # Extract campaign index from campaign_id
         try:
@@ -288,7 +288,7 @@ async def get_phase_folded_data(
         data = sort_data(data)
         
         # Find all campaigns
-        campaigns_data = find_all_campaigns(data, 10.0)
+        campaigns_data = find_all_campaigns(data, 1.0)
         
         # Extract campaign index from campaign_id
         try:
