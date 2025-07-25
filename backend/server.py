@@ -8,7 +8,11 @@ import numpy as np
 from functools import lru_cache
 import hashlib
 import time
+from dotenv import load_dotenv
 from process import find_all_campaigns, sort_data, calculate_lomb_scargle, remove_y_outliers
+
+# Load environment variables from .env file
+load_dotenv()
 
 app = FastAPI(title="Better Impuls Viewer API", version="1.0.0")
 
@@ -41,6 +45,9 @@ class PeriodogramData(BaseModel):
 class PhaseFoldedData(BaseModel):
     phase: List[float]
     flux: List[float]
+
+class SEDImageData(BaseModel):
+    sed_url: str
 
 # Configuration
 DEFAULT_DATA_FOLDER = '../sample_data'
@@ -447,6 +454,19 @@ async def get_phase_folded_data(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error calculating phase-folded data: {str(e)}")
+
+@app.get("/sed/{star_number}")
+async def get_sed_image_url(star_number: int) -> SEDImageData:
+    """Get SED image URL for a specific star"""
+    sed_base_url = os.getenv('SED_URL')
+    
+    if not sed_base_url:
+        raise HTTPException(status_code=500, detail="SED_URL not configured in environment variables")
+    
+    # Construct the SED image URL
+    sed_url = f"{sed_base_url}/{star_number}_SED.png"
+    
+    return SEDImageData(sed_url=sed_url)
 
 if __name__ == "__main__":
     import uvicorn
