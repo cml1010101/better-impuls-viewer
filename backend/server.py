@@ -50,7 +50,7 @@ class SEDImageData(BaseModel):
     sed_url: str
 
 # Configuration
-DEFAULT_DATA_FOLDER = '../sample_data'
+DEFAULT_DATA_FOLDER = '~/Documents' if os.path.exists(os.getenv('DATA_FOLDER', '~/Documents/impuls-data')) else '../sample_data'
 DEFAULT_DATA_FOLDER = os.path.abspath(DEFAULT_DATA_FOLDER)
 
 # In-memory caches for expensive operations
