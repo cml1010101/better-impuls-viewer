@@ -425,7 +425,7 @@ const Dashboard: React.FC = () => {
                       <div className="method-periods">
                         {autoPeriodsData.methods.periodogram.periods.slice(0, 3).map((period, idx) => (
                           <span key={idx} className="method-period">
-                            {period.toFixed(3)}d
+                            {Number(period).toFixed(3)}d
                           </span>
                         ))}
                       </div>
@@ -443,7 +443,7 @@ const Dashboard: React.FC = () => {
                       <div className="method-periods">
                         {autoPeriodsData.methods.torch_fitting.periods.slice(0, 3).map((period, idx) => (
                           <span key={idx} className="method-period">
-                            {period.toFixed(3)}d
+                            {Number(period).toFixed(3)}d
                           </span>
                         ))}
                       </div>
