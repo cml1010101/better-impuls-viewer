@@ -285,8 +285,8 @@ async def get_campaign_data(star_number: int, telescope: str, campaign_id: str) 
         # For processing, use only first 2 columns (time, flux)
         data_for_processing = raw_array[:, :2]
         
-        # Use cached campaigns function
-        campaigns_data = get_campaigns_from_data(data_for_processing, 1.0)
+        # Use cached campaigns function with same threshold as campaigns endpoint
+        campaigns_data = get_campaigns_from_data(data_for_processing, None)
         
         # Extract campaign index from campaign_id (e.g., "c1" -> 0, "c2" -> 1)
         try:
@@ -360,8 +360,8 @@ async def get_periodogram(star_number: int, telescope: str, campaign_id: str) ->
         # Load and process data (cached)
         data = load_data_file(filepath)
         
-        # Find all campaigns (cached)
-        campaigns_data = get_campaigns_from_data(data, 1.0)
+        # Find all campaigns (cached) - use same threshold as campaigns endpoint
+        campaigns_data = get_campaigns_from_data(data, None)
         
         # Extract campaign index from campaign_id
         try:
@@ -428,8 +428,8 @@ async def get_phase_folded_data(
         # Load and process data (cached)
         data = load_data_file(filepath)
         
-        # Find all campaigns (cached)
-        campaigns_data = get_campaigns_from_data(data, 1.0)
+        # Find all campaigns (cached) - use same threshold as campaigns endpoint
+        campaigns_data = get_campaigns_from_data(data, None)
         
         # Extract campaign index from campaign_id
         try:
@@ -484,8 +484,8 @@ async def get_automatic_periods(star_number: int, telescope: str, campaign_id: s
         # Load and process data (cached)
         data = load_data_file(filepath)
         
-        # Find all campaigns (cached)
-        campaigns_data = get_campaigns_from_data(data, 1.0)
+        # Find all campaigns (cached) - use same threshold as campaigns endpoint
+        campaigns_data = get_campaigns_from_data(data, None)
         
         # Extract campaign index from campaign_id
         try:
