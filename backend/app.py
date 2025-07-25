@@ -20,9 +20,6 @@ def main(args=None):
         print(f"No files found for star number {star_number} in folder {folder}.")
         return
     for star_df in star_dfs:
-        # Ignore wise data files
-        if star_df.endswith('w1.tbl') or star_df.endswith('w2.tbl'):
-            continue
         # Retrieve telescope name from the filename
         telescope_name = star_df.split('-')[1].split('.')[0]
         file_path = os.path.join(folder, star_df)
