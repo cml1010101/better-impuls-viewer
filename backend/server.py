@@ -50,7 +50,7 @@ class AutoPeriodsData(BaseModel):
     error: Optional[str] = None
 
 # Configuration
-DEFAULT_DATA_FOLDER = '~/Documents/impuls-data' if os.path.exists(os.path.expanduser('~/Documents/impuls-data')) else '../sample-data'
+DEFAULT_DATA_FOLDER = '~/Documents/impuls-data' if os.path.exists(os.path.expanduser('~/Documents/impuls-data')) else '../sample_data'
 DEFAULT_DATA_FOLDER = os.path.abspath(os.path.expanduser(DEFAULT_DATA_FOLDER))
 
 # In-memory caches for expensive operations

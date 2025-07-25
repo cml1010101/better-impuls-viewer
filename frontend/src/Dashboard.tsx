@@ -147,7 +147,20 @@ const Dashboard: React.FC = () => {
     try {
       setLoading(true);
       const response = await fetch(`${API_BASE}/data/${star}/${telescope}/${campaign}`);
+      
+      if (!response.ok) {
+        console.error(`Error fetching campaign data: ${response.status} ${response.statusText}`);
+        setCampaignData([]);
+        return;
+      }
+      
       const data = await response.json();
+      
+      if (!data.time || !data.flux) {
+        console.error('Invalid data format received');
+        setCampaignData([]);
+        return;
+      }
       
       const formattedData = data.time.map((time: number, index: number) => ({
         time,
@@ -158,6 +171,7 @@ const Dashboard: React.FC = () => {
       setCampaignData(formattedData);
     } catch (error) {
       console.error('Error fetching campaign data:', error);
+      setCampaignData([]);
     } finally {
       setLoading(false);
     }
@@ -167,7 +181,20 @@ const Dashboard: React.FC = () => {
     try {
       setLoading(true);
       const response = await fetch(`${API_BASE}/periodogram/${star}/${telescope}/${campaign}`);
+      
+      if (!response.ok) {
+        console.error(`Error fetching periodogram: ${response.status} ${response.statusText}`);
+        setPeriodogramData([]);
+        return;
+      }
+      
       const data = await response.json();
+      
+      if (!data.periods || !data.powers) {
+        console.error('Invalid periodogram data format received');
+        setPeriodogramData([]);
+        return;
+      }
       
       const formattedData = data.periods.map((period: number, index: number) => ({
         period,
@@ -177,6 +204,7 @@ const Dashboard: React.FC = () => {
       setPeriodogramData(formattedData);
     } catch (error) {
       console.error('Error fetching periodogram:', error);
+      setPeriodogramData([]);
     } finally {
       setLoading(false);
     }
@@ -186,7 +214,20 @@ const Dashboard: React.FC = () => {
     try {
       setLoading(true);
       const response = await fetch(`${API_BASE}/phase_fold/${star}/${telescope}/${campaign}?period=${period}`);
+      
+      if (!response.ok) {
+        console.error(`Error fetching phase-folded data: ${response.status} ${response.statusText}`);
+        setPhaseFoldedData([]);
+        return;
+      }
+      
       const data = await response.json();
+      
+      if (!data.phase || !data.flux) {
+        console.error('Invalid phase-folded data format received');
+        setPhaseFoldedData([]);
+        return;
+      }
       
       const formattedData = data.phase.map((phase: number, index: number) => ({
         phase,
@@ -196,6 +237,7 @@ const Dashboard: React.FC = () => {
       setPhaseFoldedData(formattedData);
     } catch (error) {
       console.error('Error fetching phase-folded data:', error);
+      setPhaseFoldedData([]);
     } finally {
       setLoading(false);
     }
@@ -205,6 +247,13 @@ const Dashboard: React.FC = () => {
     try {
       setLoading(true);
       const response = await fetch(`${API_BASE}/auto_periods/${star}/${telescope}/${campaign}`);
+      
+      if (!response.ok) {
+        console.error(`Error fetching auto periods data: ${response.status} ${response.statusText}`);
+        setAutoPeriodsData(null);
+        return;
+      }
+      
       const data = await response.json();
       setAutoPeriodsData(data);
     } catch (error) {
