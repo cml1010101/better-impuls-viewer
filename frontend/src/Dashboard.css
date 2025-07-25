@@ -352,6 +352,75 @@
   color: #742a2a;
 }
 
+/* Algorithm Documentation Styles */
+.algorithm-documentation {
+  margin-bottom: 1.5rem;
+}
+
+.algorithm-documentation details {
+  background: #f7fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.algorithm-documentation summary {
+  padding: 1rem;
+  cursor: pointer;
+  background: linear-gradient(135deg, #4c51bf 0%, #667eea 100%);
+  color: white;
+  font-weight: 600;
+  user-select: none;
+}
+
+.algorithm-documentation summary:hover {
+  background: linear-gradient(135deg, #3c366b 0%, #5a67d8 100%);
+}
+
+.algorithm-documentation summary h3 {
+  margin: 0;
+  display: inline;
+  font-size: 1.1rem;
+}
+
+.documentation-content {
+  padding: 1.5rem;
+  line-height: 1.6;
+}
+
+.documentation-content p {
+  margin: 0 0 1rem 0;
+  color: #4a5568;
+}
+
+.documentation-content h4 {
+  margin: 1.5rem 0 0.75rem 0;
+  color: #2d3748;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.documentation-content ul {
+  margin: 0 0 1rem 0;
+  padding-left: 1.5rem;
+}
+
+.documentation-content li {
+  margin: 0.5rem 0;
+  color: #4a5568;
+}
+
+.documentation-content strong {
+  color: #2d3748;
+  font-weight: 600;
+}
+
+.documentation-content em {
+  color: #5a67d8;
+  font-weight: 500;
+  font-style: normal;
+}
+
 /* Responsive layout */
 @media (min-width: 1200px) {
   .bottom-charts {
