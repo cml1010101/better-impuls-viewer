@@ -532,7 +532,7 @@ const Dashboard: React.FC = () => {
               <ul>
                 <li><strong>Method Agreement</strong>: Prioritizes periods detected by both methods (within 10% tolerance)</li>
                 <li><strong>Binary Detection</strong>: Identifies multiple period systems with intelligent ratio analysis</li>
-                <li><strong>Quality Control</strong>: Campaign duration: <strong>{campaignData.length > 0 ? ((Math.max(...campaignData.map(d => d.time)) - Math.min(...campaignData.map(d => d.time))).toFixed(1)) : 'N/A'} days</strong>, Max valid period: <strong>{campaignData.length > 0 ? ((Math.max(...campaignData.map(d => d.time)) - Math.min(...campaignData.map(d => d.time))) / 3).toFixed(1) : 'N/A'} days</strong></li>
+                <li><strong>Quality Control</strong>: Campaign duration: <strong>{campaignData.length > 0 ? ((Math.max(...campaignData.map(d => d.time)) - Math.min(...campaignData.map(d => d.time))).toFixed(1)) : 'N/A'} days</strong></li>
                 <li><strong>Classification Types</strong>:
                   <ul>
                     <li><em>Regular</em>: Single dominant period system</li>

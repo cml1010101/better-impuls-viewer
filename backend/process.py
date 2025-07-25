@@ -309,7 +309,7 @@ def remove_y_outliers(data: np.ndarray, iqr_multiplier: float = 3.0) -> np.ndarr
     return filtered_data
 
 
-def find_periodogram_periods(data: np.ndarray, top_n: int = 5, max_period_fraction: float = 0.33) -> List[Tuple[float, float]]:
+def find_periodogram_periods(data: np.ndarray, top_n: int = 5) -> List[Tuple[float, float]]:
     """
     Find the most significant periods from Lomb-Scargle periodogram analysis.
     
@@ -319,8 +319,6 @@ def find_periodogram_periods(data: np.ndarray, top_n: int = 5, max_period_fracti
         A 2D numpy array where the first column is time and the second column is flux.
     top_n : int, optional
         Number of top periods to return. Default is 5.
-    max_period_fraction : float, optional
-        Maximum fraction of campaign duration allowed for valid periods. Default is 0.33 (period <= campaign/3).
     
     Returns
     -------
@@ -329,10 +327,6 @@ def find_periodogram_periods(data: np.ndarray, top_n: int = 5, max_period_fracti
     """
     if data.shape[1] != 2 or data.shape[0] < 10:
         return []
-    
-    # Calculate campaign duration
-    campaign_duration = np.max(data[:, 0]) - np.min(data[:, 0])
-    max_valid_period = campaign_duration * max_period_fraction
     
     # Calculate periodogram with extended frequency range and higher resolution
     frequencies, powers = calculate_lomb_scargle(data, samples_per_peak=50)
@@ -344,8 +338,7 @@ def find_periodogram_periods(data: np.ndarray, top_n: int = 5, max_period_fracti
     periods = 1.0 / frequencies
     
     # Filter to astronomically reasonable period range (0.5 to 50 days)
-    # AND ensure period is not too long relative to campaign duration
-    valid_period_mask = (periods >= 0.5) & (periods <= min(50, max_valid_period)) & np.isfinite(periods)
+    valid_period_mask = (periods >= 0.5) & (periods <= 50) & np.isfinite(periods)
     periods = periods[valid_period_mask]
     powers = powers[valid_period_mask]
     
@@ -421,7 +414,7 @@ class SinusoidalModel(nn.Module):
         return result
 
 
-def fit_sinusoidal_periods(data: np.ndarray, n_periods: int = 2, max_epochs: int = 1000, max_period_fraction: float = 0.33) -> List[Tuple[float, float]]:
+def fit_sinusoidal_periods(data: np.ndarray, n_periods: int = 2, max_epochs: int = 1000) -> List[Tuple[float, float]]:
     """
     Use PyTorch to fit sinusoidal curves and extract periods.
     
@@ -433,8 +426,6 @@ def fit_sinusoidal_periods(data: np.ndarray, n_periods: int = 2, max_epochs: int
         Number of sinusoidal components to fit. Default is 2.
     max_epochs : int, optional
         Maximum number of training epochs. Default is 1000.
-    max_period_fraction : float, optional
-        Maximum fraction of campaign duration allowed for valid periods. Default is 0.33.
     
     Returns
     -------
@@ -443,10 +434,6 @@ def fit_sinusoidal_periods(data: np.ndarray, n_periods: int = 2, max_epochs: int
     """
     if data.shape[1] != 2 or data.shape[0] < 20:
         return []
-    
-    # Calculate campaign duration for validation
-    campaign_duration = np.max(data[:, 0]) - np.min(data[:, 0])
-    max_valid_period = campaign_duration * max_period_fraction
     
     # Prepare data
     time = torch.tensor(data[:, 0], dtype=torch.float32)
@@ -495,9 +482,8 @@ def fit_sinusoidal_periods(data: np.ndarray, n_periods: int = 2, max_epochs: int
             period = torch.abs(model.periods[i]).item() + 0.1
             amplitude = torch.abs(model.amplitudes[i]).item()
             
-            # Filter reasonable periods (0.1 to max_valid_period days) 
-            # AND not longer than campaign duration fraction
-            if 0.1 <= period <= min(100, max_valid_period):
+            # Filter reasonable periods (0.1 to 100 days)
+            if 0.1 <= period <= 100:
                 # Use amplitude as a proxy for confidence
                 confidence = amplitude / (flux_std.item() if flux_std > 0 else 1.0)
                 periods_with_confidence.append((period, confidence))
@@ -647,11 +633,7 @@ def determine_automatic_periods(data: np.ndarray) -> Dict[str, any]:
        - Uses gradient descent optimization with early stopping
        - Provides confidence scores based on fit quality
     
-    3. **Campaign Duration Validation**:
-       - Rejects periods that are too large relative to the observing campaign duration
-       - Ensures detected periods can be reliably measured within the available data
-    
-    4. **Dual-Method Cross-Validation**:
+    3. **Dual-Method Cross-Validation**:
        - Combines results from both methods for robust period detection
        - Prioritizes periods that appear in both methods
        - Provides confidence scoring based on detection strength and method agreement
@@ -682,10 +664,6 @@ def determine_automatic_periods(data: np.ndarray) -> Dict[str, any]:
             "error": "Insufficient data points for period analysis"
         }
     
-    # Calculate campaign duration for period validation
-    campaign_duration = np.max(data[:, 0]) - np.min(data[:, 0])
-    max_valid_period = campaign_duration / 3.0  # Period must be at least 3x shorter than campaign
-    
     # Method 1: Enhanced periodogram analysis
     periodogram_success = False
     periodogram_periods = []
@@ -693,8 +671,6 @@ def determine_automatic_periods(data: np.ndarray) -> Dict[str, any]:
     
     try:
         periodogram_periods = find_periodogram_periods(data, top_n=3)
-        # Filter out periods that are too long relative to campaign duration
-        periodogram_periods = [(p, pow) for p, pow in periodogram_periods if p <= max_valid_period]
         periodogram_success = len(periodogram_periods) > 0
     except Exception as e:
         periodogram_error = str(e)
@@ -706,8 +682,6 @@ def determine_automatic_periods(data: np.ndarray) -> Dict[str, any]:
     
     try:
         torch_periods = fit_sinusoidal_periods(data, n_periods=2, max_epochs=500)
-        # Filter out periods that are too long relative to campaign duration
-        torch_periods = [(p, c) for p, c in torch_periods if p <= max_valid_period]
         torch_success = len(torch_periods) > 0
     except Exception as e:
         torch_error = str(e)
