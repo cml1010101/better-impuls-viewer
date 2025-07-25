@@ -53,10 +53,53 @@ def find_longest_x_campaign(data: np.ndarray, x_threshold: float) -> np.ndarray:
 
     return longest_campaign
 
-def find_all_campaigns(data: np.ndarray, x_threshold: float) -> list[np.ndarray]:
+def calculate_dynamic_campaign_threshold(data: np.ndarray, multiplier: float = 5.0) -> float:
+    """
+    Calculate a dynamic threshold for campaign detection based on data characteristics.
+    
+    The threshold is determined by analyzing the distribution of time gaps between
+    consecutive observations. Campaigns are separated when gaps are significantly
+    larger than the typical observational cadence.
+    
+    Args:
+        data (np.ndarray): A NumPy array of shape (n, 2) where each row
+                           is a (x, y) coordinate pair.
+        multiplier (float): Factor to multiply the median gap to determine the threshold.
+                           Higher values create fewer, longer campaigns.
+    
+    Returns:
+        float: The calculated threshold for campaign detection.
+    """
+    if data.shape[0] < 2:
+        return 1.0  # Default threshold for minimal data
+    
+    # Calculate gaps between consecutive time points
+    time_gaps = np.diff(data[:, 0])
+    
+    # Remove negative gaps (shouldn't happen with sorted data)
+    time_gaps = time_gaps[time_gaps > 0]
+    
+    if len(time_gaps) == 0:
+        return 1.0
+    
+    # Use the median gap as the base measure
+    median_gap = np.median(time_gaps)
+    
+    # Use multiplier to determine campaign separation threshold
+    # Typical astronomical observations have regular cadence within campaigns
+    # but large gaps between campaigns
+    threshold = median_gap * multiplier
+    
+    # Ensure threshold is reasonable (not too small or too large)
+    threshold = max(threshold, median_gap * 2)  # At least 2x median
+    threshold = min(threshold, np.max(time_gaps) * 0.5)  # At most half the largest gap
+    
+    return threshold
+
+def find_all_campaigns(data: np.ndarray, x_threshold: float = None) -> list[np.ndarray]:
     """
     Finds all campaigns (series of consecutive data points) where the x-values
-    are "close" to each other within a specified threshold.
+    are "close" to each other within a specified or dynamically calculated threshold.
 
     A "campaign" is defined as a sequence of points where the absolute
     difference between the x-value of the current point and the x-value
@@ -65,9 +108,10 @@ def find_all_campaigns(data: np.ndarray, x_threshold: float) -> list[np.ndarray]
     Args:
         data (np.ndarray): A NumPy array of shape (n, 2) where each row
                            is a (x, y) coordinate pair.
-        x_threshold (float): The maximum allowed absolute difference between
+        x_threshold (float, optional): The maximum allowed absolute difference between
                              consecutive x-values for them to be considered
-                             "close" and part of the same campaign.
+                             "close" and part of the same campaign. If None,
+                             a dynamic threshold will be calculated.
 
     Returns:
         list[np.ndarray]: A list of NumPy arrays, each representing a campaign.
@@ -80,6 +124,11 @@ def find_all_campaigns(data: np.ndarray, x_threshold: float) -> list[np.ndarray]
     if data.shape[0] == 1:
         print("Input data has only one point. Returning the point as the only campaign.")
         return [data]
+
+    # Calculate dynamic threshold if not provided
+    if x_threshold is None:
+        x_threshold = calculate_dynamic_campaign_threshold(data)
+        print(f"Using dynamic campaign threshold: {x_threshold:.3f}")
 
     campaigns = []
     current_campaign = np.array([data[0]]) # Start with the first point
@@ -241,3 +290,122 @@ def remove_y_outliers(data: np.ndarray, iqr_multiplier: float = 3.0) -> np.ndarr
         print("All data points were identified as outliers and removed.")
 
     return filtered_data
+
+def detect_wise_folding_period(data: np.ndarray, max_period: float = 10.0) -> float:
+    """
+    Detect the folding period in WISE data by looking for artificial periodicity.
+    
+    WISE data is often already phase-folded on itself, creating artificial periods.
+    This function attempts to detect this folding period by analyzing the 
+    time structure of the data.
+    
+    Args:
+        data (np.ndarray): A NumPy array of shape (n, 2) where each row
+                           is a (time, flux) coordinate pair.
+        max_period (float): Maximum period to consider for folding detection.
+    
+    Returns:
+        float: Detected folding period, or 0 if no clear folding is detected.
+    """
+    if data.shape[0] < 10:
+        return 0.0
+    
+    times = data[:, 0]
+    time_diffs = np.diff(times)
+    
+    # Check for backwards jumps (negative time differences) which indicate folding
+    backwards_jumps = time_diffs[time_diffs < -0.1]
+    
+    if len(backwards_jumps) > 0:
+        # Look for the pattern: if we have backwards jumps, the period is likely 
+        # the range before the jump plus the absolute value of the jump
+        time_span = np.max(times) - np.min(times)
+        
+        # Find the largest backwards jump
+        largest_backwards = np.min(backwards_jumps)  # Most negative
+        
+        # The folding period might be related to the time span or jump size
+        detected_period = min(time_span, abs(largest_backwards))
+        
+        if detected_period > 0.1 and detected_period < max_period:
+            print(f"Detected WISE folding period from backwards jumps: {detected_period:.3f}")
+            return detected_period
+    
+    # Alternative detection: if the time span is suspiciously small for astronomical data
+    time_span = np.max(times) - np.min(times)
+    if time_span < 2.0:  # Less than 2 days total time span suggests folding
+        print(f"Detected WISE folding period from small time span: {time_span:.3f}")
+        return time_span
+    
+    # Look for repeated patterns in time spacing that might indicate folding
+    # If we see regular large gaps, it might be folding artifacts
+    large_gaps = time_diffs[time_diffs > 10]  # Gaps larger than 10 days
+    if len(large_gaps) > 1:
+        # Check if these gaps are similar (indicating folding structure)
+        gap_std = np.std(large_gaps)
+        gap_mean = np.mean(large_gaps)
+        
+        if gap_std < gap_mean * 0.1:  # Gaps are very similar
+            # This suggests artificial folding - the period might be the time before the gap
+            print(f"Detected WISE folding from regular gaps: period ~{gap_mean:.3f}")
+            return min(gap_mean, max_period)
+    
+    return 0.0
+
+def unfold_wise_data(data: np.ndarray, folding_period: float) -> np.ndarray:
+    """
+    Unfold WISE data that has been artificially phase-folded.
+    
+    Args:
+        data (np.ndarray): A NumPy array of shape (n, 2) where each row
+                           is a (time, flux) coordinate pair.
+        folding_period (float): The period over which the data was folded.
+    
+    Returns:
+        np.ndarray: Unfolded data with corrected time values.
+    """
+    if folding_period <= 0:
+        return data
+    
+    unfolded_data = data.copy()
+    times = unfolded_data[:, 0]
+    
+    # Track cycles to unfold the data
+    current_cycle = 0
+    last_time = times[0]
+    
+    for i in range(1, len(times)):
+        # If time decreases significantly, we've started a new cycle
+        if times[i] < last_time - folding_period * 0.5:
+            current_cycle += 1
+        
+        # Adjust time by adding the cycle offset
+        unfolded_data[i, 0] = times[i] + current_cycle * folding_period
+        last_time = times[i]
+    
+    print(f"Unfolded WISE data with {current_cycle + 1} cycles")
+    return unfolded_data
+
+def is_wise_telescope(telescope: str) -> bool:
+    """Check if the telescope is a WISE telescope (w1 or w2)."""
+    return telescope.lower() in ['w1', 'w2', 'wise']
+
+def process_wise_data(data: np.ndarray) -> np.ndarray:
+    """
+    Process WISE data by detecting and unfolding any artificial phase folding.
+    
+    Args:
+        data (np.ndarray): Raw WISE data
+    
+    Returns:
+        np.ndarray: Processed and potentially unfolded WISE data
+    """
+    # Detect if data is folded
+    folding_period = detect_wise_folding_period(data)
+    
+    if folding_period > 0:
+        # Unfold the data
+        return unfold_wise_data(data, folding_period)
+    else:
+        print("No WISE folding detected, returning original data")
+        return data

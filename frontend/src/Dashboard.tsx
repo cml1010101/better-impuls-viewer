@@ -252,11 +252,11 @@ const Dashboard: React.FC = () => {
 
       {loading && <div className="loading">Loading...</div>}
 
-      {/* Charts - Compact Grid Layout */}
+      {/* Charts - New Layout: Light curve on top, periodogram and phase-folded side by side */}
       <div className="charts-container">
-        {/* Original Data Chart */}
+        {/* Light Curve Chart - Full Width on Top */}
         {campaignData.length > 0 && (
-          <div className="chart-section">
+          <div className="chart-section light-curve-section">
             <h3>Light Curve Data</h3>
             <Plot
               data={[
@@ -298,135 +298,140 @@ const Dashboard: React.FC = () => {
           </div>
         )}
 
-        {/* Periodogram Chart */}
-        {periodogramData.length > 0 && (
-          <div className="chart-section">
-            <h3>Periodogram</h3>
-            <p className="chart-description">
-              Hover over the chart to see period values. Click or manually enter a period below to fold the data.
-            </p>
-            <Plot
-              data={[
-                {
-                  x: periodogramData.map(d => d.period),
-                  y: periodogramData.map(d => d.power),
-                  mode: 'lines+markers',
-                  type: 'scatter',
-                  line: {
-                    color: '#ff7300',
-                    width: 2,
-                  },
-                  marker: {
-                    color: '#ff7300',
-                    size: 4,
-                  },
-                  name: 'Power',
-                },
-              ]}
-              layout={{
-                width: undefined,
-                height: 250,
-                margin: { l: 60, r: 20, t: 20, b: 60 },
-                xaxis: {
-                  title: { text: 'Period (days)' },
-                  type: 'log',
-                  automargin: true,
-                },
-                yaxis: {
-                  title: { text: 'Power' },
-                  automargin: true,
-                },
-                showlegend: false,
-                dragmode: 'pan',
-              }}
-              config={{
-                responsive: true,
-                displayModeBar: true,
-                modeBarButtonsToRemove: ['toImage', 'sendDataToCloud'],
-                displaylogo: false,
-              }}
-              style={{ width: '100%' }}
-              onClick={handlePeriodogramClick}
-            />
-            
-            {/* Manual period input */}
-            <div className="period-input-section">
-              <label className="period-label">
-                Enter Period (days):
-              </label>
-              <input
-                type="number"
-                step="0.0001"
-                min="0.1"
-                max="20"
-                value={periodInputValue}
-                onChange={(e) => handlePeriodInputChange(e.target.value)}
-                className="period-input"
-                placeholder="e.g., 7.8"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter') {
-                    handlePeriodSubmit();
-                  }
-                }}
-              />
-              <button
-                onClick={handlePeriodSubmit}
-                className="period-button"
-              >
-                Fold Data
-              </button>
-            </div>
-            
-            {selectedPeriod && (
-              <p className="selected-period">
-                Selected Period: {selectedPeriod.toFixed(4)} days
-              </p>
+        {/* Bottom Row: Periodogram and Phase-Folded Data Side by Side */}
+        {(periodogramData.length > 0 || (phaseFoldedData.length > 0 && selectedPeriod)) && (
+          <div className="bottom-charts">
+            {/* Periodogram Chart */}
+            {periodogramData.length > 0 && (
+              <div className="chart-section">
+                <h3>Periodogram</h3>
+                <p className="chart-description">
+                  Hover over the chart to see period values. Click or manually enter a period below to fold the data.
+                </p>
+                <Plot
+                  data={[
+                    {
+                      x: periodogramData.map(d => d.period),
+                      y: periodogramData.map(d => d.power),
+                      mode: 'lines+markers',
+                      type: 'scatter',
+                      line: {
+                        color: '#ff7300',
+                        width: 2,
+                      },
+                      marker: {
+                        color: '#ff7300',
+                        size: 4,
+                      },
+                      name: 'Power',
+                    },
+                  ]}
+                  layout={{
+                    width: undefined,
+                    height: 250,
+                    margin: { l: 60, r: 20, t: 20, b: 60 },
+                    xaxis: {
+                      title: { text: 'Period (days)' },
+                      type: 'log',
+                      automargin: true,
+                    },
+                    yaxis: {
+                      title: { text: 'Power' },
+                      automargin: true,
+                    },
+                    showlegend: false,
+                    dragmode: 'pan',
+                  }}
+                  config={{
+                    responsive: true,
+                    displayModeBar: true,
+                    modeBarButtonsToRemove: ['toImage', 'sendDataToCloud'],
+                    displaylogo: false,
+                  }}
+                  style={{ width: '100%' }}
+                  onClick={handlePeriodogramClick}
+                />
+                
+                {/* Manual period input */}
+                <div className="period-input-section">
+                  <label className="period-label">
+                    Enter Period (days):
+                  </label>
+                  <input
+                    type="number"
+                    step="0.0001"
+                    min="0.1"
+                    max="20"
+                    value={periodInputValue}
+                    onChange={(e) => handlePeriodInputChange(e.target.value)}
+                    className="period-input"
+                    placeholder="e.g., 7.8"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        handlePeriodSubmit();
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={handlePeriodSubmit}
+                    className="period-button"
+                  >
+                    Fold Data
+                  </button>
+                </div>
+                
+                {selectedPeriod && (
+                  <p className="selected-period">
+                    Selected Period: {selectedPeriod.toFixed(4)} days
+                  </p>
+                )}
+              </div>
             )}
-          </div>
-        )}
 
-        {/* Phase-Folded Data Chart */}
-        {phaseFoldedData.length > 0 && selectedPeriod && (
-          <div className="chart-section">
-            <h3>Phase-Folded Data (Period: {selectedPeriod.toFixed(4)} days)</h3>
-            <Plot
-              data={[
-                {
-                  x: phaseFoldedData.map(d => d.phase),
-                  y: phaseFoldedData.map(d => d.flux),
-                  mode: 'markers',
-                  type: 'scatter',
-                  marker: {
-                    color: '#82ca9d',
-                    size: 4,
-                  },
-                  name: 'Flux',
-                },
-              ]}
-              layout={{
-                width: undefined,
-                height: 250,
-                margin: { l: 60, r: 20, t: 20, b: 60 },
-                xaxis: {
-                  title: { text: 'Phase' },
-                  range: [0, 1],
-                  automargin: true,
-                },
-                yaxis: {
-                  title: { text: 'Flux' },
-                  automargin: true,
-                },
-                showlegend: false,
-                dragmode: 'pan',
-              }}
-              config={{
-                responsive: true,
-                displayModeBar: true,
-                modeBarButtonsToRemove: ['toImage', 'sendDataToCloud'],
-                displaylogo: false,
-              }}
-              style={{ width: '100%' }}
-            />
+            {/* Phase-Folded Data Chart */}
+            {phaseFoldedData.length > 0 && selectedPeriod && (
+              <div className="chart-section">
+                <h3>Phase-Folded Data (Period: {selectedPeriod.toFixed(4)} days)</h3>
+                <Plot
+                  data={[
+                    {
+                      x: phaseFoldedData.map(d => d.phase),
+                      y: phaseFoldedData.map(d => d.flux),
+                      mode: 'markers',
+                      type: 'scatter',
+                      marker: {
+                        color: '#82ca9d',
+                        size: 4,
+                      },
+                      name: 'Flux',
+                    },
+                  ]}
+                  layout={{
+                    width: undefined,
+                    height: 250,
+                    margin: { l: 60, r: 20, t: 20, b: 60 },
+                    xaxis: {
+                      title: { text: 'Phase' },
+                      range: [0, 1],
+                      automargin: true,
+                    },
+                    yaxis: {
+                      title: { text: 'Flux' },
+                      automargin: true,
+                    },
+                    showlegend: false,
+                    dragmode: 'pan',
+                  }}
+                  config={{
+                    responsive: true,
+                    displayModeBar: true,
+                    modeBarButtonsToRemove: ['toImage', 'sendDataToCloud'],
+                    displaylogo: false,
+                  }}
+                  style={{ width: '100%' }}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>

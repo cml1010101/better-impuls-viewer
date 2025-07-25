@@ -38,10 +38,20 @@
   font-size: 0.9rem;
 }
 
-/* Compact charts container */
+/* Charts container with light curve on top, periodogram and phase-folded side by side */
 .charts-container {
   display: grid;
   grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+.light-curve-section {
+  grid-column: 1 / -1;
+}
+
+.bottom-charts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 1.5rem;
 }
 
@@ -123,15 +133,10 @@
   font-weight: 600;
 }
 
-/* Responsive layout - side by side charts on larger screens */
+/* Responsive layout */
 @media (min-width: 1200px) {
-  .charts-container {
+  .bottom-charts {
     grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-  }
-  
-  .chart-section:last-child {
-    grid-column: 1 / -1;
   }
 }
 
@@ -153,5 +158,10 @@
   
   .chart-section {
     padding: 0.75rem;
+  }
+  
+  .bottom-charts {
+    grid-template-columns: 1fr;
+    gap: 1rem;
   }
 }

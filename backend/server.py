@@ -8,7 +8,7 @@ import numpy as np
 from functools import lru_cache
 import hashlib
 import time
-from process import find_all_campaigns, sort_data, calculate_lomb_scargle, remove_y_outliers
+from process import find_all_campaigns, sort_data, calculate_lomb_scargle, remove_y_outliers, is_wise_telescope, process_wise_data
 
 app = FastAPI(title="Better Impuls Viewer API", version="1.0.0")
 
@@ -66,12 +66,15 @@ def get_data_folder():
     """Get the data folder path"""
     return DEFAULT_DATA_FOLDER
 
-def load_data_file(filepath: str) -> np.ndarray:
-    """Load data from a .tbl file with caching"""
+def load_data_file(filepath: str, telescope: str = None) -> np.ndarray:
+    """Load data from a .tbl file with caching and WISE processing"""
+    # Include telescope info in cache key for WISE processing
+    cache_key = f"{filepath}_{telescope}" if telescope else filepath
     file_hash = get_file_hash(filepath)
+    full_cache_key = f"{file_hash}_{telescope}" if telescope else file_hash
     
-    if file_hash in _file_cache:
-        return _file_cache[file_hash]
+    if full_cache_key in _file_cache:
+        return _file_cache[full_cache_key]
     
     try:
         data = pd.read_table(filepath, header=None, sep=r'\s+', skiprows=[0, 1, 2])
@@ -83,16 +86,21 @@ def load_data_file(filepath: str) -> np.ndarray:
         else:
             result = data_array
         
+        # Apply WISE-specific processing if needed
+        if telescope and is_wise_telescope(telescope):
+            result = process_wise_data(result)
+        
         # Cache the result
-        _file_cache[file_hash] = result
+        _file_cache[full_cache_key] = result
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error loading data file: {str(e)}")
 
-def get_campaigns_from_data(data: np.ndarray, threshold: float = 1.0) -> List[np.ndarray]:
-    """Get campaigns from data with caching"""
+def get_campaigns_from_data(data: np.ndarray, threshold: float = None) -> List[np.ndarray]:
+    """Get campaigns from data with caching. Uses dynamic threshold if none provided."""
     # Create a cache key based on data hash and threshold
-    data_hash = hashlib.md5(f"{data.tobytes()}_{threshold}".encode()).hexdigest()
+    threshold_str = str(threshold) if threshold is not None else "dynamic"
+    data_hash = hashlib.md5(f"{data.tobytes()}_{threshold_str}".encode()).hexdigest()
     
     if data_hash in _campaigns_cache:
         return _campaigns_cache[data_hash]
@@ -100,7 +108,7 @@ def get_campaigns_from_data(data: np.ndarray, threshold: float = 1.0) -> List[np
     # Sort data first
     sorted_data = sort_data(data)
     
-    # Find all campaigns
+    # Find all campaigns (will use dynamic threshold if threshold is None)
     campaigns_data = find_all_campaigns(sorted_data, threshold)
     
     # Cache the result
@@ -132,11 +140,11 @@ def get_campaigns_for_star_telescope(star_number: int, telescope: str) -> List[C
         return []
     
     try:
-        # Load data from the single file (cached)
-        data = load_data_file(filepath)
+        # Load data from the single file (cached) with telescope-specific processing
+        data = load_data_file(filepath, telescope)
         
-        # Find all campaigns in the data using cached function
-        campaigns_data = get_campaigns_from_data(data, 1.0)
+        # Find all campaigns in the data using dynamic threshold
+        campaigns_data = get_campaigns_from_data(data, None)
         
         campaigns = []
         for i, campaign_data in enumerate(campaigns_data):
