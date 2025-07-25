@@ -27,6 +27,28 @@ interface PhaseFoldedPoint {
   flux: number;
 }
 
+interface AutoPeriodClassification {
+  type: string;
+  confidence: number;
+  description: string;
+}
+
+interface AutoPeriodMethod {
+  success: boolean;
+  periods: number[];
+}
+
+interface AutoPeriodsData {
+  primary_period: number | null;
+  secondary_period: number | null;
+  classification: AutoPeriodClassification;
+  methods: {
+    periodogram?: AutoPeriodMethod;
+    torch_fitting?: AutoPeriodMethod;
+  };
+  error?: string;
+}
+
 const API_BASE = 'http://localhost:8000';
 
 const Dashboard: React.FC = () => {
@@ -41,6 +63,7 @@ const Dashboard: React.FC = () => {
   const [selectedPeriod, setSelectedPeriod] = useState<number | null>(null);
   const [periodInputValue, setPeriodInputValue] = useState<string>(''); // Add controlled input state
   const [phaseFoldedData, setPhaseFoldedData] = useState<PhaseFoldedPoint[]>([]);
+  const [autoPeriodsData, setAutoPeriodsData] = useState<AutoPeriodsData | null>(null);
   const [loading, setLoading] = useState(false);
 
   // Fetch available stars on component mount
@@ -67,6 +90,7 @@ const Dashboard: React.FC = () => {
     if (selectedStar && selectedTelescope && selectedCampaign) {
       fetchCampaignData(selectedStar, selectedTelescope, selectedCampaign);
       fetchPeriodogram(selectedStar, selectedTelescope, selectedCampaign);
+      fetchAutoPeriodsData(selectedStar, selectedTelescope, selectedCampaign);
     }
   }, [selectedStar, selectedTelescope, selectedCampaign]);
 
@@ -177,6 +201,20 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const fetchAutoPeriodsData = async (star: number, telescope: string, campaign: string) => {
+    try {
+      setLoading(true);
+      const response = await fetch(`${API_BASE}/auto_periods/${star}/${telescope}/${campaign}`);
+      const data = await response.json();
+      setAutoPeriodsData(data);
+    } catch (error) {
+      console.error('Error fetching auto periods data:', error);
+      setAutoPeriodsData(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handlePeriodogramClick = (data: any) => {
     console.log('Periodogram clicked:', data);
     // Handle Plotly.js click events
@@ -198,6 +236,22 @@ const Dashboard: React.FC = () => {
     const value = parseFloat(periodInputValue);
     if (value && value >= 0.1 && value <= 20) {
       setSelectedPeriod(value);
+    }
+  };
+
+  const handleUsePrimaryPeriod = () => {
+    if (autoPeriodsData && autoPeriodsData.primary_period) {
+      const period = autoPeriodsData.primary_period;
+      setSelectedPeriod(period);
+      setPeriodInputValue(period.toFixed(4));
+    }
+  };
+
+  const handleUseSecondaryPeriod = () => {
+    if (autoPeriodsData && autoPeriodsData.secondary_period) {
+      const period = autoPeriodsData.secondary_period;
+      setSelectedPeriod(period);
+      setPeriodInputValue(period.toFixed(4));
     }
   };
 
@@ -251,6 +305,116 @@ const Dashboard: React.FC = () => {
       </div>
 
       {loading && <div className="loading">Loading...</div>}
+
+      {/* Automatic Period Detection Results */}
+      {autoPeriodsData && !autoPeriodsData.error && (
+        <div className="auto-periods-section">
+          <h3>🤖 Automatic Period Detection Results</h3>
+          
+          <div className="auto-periods-content">
+            {/* Classification Results */}
+            <div className="classification-info">
+              <div className="classification-badge">
+                <span className={`classification-type classification-${autoPeriodsData.classification.type}`}>
+                  {autoPeriodsData.classification.type.toUpperCase()}
+                </span>
+                <span className="classification-confidence">
+                  {(autoPeriodsData.classification.confidence * 100).toFixed(1)}% confidence
+                </span>
+              </div>
+              <p className="classification-description">
+                {autoPeriodsData.classification.description}
+              </p>
+            </div>
+
+            {/* Period Results */}
+            <div className="periods-info">
+              {autoPeriodsData.primary_period && (
+                <div className="period-result">
+                  <div className="period-label">Primary Period:</div>
+                  <div className="period-value">
+                    <strong>{autoPeriodsData.primary_period.toFixed(4)} days</strong>
+                    <button 
+                      className="use-period-btn primary-btn"
+                      onClick={handleUsePrimaryPeriod}
+                      title="Use this period for phase folding"
+                    >
+                      Use Period
+                    </button>
+                  </div>
+                </div>
+              )}
+              
+              {autoPeriodsData.secondary_period && (
+                <div className="period-result">
+                  <div className="period-label">Secondary Period:</div>
+                  <div className="period-value">
+                    <strong>{autoPeriodsData.secondary_period.toFixed(4)} days</strong>
+                    <button 
+                      className="use-period-btn secondary-btn"
+                      onClick={handleUseSecondaryPeriod}
+                      title="Use this period for phase folding"
+                    >
+                      Use Period
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Method Results */}
+            <div className="methods-info">
+              <div className="methods-header">Detection Methods:</div>
+              <div className="methods-grid">
+                {autoPeriodsData.methods.periodogram && (
+                  <div className={`method-result ${autoPeriodsData.methods.periodogram.success ? 'success' : 'failed'}`}>
+                    <div className="method-name">Periodogram</div>
+                    <div className="method-status">
+                      {autoPeriodsData.methods.periodogram.success ? '✓' : '✗'}
+                    </div>
+                    {autoPeriodsData.methods.periodogram.success && (
+                      <div className="method-periods">
+                        {autoPeriodsData.methods.periodogram.periods.slice(0, 3).map((period, idx) => (
+                          <span key={idx} className="method-period">
+                            {period.toFixed(3)}d
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {autoPeriodsData.methods.torch_fitting && (
+                  <div className={`method-result ${autoPeriodsData.methods.torch_fitting.success ? 'success' : 'failed'}`}>
+                    <div className="method-name">PyTorch Fitting</div>
+                    <div className="method-status">
+                      {autoPeriodsData.methods.torch_fitting.success ? '✓' : '✗'}
+                    </div>
+                    {autoPeriodsData.methods.torch_fitting.success && (
+                      <div className="method-periods">
+                        {autoPeriodsData.methods.torch_fitting.periods.slice(0, 3).map((period, idx) => (
+                          <span key={idx} className="method-period">
+                            {period.toFixed(3)}d
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Show error message if auto period detection failed */}
+      {autoPeriodsData && autoPeriodsData.error && (
+        <div className="auto-periods-error">
+          <h3>⚠️ Automatic Period Detection</h3>
+          <p>Unable to automatically determine periods: {autoPeriodsData.error}</p>
+          <p>You can still manually analyze the periodogram and select periods below.</p>
+        </div>
+      )}
 
       {/* Charts - New Layout: Light curve on top, periodogram and phase-folded side by side */}
       <div className="charts-container">
