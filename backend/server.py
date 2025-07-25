@@ -40,7 +40,8 @@ class PhaseFoldedData(BaseModel):
     flux: List[float]
 
 # Configuration
-DEFAULT_DATA_FOLDER = '/home/runner/work/better-impuls-viewer/better-impuls-viewer/sample_data'
+DEFAULT_DATA_FOLDER = '~/Documents/impuls-data'
+DEFAULT_DATA_FOLDER = os.path.expanduser(DEFAULT_DATA_FOLDER)
 
 def get_data_folder():
     """Get the data folder path"""
