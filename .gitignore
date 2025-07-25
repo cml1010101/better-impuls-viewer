@@ -1,5 +1,11 @@
 .venv
 
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
 # Frontend dependencies and build artifacts
 frontend/node_modules/
 frontend/dist/
@@ -7,3 +13,12 @@ frontend/.env.local
 frontend/.env.development.local
 frontend/.env.test.local
 frontend/.env.production.local
+
+# IDE artifacts
+.vscode/
+.idea/
+*.swp
+
+# OS artifacts
+.DS_Store
+Thumbs.db
