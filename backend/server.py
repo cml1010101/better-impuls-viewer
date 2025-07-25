@@ -43,8 +43,8 @@ class PhaseFoldedData(BaseModel):
     flux: List[float]
 
 # Configuration
-DEFAULT_DATA_FOLDER = '~/Documents/impuls-data'
-DEFAULT_DATA_FOLDER = os.path.expanduser(DEFAULT_DATA_FOLDER)
+DEFAULT_DATA_FOLDER = '../sample_data'
+DEFAULT_DATA_FOLDER = os.path.abspath(DEFAULT_DATA_FOLDER)
 
 # In-memory caches for expensive operations
 _file_cache = {}  # Cache for loaded files

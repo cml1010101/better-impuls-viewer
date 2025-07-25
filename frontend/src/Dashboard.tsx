@@ -1,15 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ScatterChart,
-  Scatter,
-} from 'recharts';
+import Plot from 'react-plotly.js';
 import './Dashboard.css';
 
 // Types
@@ -189,20 +179,14 @@ const Dashboard: React.FC = () => {
 
   const handlePeriodogramClick = (data: any) => {
     console.log('Periodogram clicked:', data);
-    // Try different ways to access the period data from Recharts onClick
-    let period = null;
-    
-    if (data && data.activeLabel) {
-      // activeLabel often contains the x-axis value (period in our case)
-      period = data.activeLabel;
-    } else if (data && data.activePayload && data.activePayload[0] && data.activePayload[0].payload) {
-      period = data.activePayload[0].payload.period;
-    }
-    
-    if (period) {
-      console.log('Selected period:', period);
-      setSelectedPeriod(period);
-      setPeriodInputValue(period.toFixed(4)); // Update input field with clicked period
+    // Handle Plotly.js click events
+    if (data && data.points && data.points[0]) {
+      const period = data.points[0].x;
+      if (period) {
+        console.log('Selected period:', period);
+        setSelectedPeriod(period);
+        setPeriodInputValue(period.toFixed(4)); // Update input field with clicked period
+      }
     }
   };
 
@@ -268,35 +252,49 @@ const Dashboard: React.FC = () => {
 
       {loading && <div className="loading">Loading...</div>}
 
-      {/* Charts */}
+      {/* Charts - Compact Grid Layout */}
       <div className="charts-container">
         {/* Original Data Chart */}
         {campaignData.length > 0 && (
           <div className="chart-section">
             <h3>Light Curve Data</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <ScatterChart data={campaignData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="time" 
-                  type="number" 
-                  scale="linear"
-                  domain={['dataMin', 'dataMax']}
-                  label={{ value: 'Time (days)', position: 'insideBottom', offset: -5 }}
-                />
-                <YAxis 
-                  dataKey="flux"
-                  type="number"
-                  domain={['dataMin', 'dataMax']}
-                  label={{ value: 'Flux', angle: -90, position: 'insideLeft' }}
-                />
-                <Tooltip 
-                  formatter={(value, name) => [Number(value).toFixed(6), name]}
-                  labelFormatter={(value) => `Time: ${Number(value).toFixed(3)} days`}
-                />
-                <Scatter dataKey="flux" fill="#8884d8" />
-              </ScatterChart>
-            </ResponsiveContainer>
+            <Plot
+              data={[
+                {
+                  x: campaignData.map(d => d.time),
+                  y: campaignData.map(d => d.flux),
+                  mode: 'markers',
+                  type: 'scatter',
+                  marker: {
+                    color: '#8884d8',
+                    size: 4,
+                  },
+                  name: 'Flux',
+                },
+              ]}
+              layout={{
+                width: undefined,
+                height: 250,
+                margin: { l: 60, r: 20, t: 20, b: 60 },
+                xaxis: {
+                  title: { text: 'Time (days)' },
+                  automargin: true,
+                },
+                yaxis: {
+                  title: { text: 'Flux' },
+                  automargin: true,
+                },
+                showlegend: false,
+                dragmode: 'pan',
+              }}
+              config={{
+                responsive: true,
+                displayModeBar: true,
+                modeBarButtonsToRemove: ['toImage', 'sendDataToCloud'],
+                displaylogo: false,
+              }}
+              style={{ width: '100%' }}
+            />
           </div>
         )}
 
@@ -304,40 +302,56 @@ const Dashboard: React.FC = () => {
         {periodogramData.length > 0 && (
           <div className="chart-section">
             <h3>Periodogram</h3>
-            <p style={{ textAlign: 'center', marginBottom: '1rem', color: '#666' }}>
+            <p className="chart-description">
               Hover over the chart to see period values. Click or manually enter a period below to fold the data.
             </p>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={periodogramData} onClick={handlePeriodogramClick}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="period"
-                  scale="log"
-                  type="number"
-                  domain={['dataMin', 'dataMax']}
-                  label={{ value: 'Period (days)', position: 'insideBottom', offset: -5 }}
-                />
-                <YAxis 
-                  label={{ value: 'Power', angle: -90, position: 'insideLeft' }}
-                />
-                <Tooltip 
-                  formatter={(value, name) => [Number(value).toFixed(4), name]}
-                  labelFormatter={(value) => `Period: ${Number(value).toFixed(4)} days`}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="power" 
-                  stroke="#ff7300" 
-                  strokeWidth={2}
-                  dot={{ fill: '#ff7300', strokeWidth: 2, r: 2 }}
-                  activeDot={{ r: 6 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            <Plot
+              data={[
+                {
+                  x: periodogramData.map(d => d.period),
+                  y: periodogramData.map(d => d.power),
+                  mode: 'lines+markers',
+                  type: 'scatter',
+                  line: {
+                    color: '#ff7300',
+                    width: 2,
+                  },
+                  marker: {
+                    color: '#ff7300',
+                    size: 4,
+                  },
+                  name: 'Power',
+                },
+              ]}
+              layout={{
+                width: undefined,
+                height: 250,
+                margin: { l: 60, r: 20, t: 20, b: 60 },
+                xaxis: {
+                  title: { text: 'Period (days)' },
+                  type: 'log',
+                  automargin: true,
+                },
+                yaxis: {
+                  title: { text: 'Power' },
+                  automargin: true,
+                },
+                showlegend: false,
+                dragmode: 'pan',
+              }}
+              config={{
+                responsive: true,
+                displayModeBar: true,
+                modeBarButtonsToRemove: ['toImage', 'sendDataToCloud'],
+                displaylogo: false,
+              }}
+              style={{ width: '100%' }}
+              onClick={handlePeriodogramClick}
+            />
             
             {/* Manual period input */}
-            <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-              <label style={{ marginRight: '0.5rem', fontWeight: '600' }}>
+            <div className="period-input-section">
+              <label className="period-label">
                 Enter Period (days):
               </label>
               <input
@@ -347,13 +361,7 @@ const Dashboard: React.FC = () => {
                 max="20"
                 value={periodInputValue}
                 onChange={(e) => handlePeriodInputChange(e.target.value)}
-                style={{
-                  padding: '0.5rem',
-                  border: '2px solid #e1e8ed',
-                  borderRadius: '4px',
-                  marginRight: '0.5rem',
-                  width: '120px'
-                }}
+                className="period-input"
                 placeholder="e.g., 7.8"
                 onKeyPress={(e) => {
                   if (e.key === 'Enter') {
@@ -363,14 +371,7 @@ const Dashboard: React.FC = () => {
               />
               <button
                 onClick={handlePeriodSubmit}
-                style={{
-                  padding: '0.5rem 1rem',
-                  background: '#667eea',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                  cursor: 'pointer'
-                }}
+                className="period-button"
               >
                 Fold Data
               </button>
@@ -388,28 +389,44 @@ const Dashboard: React.FC = () => {
         {phaseFoldedData.length > 0 && selectedPeriod && (
           <div className="chart-section">
             <h3>Phase-Folded Data (Period: {selectedPeriod.toFixed(4)} days)</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <ScatterChart data={phaseFoldedData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="phase"
-                  type="number"
-                  domain={[0, 1]}
-                  label={{ value: 'Phase', position: 'insideBottom', offset: -5 }}
-                />
-                <YAxis 
-                  dataKey="flux"
-                  type="number"
-                  domain={['dataMin', 'dataMax']}
-                  label={{ value: 'Flux', angle: -90, position: 'insideLeft' }}
-                />
-                <Tooltip 
-                  formatter={(value, name) => [Number(value).toFixed(6), name]}
-                  labelFormatter={(value) => `Phase: ${Number(value).toFixed(3)}`}
-                />
-                <Scatter dataKey="flux" fill="#82ca9d" />
-              </ScatterChart>
-            </ResponsiveContainer>
+            <Plot
+              data={[
+                {
+                  x: phaseFoldedData.map(d => d.phase),
+                  y: phaseFoldedData.map(d => d.flux),
+                  mode: 'markers',
+                  type: 'scatter',
+                  marker: {
+                    color: '#82ca9d',
+                    size: 4,
+                  },
+                  name: 'Flux',
+                },
+              ]}
+              layout={{
+                width: undefined,
+                height: 250,
+                margin: { l: 60, r: 20, t: 20, b: 60 },
+                xaxis: {
+                  title: { text: 'Phase' },
+                  range: [0, 1],
+                  automargin: true,
+                },
+                yaxis: {
+                  title: { text: 'Flux' },
+                  automargin: true,
+                },
+                showlegend: false,
+                dragmode: 'pan',
+              }}
+              config={{
+                responsive: true,
+                displayModeBar: true,
+                modeBarButtonsToRemove: ['toImage', 'sendDataToCloud'],
+                displaylogo: false,
+              }}
+              style={{ width: '100%' }}
+            />
           </div>
         )}
       </div>
