@@ -12,6 +12,8 @@ A modern web application for astronomical data analysis, providing interactive v
 - **Interactive Light Curves**: Scatter plot visualization of time-series photometry
 - **Lomb-Scargle Periodogram**: Frequency analysis with logarithmic period display
 - **Phase Folding**: Manual period input with real-time phase-folded light curve generation
+- **🆕 Automatic Period Detection**: AI-powered period determination using both periodogram analysis and PyTorch sinusoidal regression
+- **🆕 Variability Classification**: Automatically classifies objects as regular variables, binary systems, or other types
 - **Modern UI**: Responsive design with gradient backgrounds and intuitive controls
 
 ## 🛠 Technology Stack
@@ -21,6 +23,8 @@ A modern web application for astronomical data analysis, providing interactive v
 - **pandas**: Data manipulation and analysis
 - **numpy**: Numerical computing
 - **astropy**: Astronomical calculations (Lomb-Scargle periodogram)
+- **PyTorch**: Deep learning framework for sinusoidal curve fitting
+- **scipy**: Scientific computing for peak detection and signal analysis
 - **CORS Support**: Cross-origin requests for frontend communication
 
 ### Frontend
@@ -75,6 +79,42 @@ The application implements several astronomical data processing techniques:
 - **Lomb-Scargle Periodogram**: Calculates frequency spectrum for unevenly sampled time series
 - **Phase Folding**: Wraps time series data to a specified period for periodic signal analysis
 
+### 🤖 Automatic Period Determination (NEW)
+
+The system now includes intelligent period detection using two complementary methods:
+
+#### 1. Enhanced Periodogram Analysis
+- **Robust Peak Detection**: Uses median absolute deviation for noise-resistant thresholds
+- **Period Weighting**: Prioritizes astronomically reasonable periods (0.5-50 days)
+- **Harmonic Filtering**: Avoids spurious detections from high-frequency noise
+
+#### 2. PyTorch Sinusoidal Regression
+- **Deep Learning Approach**: Fits multiple sinusoidal components using gradient descent
+- **Flexible Modeling**: Automatically determines amplitudes, periods, and phases
+- **Early Stopping**: Prevents overfitting with patience-based convergence
+
+#### 3. Intelligent Classification
+- **Regular Variables**: Single dominant period systems
+- **Binary Systems**: Multiple period detection with ratio analysis
+- **Complex Objects**: Irregular or multi-component variability
+
+**Example API Response:**
+```json
+{
+  "primary_period": 2.361,
+  "secondary_period": 10.303,
+  "classification": {
+    "type": "regular",
+    "confidence": 0.88,
+    "description": "Regular variable star with period 2.361 days"
+  },
+  "methods": {
+    "periodogram": {"success": true, "periods": [...]},
+    "torch_fitting": {"success": true, "periods": [...]}
+  }
+}
+```
+
 ## 🎯 Sample Data
 
 The repository includes simulated astronomical data with:
@@ -91,6 +131,7 @@ The repository includes simulated astronomical data with:
 - `GET /data/{star_number}/{telescope}/{campaign_id}` - Get processed light curve data
 - `GET /periodogram/{star_number}/{telescope}/{campaign_id}` - Get Lomb-Scargle periodogram
 - `GET /phase_fold/{star_number}/{telescope}/{campaign_id}?period={period}` - Get phase-folded data
+- `GET /auto_periods/{star_number}/{telescope}/{campaign_id}` - **NEW**: Automatically determine periods and classify variability type
 
 ## 🎨 Architecture
 
