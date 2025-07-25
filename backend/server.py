@@ -8,7 +8,7 @@ import numpy as np
 from functools import lru_cache
 import hashlib
 import time
-from process import find_all_campaigns, sort_data, calculate_lomb_scargle, remove_y_outliers
+from process import find_all_campaigns, sort_data, calculate_lomb_scargle, remove_y_outliers, determine_automatic_periods
 
 app = FastAPI(title="Better Impuls Viewer API", version="1.0.0")
 
@@ -41,6 +41,13 @@ class PeriodogramData(BaseModel):
 class PhaseFoldedData(BaseModel):
     phase: List[float]
     flux: List[float]
+
+class AutoPeriodsData(BaseModel):
+    primary_period: Optional[float]
+    secondary_period: Optional[float]
+    classification: Dict[str, Any]
+    methods: Dict[str, Any]
+    error: Optional[str] = None
 
 # Configuration
 DEFAULT_DATA_FOLDER = '../sample_data'
@@ -447,6 +454,74 @@ async def get_phase_folded_data(
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error calculating phase-folded data: {str(e)}")
+
+@app.get("/auto_periods/{star_number}/{telescope}/{campaign_id}")
+async def get_automatic_periods(star_number: int, telescope: str, campaign_id: str) -> AutoPeriodsData:
+    """Get automatically determined periods for a specific campaign using multiple methods"""
+    cache_key = f"auto_periods_{star_number}_{telescope}_{campaign_id}"
+    
+    # Check cache first
+    if cache_key in _processed_data_cache:
+        cache_entry = _processed_data_cache[cache_key]
+        # Check if cache is still valid
+        folder = get_data_folder()
+        filename = f"{star_number}-{telescope}.tbl"
+        filepath = os.path.join(folder, filename)
+        
+        if os.path.exists(filepath):
+            current_hash = get_file_hash(filepath)
+            if cache_entry.get('file_hash') == current_hash:
+                return cache_entry['data']
+    
+    folder = get_data_folder()
+    filename = f"{star_number}-{telescope}.tbl"
+    filepath = os.path.join(folder, filename)
+    
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail=f"Data file not found: {filename}")
+    
+    try:
+        # Load and process data (cached)
+        data = load_data_file(filepath)
+        
+        # Find all campaigns (cached)
+        campaigns_data = get_campaigns_from_data(data, 1.0)
+        
+        # Extract campaign index from campaign_id
+        try:
+            campaign_index = int(campaign_id.replace('c', '')) - 1
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid campaign ID: {campaign_id}")
+        
+        if campaign_index < 0 or campaign_index >= len(campaigns_data):
+            raise HTTPException(status_code=404, detail=f"Campaign {campaign_id} not found")
+        
+        # Get the specific campaign data
+        campaign_data = campaigns_data[campaign_index]
+        campaign_data = remove_y_outliers(campaign_data)
+        campaign_data = sort_data(campaign_data)
+        
+        # Perform automatic period determination
+        period_analysis = determine_automatic_periods(campaign_data)
+        
+        result = AutoPeriodsData(
+            primary_period=period_analysis.get("primary_period"),
+            secondary_period=period_analysis.get("secondary_period"),
+            classification=period_analysis.get("classification", {}),
+            methods=period_analysis.get("methods", {}),
+            error=period_analysis.get("error")
+        )
+        
+        # Cache the result
+        _processed_data_cache[cache_key] = {
+            'data': result,
+            'file_hash': get_file_hash(filepath),
+            'timestamp': time.time()
+        }
+        
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error determining automatic periods: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
