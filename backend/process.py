@@ -53,6 +53,58 @@ def find_longest_x_campaign(data: np.ndarray, x_threshold: float) -> np.ndarray:
 
     return longest_campaign
 
+def find_all_campaigns(data: np.ndarray, x_threshold: float) -> list[np.ndarray]:
+    """
+    Finds all campaigns (series of consecutive data points) where the x-values
+    are "close" to each other within a specified threshold.
+
+    A "campaign" is defined as a sequence of points where the absolute
+    difference between the x-value of the current point and the x-value
+    of the previous point is less than or equal to the x_threshold.
+
+    Args:
+        data (np.ndarray): A NumPy array of shape (n, 2) where each row
+                           is a (x, y) coordinate pair.
+        x_threshold (float): The maximum allowed absolute difference between
+                             consecutive x-values for them to be considered
+                             "close" and part of the same campaign.
+
+    Returns:
+        list[np.ndarray]: A list of NumPy arrays, each representing a campaign.
+                         Returns an empty list if no data or no campaigns are found.
+    """
+    if data.shape[0] == 0:
+        print("Input data is empty.")
+        return []
+
+    if data.shape[0] == 1:
+        print("Input data has only one point. Returning the point as the only campaign.")
+        return [data]
+
+    campaigns = []
+    current_campaign = np.array([data[0]]) # Start with the first point
+
+    # Iterate through the data starting from the second point
+    for i in range(1, data.shape[0]):
+        # Check if the current point's x-value is close to the previous point's x-value
+        if np.abs(data[i, 0] - data[i-1, 0]) <= x_threshold:
+            # If close, add the point to the current campaign
+            current_campaign = np.vstack((current_campaign, data[i]))
+        else:
+            # If not close, the current campaign ends.
+            # Add the current campaign to the list if it has data
+            if len(current_campaign) > 0:
+                campaigns.append(current_campaign)
+
+            # Start a new campaign with the current point
+            current_campaign = np.array([data[i]])
+
+    # After the loop, add the last campaign if it has data
+    if len(current_campaign) > 0:
+        campaigns.append(current_campaign)
+
+    return campaigns
+
 def sort_data(data: np.ndarray) -> np.ndarray:
     """
     Sort the data based on the first column (x-axis data).

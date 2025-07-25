@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional
 import os
 import pandas as pd
 import numpy as np
-from process import find_longest_x_campaign, sort_data, calculate_lomb_scargle, remove_y_outliers
+from process import find_longest_x_campaign, find_all_campaigns, sort_data, calculate_lomb_scargle, remove_y_outliers
 
 app = FastAPI(title="Better Impuls Viewer API", version="1.0.0")
 
@@ -61,40 +61,46 @@ def load_data_file(filepath: str) -> np.ndarray:
         raise HTTPException(status_code=500, detail=f"Error loading data file: {str(e)}")
 
 def get_campaigns_for_star_telescope(star_number: int, telescope: str) -> List[CampaignInfo]:
-    """Get all campaigns for a specific star and telescope"""
+    """Get the top 3 campaigns for a specific star and telescope from a single data file"""
     folder = get_data_folder()
-    all_files = os.listdir(folder)
+    filename = f"{star_number}-{telescope}.tbl"
+    filepath = os.path.join(folder, filename)
     
-    campaigns = []
-    pattern = f"{star_number}-{telescope}"
+    if not os.path.exists(filepath):
+        return []
     
-    for filename in all_files:
-        if filename.startswith(pattern) and filename.endswith('.tbl'):
-            filepath = os.path.join(folder, filename)
+    try:
+        # Load data from the single file
+        data = load_data_file(filepath)
+        data = sort_data(data)
+        
+        # Find all campaigns in the data using time threshold
+        # Use 10 day threshold to identify gaps between campaigns (since campaigns are separated by 120 days)
+        campaigns_data = find_all_campaigns(data, 10.0)
+        
+        campaigns = []
+        for i, campaign_data in enumerate(campaigns_data):
+            # Remove outliers from this campaign
+            clean_campaign_data = remove_y_outliers(campaign_data)
             
-            # Extract campaign info from filename
-            parts = filename.replace('.tbl', '').split('-')
-            if len(parts) >= 3:
-                campaign_id = parts[2]  # e.g., 'c1', 'c2', etc.
+            if len(clean_campaign_data) > 10:  # Only include campaigns with reasonable amount of data
+                duration = clean_campaign_data[-1, 0] - clean_campaign_data[0, 0] if len(clean_campaign_data) > 0 else 0
                 
-                # Load data to get info
-                try:
-                    data = load_data_file(filepath)
-                    duration = data[-1, 0] - data[0, 0] if len(data) > 0 else 0
-                    
-                    campaigns.append(CampaignInfo(
-                        campaign_id=campaign_id,
-                        telescope=telescope,
-                        star_number=star_number,
-                        data_points=len(data),
-                        duration=duration
-                    ))
-                except Exception:
-                    continue  # Skip files that can't be loaded
-    
-    # Sort by number of data points (largest first) to get "most massive" campaigns
-    campaigns.sort(key=lambda x: x.data_points, reverse=True)
-    return campaigns[:3]  # Return top 3 most massive
+                campaigns.append(CampaignInfo(
+                    campaign_id=f"c{i+1}",
+                    telescope=telescope,
+                    star_number=star_number,
+                    data_points=len(clean_campaign_data),
+                    duration=duration
+                ))
+        
+        # Sort by number of data points (largest first) to get "most massive" campaigns
+        campaigns.sort(key=lambda x: x.data_points, reverse=True)
+        return campaigns[:3]  # Return top 3 most massive
+        
+    except Exception as e:
+        print(f"Error processing campaigns for {star_number}-{telescope}: {str(e)}")
+        return []
 
 @app.get("/")
 async def root():
@@ -136,7 +142,7 @@ async def get_telescopes_for_star(star_number: int) -> List[str]:
             try:
                 parts = filename.split('-')
                 if len(parts) >= 2:
-                    telescope = parts[1].split('.')[0].replace('c1', '').replace('c2', '').replace('c3', '')
+                    telescope = parts[1].replace('.tbl', '')
                     if telescope:
                         telescopes.add(telescope)
             except (ValueError, IndexError):
@@ -153,7 +159,7 @@ async def get_campaigns(star_number: int, telescope: str) -> List[CampaignInfo]:
 async def get_campaign_data(star_number: int, telescope: str, campaign_id: str) -> ProcessedData:
     """Get processed data for a specific campaign"""
     folder = get_data_folder()
-    filename = f"{star_number}-{telescope}-{campaign_id}.tbl"
+    filename = f"{star_number}-{telescope}.tbl"
     filepath = os.path.join(folder, filename)
     
     if not os.path.exists(filepath):
@@ -166,27 +172,40 @@ async def get_campaign_data(star_number: int, telescope: str, campaign_id: str) 
         
         # For processing, use only first 2 columns (time, flux)
         data_for_processing = raw_array[:, :2]
+        data_for_processing = sort_data(data_for_processing)
         
-        # Find longest campaign
-        data_for_processing = find_longest_x_campaign(data_for_processing, 0.1)
+        # Find all campaigns
+        campaigns_data = find_all_campaigns(data_for_processing, 10.0)
+        
+        # Extract campaign index from campaign_id (e.g., "c1" -> 0, "c2" -> 1)
+        try:
+            campaign_index = int(campaign_id.replace('c', '')) - 1
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid campaign ID: {campaign_id}")
+        
+        if campaign_index < 0 or campaign_index >= len(campaigns_data):
+            raise HTTPException(status_code=404, detail=f"Campaign {campaign_id} not found")
+        
+        # Get the specific campaign data
+        campaign_data = campaigns_data[campaign_index]
         
         # Remove outliers
-        data_for_processing = remove_y_outliers(data_for_processing)
+        campaign_data = remove_y_outliers(campaign_data)
         
         # Sort data
-        data_for_processing = sort_data(data_for_processing)
+        campaign_data = sort_data(campaign_data)
         
         # Extract error column if available
         if raw_array.shape[1] > 2:
             # Create a mapping from original indices to processed indices
             # For simplicity, use a default error for processed data
-            error_values = [0.005] * len(data_for_processing)
+            error_values = [0.005] * len(campaign_data)
         else:
-            error_values = [0.005] * len(data_for_processing)
+            error_values = [0.005] * len(campaign_data)
         
         return ProcessedData(
-            time=data_for_processing[:, 0].tolist(),
-            flux=data_for_processing[:, 1].tolist(),
+            time=campaign_data[:, 0].tolist(),
+            flux=campaign_data[:, 1].tolist(),
             error=error_values
         )
     except Exception as e:
@@ -196,7 +215,7 @@ async def get_campaign_data(star_number: int, telescope: str, campaign_id: str) 
 async def get_periodogram(star_number: int, telescope: str, campaign_id: str) -> PeriodogramData:
     """Get Lomb-Scargle periodogram for a specific campaign"""
     folder = get_data_folder()
-    filename = f"{star_number}-{telescope}-{campaign_id}.tbl"
+    filename = f"{star_number}-{telescope}.tbl"
     filepath = os.path.join(folder, filename)
     
     if not os.path.exists(filepath):
@@ -205,12 +224,27 @@ async def get_periodogram(star_number: int, telescope: str, campaign_id: str) ->
     try:
         # Load and process data
         data = load_data_file(filepath)
-        data = find_longest_x_campaign(data, 0.1)
-        data = remove_y_outliers(data)
         data = sort_data(data)
         
+        # Find all campaigns
+        campaigns_data = find_all_campaigns(data, 10.0)
+        
+        # Extract campaign index from campaign_id
+        try:
+            campaign_index = int(campaign_id.replace('c', '')) - 1
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid campaign ID: {campaign_id}")
+        
+        if campaign_index < 0 or campaign_index >= len(campaigns_data):
+            raise HTTPException(status_code=404, detail=f"Campaign {campaign_id} not found")
+        
+        # Get the specific campaign data
+        campaign_data = campaigns_data[campaign_index]
+        campaign_data = remove_y_outliers(campaign_data)
+        campaign_data = sort_data(campaign_data)
+        
         # Calculate periodogram
-        frequencies, powers = calculate_lomb_scargle(data)
+        frequencies, powers = calculate_lomb_scargle(campaign_data)
         
         # Convert frequencies to periods
         periods = np.zeros_like(frequencies)
@@ -241,7 +275,7 @@ async def get_phase_folded_data(
         raise HTTPException(status_code=400, detail="Period must be positive and finite")
     
     folder = get_data_folder()
-    filename = f"{star_number}-{telescope}-{campaign_id}.tbl"
+    filename = f"{star_number}-{telescope}.tbl"
     filepath = os.path.join(folder, filename)
     
     if not os.path.exists(filepath):
@@ -250,16 +284,31 @@ async def get_phase_folded_data(
     try:
         # Load and process data
         data = load_data_file(filepath)
-        data = find_longest_x_campaign(data, 0.1)
-        data = remove_y_outliers(data)
         data = sort_data(data)
         
+        # Find all campaigns
+        campaigns_data = find_all_campaigns(data, 10.0)
+        
+        # Extract campaign index from campaign_id
+        try:
+            campaign_index = int(campaign_id.replace('c', '')) - 1
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid campaign ID: {campaign_id}")
+        
+        if campaign_index < 0 or campaign_index >= len(campaigns_data):
+            raise HTTPException(status_code=404, detail=f"Campaign {campaign_id} not found")
+        
+        # Get the specific campaign data
+        campaign_data = campaigns_data[campaign_index]
+        campaign_data = remove_y_outliers(campaign_data)
+        campaign_data = sort_data(campaign_data)
+        
         # Calculate phase
-        phase = (data[:, 0] % period) / period
+        phase = (campaign_data[:, 0] % period) / period
         
         return PhaseFoldedData(
             phase=phase.tolist(),
-            flux=data[:, 1].tolist()
+            flux=campaign_data[:, 1].tolist()
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error calculating phase-folded data: {str(e)}")

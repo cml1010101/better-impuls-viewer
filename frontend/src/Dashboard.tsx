@@ -6,7 +6,6 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   ScatterChart,
   Scatter,
@@ -187,11 +186,12 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const handlePeriodogramClick = (data: any, index: number) => {
-    console.log('Periodogram clicked:', data, index);
-    if (data && data.period) {
-      console.log('Selected period:', data.period);
-      setSelectedPeriod(data.period);
+  const handlePeriodogramClick = (data: any) => {
+    console.log('Periodogram clicked:', data);
+    if (data && data.activePayload && data.activePayload[0] && data.activePayload[0].payload) {
+      const period = data.activePayload[0].payload.period;
+      console.log('Selected period:', period);
+      setSelectedPeriod(period);
     }
   };
 
@@ -308,7 +308,7 @@ const Dashboard: React.FC = () => {
                   stroke="#ff7300" 
                   strokeWidth={2}
                   dot={{ fill: '#ff7300', strokeWidth: 2, r: 2 }}
-                  activeDot={{ r: 6, onClick: handlePeriodogramClick }}
+                  activeDot={{ r: 6 }}
                 />
               </LineChart>
             </ResponsiveContainer>
