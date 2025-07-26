@@ -233,23 +233,53 @@
   color: white;
 }
 
-.classification-eclipsing_object {
-  background: #dc2626;
-  color: white;
-}
-
 .classification-eclipsing_binary {
   background: #ea580c;
   color: white;
 }
 
-.classification-double_peaked {
+.classification-dipper {
+  background: #dc2626;
+  color: white;
+}
+
+.classification-burster {
+  background: #f59e0b;
+  color: white;
+}
+
+.classification-complex_variable {
   background: #2563eb;
   color: white;
 }
 
-.classification-close_binary {
+.classification-beating_variable {
   background: #7c2d12;
+  color: white;
+}
+
+.classification-beating_system {
+  background: #92400e;
+  color: white;
+}
+
+.classification-shape_changing {
+  background: #059669;
+  color: white;
+}
+
+.classification-spotted_star {
+  background: #0891b2;
+  color: white;
+}
+
+.classification-long_term_variable {
+  background: #7c3aed;
+  color: white;
+}
+
+.classification-irregular_variable {
+  background: #6b7280;
   color: white;
 }
 

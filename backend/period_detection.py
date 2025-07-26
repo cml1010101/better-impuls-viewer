@@ -163,10 +163,10 @@ class PeriodValidationCNN(nn.Module):
     2. Classification probabilities for variability types
     """
     
-    def __init__(self, input_size: int = 100, num_classes: int = 5):
+    def __init__(self, input_size: int = 100, num_classes: int = 14):
         super(PeriodValidationCNN, self).__init__()
         self.input_size = input_size
-        self.num_classes = num_classes  # dipper, distant_peaks, close_peak, sinusoidal, other
+        self.num_classes = num_classes  # All 14 classification types from CLASS_NAMES
         
         # Convolutional layers for pattern recognition in folded curves
         self.conv_layers = nn.Sequential(
@@ -329,49 +329,11 @@ def create_synthetic_training_data(
     for _ in range(n_samples):
         phase = np.linspace(0, 1, n_bins)
         
-        # Generate different types of curves based on new classifications
-        curve_type = np.random.choice(['dipper', 'distant_peaks', 'close_peak', 'sinusoidal', 'other'])
+        # Generate different types of curves based on all 14 classifications
+        curve_type = np.random.choice(CLASS_NAMES)
+        class_label = CLASS_NAMES.index(curve_type)
         
-        if curve_type == 'dipper':
-            # Transit-like dips (exoplanet/eclipsing binary characteristic)
-            dip_center = np.random.uniform(0.3, 0.7)
-            dip_width = np.random.uniform(0.05, 0.15)
-            dip_depth = np.random.uniform(0.5, 2.0)
-            
-            # Create symmetric dip
-            dip_mask = np.abs(phase - dip_center) < dip_width/2
-            curve = np.ones(n_bins)
-            curve[dip_mask] -= dip_depth * np.exp(-((phase[dip_mask] - dip_center)/(dip_width/4))**2)
-            confidence = np.random.uniform(0.7, 0.95)
-            class_label = 0  # dipper
-            
-        elif curve_type == 'distant_peaks':
-            # Multiple peaks with significant separation
-            peak1_pos = np.random.uniform(0.1, 0.3)
-            peak2_pos = np.random.uniform(0.6, 0.9)
-            amplitude1 = np.random.uniform(0.8, 1.5)
-            amplitude2 = np.random.uniform(0.5, 1.2)
-            width = np.random.uniform(0.08, 0.15)
-            
-            curve = (amplitude1 * np.exp(-((phase - peak1_pos)/width)**2) + 
-                    amplitude2 * np.exp(-((phase - peak2_pos)/width)**2))
-            confidence = np.random.uniform(0.6, 0.9)
-            class_label = 1  # distant_peaks
-            
-        elif curve_type == 'close_peak':
-            # Multiple peaks close together
-            peak1_pos = np.random.uniform(0.3, 0.5)
-            peak2_pos = peak1_pos + np.random.uniform(0.1, 0.25)
-            amplitude1 = np.random.uniform(0.8, 1.5)
-            amplitude2 = np.random.uniform(0.6, 1.3)
-            width = np.random.uniform(0.06, 0.12)
-            
-            curve = (amplitude1 * np.exp(-((phase - peak1_pos)/width)**2) + 
-                    amplitude2 * np.exp(-((phase - peak2_pos)/width)**2))
-            confidence = np.random.uniform(0.6, 0.9)
-            class_label = 2  # close_peak
-            
-        elif curve_type == 'sinusoidal':
+        if curve_type == 'sinusoidal':
             # Clean sinusoidal pattern (regular variable star)
             amplitude = np.random.uniform(0.5, 2.0)
             n_harmonics = np.random.choice([1, 2])
@@ -380,20 +342,134 @@ def create_synthetic_training_data(
             curve = amplitude * np.sin(2 * np.pi * phase + phase_shift)
             if n_harmonics == 2:
                 curve += 0.3 * amplitude * np.sin(4 * np.pi * phase + np.random.uniform(0, 2*np.pi))
-            
             confidence = np.random.uniform(0.8, 0.95)
-            class_label = 3  # sinusoidal
             
-        else:  # other/noise
-            # Random noise pattern or irregular variability
-            curve = np.random.normal(0, 0.5, n_bins)
-            # Add some random spikes to simulate irregular behavior
-            n_spikes = np.random.choice([0, 1, 2, 3])
-            for _ in range(n_spikes):
-                spike_pos = np.random.randint(0, n_bins)
-                curve[spike_pos] += np.random.uniform(-1.5, 1.5)
+        elif curve_type == 'double dip':
+            # Binary system with two eclipses per period
+            primary_depth = np.random.uniform(1.0, 2.5)
+            secondary_depth = np.random.uniform(0.3, 1.0)
+            
+            curve = np.ones(n_bins)
+            # Primary eclipse
+            primary_mask = np.abs(phase - 0.0) < 0.1
+            curve[primary_mask] -= primary_depth * np.exp(-((phase[primary_mask] - 0.0)/0.04)**2)
+            # Secondary eclipse
+            secondary_mask = np.abs(phase - 0.5) < 0.08
+            curve[secondary_mask] -= secondary_depth * np.exp(-((phase[secondary_mask] - 0.5)/0.03)**2)
+            confidence = np.random.uniform(0.7, 0.95)
+            
+        elif curve_type == 'shape changer':
+            # Variable morphology over time - use higher order harmonics
+            base_sine = np.sin(2 * np.pi * phase)
+            modulation = 0.3 * np.sin(4 * np.pi * phase + np.random.uniform(0, 2*np.pi))
+            curve = base_sine * (1 + modulation)
+            confidence = np.random.uniform(0.6, 0.85)
+            
+        elif curve_type == 'beater':
+            # Beat phenomenon from two close frequencies
+            f1, f2 = 1.0, 1.1  # Close frequencies
+            curve = np.sin(2*np.pi*f1*phase) + np.sin(2*np.pi*f2*phase)
+            confidence = np.random.uniform(0.5, 0.8)
+            
+        elif curve_type == 'beater/complex peak':
+            # Complex beater with multiple frequencies
+            curve = (np.sin(2*np.pi*1.0*phase) + 
+                    np.sin(2*np.pi*1.05*phase) + 
+                    0.5*np.sin(2*np.pi*1.1*phase))
+            confidence = np.random.uniform(0.4, 0.75)
+            
+        elif curve_type == 'resolved close peaks':
+            # Two well-separated but close periods
+            peak1_pos = np.random.uniform(0.3, 0.5)
+            peak2_pos = peak1_pos + np.random.uniform(0.15, 0.3)
+            width = np.random.uniform(0.06, 0.12)
+            
+            curve = (np.exp(-((phase - peak1_pos)/width)**2) + 
+                    0.7*np.exp(-((phase - peak2_pos)/width)**2))
+            confidence = np.random.uniform(0.6, 0.9)
+            
+        elif curve_type == 'resolved distant peaks':
+            # Two well-separated distant peaks
+            peak1_pos = np.random.uniform(0.1, 0.3)
+            peak2_pos = np.random.uniform(0.6, 0.9)
+            width = np.random.uniform(0.08, 0.15)
+            
+            curve = (np.exp(-((phase - peak1_pos)/width)**2) + 
+                    0.8*np.exp(-((phase - peak2_pos)/width)**2))
+            confidence = np.random.uniform(0.6, 0.9)
+            
+        elif curve_type == 'eclipsing binaries':
+            # Classic eclipsing binary system
+            curve = np.ones(n_bins)
+            # Primary eclipse - wider and deeper
+            primary_width = np.random.uniform(0.08, 0.15)
+            primary_depth = np.random.uniform(1.5, 3.0)
+            primary_mask = np.abs(phase - 0.0) < primary_width
+            curve[primary_mask] -= primary_depth * np.exp(-((phase[primary_mask] - 0.0)/(primary_width/3))**2)
+            
+            # Secondary eclipse - narrower and shallower  
+            secondary_width = np.random.uniform(0.05, 0.1)
+            secondary_depth = np.random.uniform(0.5, 1.5)
+            secondary_mask = np.abs(phase - 0.5) < secondary_width
+            curve[secondary_mask] -= secondary_depth * np.exp(-((phase[secondary_mask] - 0.5)/(secondary_width/3))**2)
+            confidence = np.random.uniform(0.8, 0.95)
+            
+        elif curve_type == 'pulsator':
+            # Pulsating variable with multiple harmonics
+            curve = np.zeros(n_bins)
+            for harmonic in range(1, 4):
+                amplitude = np.random.uniform(0.3, 1.0) / harmonic
+                curve += amplitude * np.sin(2 * np.pi * harmonic * phase + np.random.uniform(0, 2*np.pi))
+            confidence = np.random.uniform(0.7, 0.9)
+            
+        elif curve_type == 'burster':
+            # Random bursting behavior
+            curve = np.random.normal(0, 0.2, n_bins)
+            n_bursts = np.random.choice([1, 2, 3])
+            for _ in range(n_bursts):
+                burst_pos = np.random.randint(0, n_bins)
+                burst_width = np.random.randint(3, 8)
+                burst_amplitude = np.random.uniform(1.0, 3.0)
+                start = max(0, burst_pos - burst_width//2)
+                end = min(n_bins, burst_pos + burst_width//2)
+                curve[start:end] += burst_amplitude * np.exp(-np.arange(end-start)**2 / (burst_width/3)**2)
+            confidence = np.random.uniform(0.4, 0.7)
+            
+        elif curve_type == 'dipper':
+            # Random dipping behavior (like young stellar objects)
+            curve = np.ones(n_bins) + np.random.normal(0, 0.1, n_bins)
+            n_dips = np.random.choice([1, 2, 3])
+            for _ in range(n_dips):
+                dip_pos = np.random.randint(0, n_bins)
+                dip_width = np.random.randint(5, 15)
+                dip_depth = np.random.uniform(0.5, 2.0)
+                start = max(0, dip_pos - dip_width//2)
+                end = min(n_bins, dip_pos + dip_width//2)
+                curve[start:end] -= dip_depth * np.exp(-np.arange(end-start)**2 / (dip_width/3)**2)
+            confidence = np.random.uniform(0.5, 0.8)
+            
+        elif curve_type == 'co-rotating optically thin material':
+            # Spotted stars with multiple sinusoidal components
+            curve = np.ones(n_bins)
+            n_spots = np.random.choice([2, 3, 4])
+            for spot in range(n_spots):
+                spot_amplitude = np.random.uniform(0.1, 0.4)
+                spot_phase = np.random.uniform(0, 2*np.pi)
+                curve -= spot_amplitude * np.maximum(0, np.sin(2*np.pi*phase + spot_phase))
+            confidence = np.random.uniform(0.6, 0.85)
+            
+        elif curve_type == 'long term trend':
+            # Long-term trending behavior
+            trend_coeff = np.random.uniform(-1.0, 1.0)
+            curve = trend_coeff * phase + 0.3 * np.sin(2 * np.pi * phase)
+            confidence = np.random.uniform(0.3, 0.6)
+            
+        elif curve_type == 'stochastic':
+            # Stochastic/irregular variability
+            # Generate correlated noise
+            random_walk = np.cumsum(np.random.normal(0, 0.1, n_bins))
+            curve = random_walk - np.mean(random_walk)  # Remove mean
             confidence = np.random.uniform(0.1, 0.4)
-            class_label = 4  # other
         
         # Add noise
         noise_level = np.random.uniform(0.05, 0.2)
@@ -515,7 +591,7 @@ def validate_periods_with_cnn(
         return []
 
     results = []
-    class_names = ['dipper', 'distant_peaks', 'close_peak', 'sinusoidal', 'other']
+    # Prepare validated periods with classifications
     
     with torch.no_grad():
         for period, power in candidate_periods:
@@ -615,19 +691,26 @@ def classify_periodicity_with_cnn(
         avg_confidence = (primary_confidence + secondary_confidence) / 2
         
         # Check for specific multi-period patterns
-        if (primary_classification in ['dipper', 'close_peak'] and 
-            secondary_classification in ['dipper', 'close_peak']):
+        if (primary_classification in ['double dip', 'eclipsing binaries'] and 
+            secondary_classification in ['double dip', 'eclipsing binaries']):
             return {
                 "type": "eclipsing_binary",
                 "confidence": min(0.9, avg_confidence),
                 "description": f"Eclipsing binary system with periods {primary_period:.3f} and {secondary_period:.3f} days"
             }
-        elif (primary_classification == 'distant_peaks' or 
-              secondary_classification == 'distant_peaks'):
+        elif (primary_classification in ['resolved distant peaks', 'resolved close peaks'] or 
+              secondary_classification in ['resolved distant peaks', 'resolved close peaks']):
             return {
                 "type": "complex_multiperiod",
                 "confidence": min(0.85, avg_confidence),
                 "description": f"Complex multi-period system (primary: {primary_period:.3f} days, secondary: {secondary_period:.3f} days)"
+            }
+        elif (primary_classification in ['beater', 'beater/complex peak'] or 
+              secondary_classification in ['beater', 'beater/complex peak']):
+            return {
+                "type": "beating_system",
+                "confidence": min(0.8, avg_confidence),
+                "description": f"Beating variability system ({primary_classification} + {secondary_classification})"
             }
         else:
             return {
@@ -636,37 +719,99 @@ def classify_periodicity_with_cnn(
                 "description": f"Multi-period variability ({primary_classification} + {secondary_classification})"
             }
     
-    # Single dominant period classification
+    # Single dominant period classification - use the CNN classification directly
     if primary_confidence > 0.3:
+        # Map CNN classifications to simplified types for frontend display
+        display_type_map = {
+            'sinusoidal': 'regular_variable',
+            'pulsator': 'regular_variable', 
+            'double dip': 'eclipsing_binary',
+            'eclipsing binaries': 'eclipsing_binary',
+            'dipper': 'dipper',
+            'burster': 'burster',
+            'resolved close peaks': 'complex_variable',
+            'resolved distant peaks': 'complex_variable',
+            'beater': 'beating_variable',
+            'beater/complex peak': 'beating_variable',
+            'shape changer': 'shape_changing',
+            'co-rotating optically thin material': 'spotted_star',
+            'long term trend': 'long_term_variable',
+            'stochastic': 'irregular_variable'
+        }
+        
+        display_type = display_type_map.get(primary_classification, 'other')
+        
         if primary_classification == 'sinusoidal':
             return {
-                "type": "regular_variable",
+                "type": display_type,
                 "confidence": min(0.9, primary_confidence),
                 "description": f"Regular variable star with clean sinusoidal pattern (period: {primary_period:.3f} days)"
             }
+        elif primary_classification == 'pulsator':
+            return {
+                "type": display_type,
+                "confidence": min(0.9, primary_confidence),
+                "description": f"Pulsating variable star (period: {primary_period:.3f} days)"
+            }
         elif primary_classification == 'dipper':
             return {
-                "type": "eclipsing_object",
+                "type": display_type,
                 "confidence": min(0.85, primary_confidence),
-                "description": f"Eclipsing or transiting object with dip pattern (period: {primary_period:.3f} days)"
+                "description": f"Dipping variable (young stellar object or disk occultation) - period: {primary_period:.3f} days"
             }
-        elif primary_classification == 'distant_peaks':
+        elif primary_classification == 'burster':
             return {
-                "type": "double_peaked",
+                "type": display_type,
                 "confidence": min(0.8, primary_confidence),
-                "description": f"Double-peaked variable star (period: {primary_period:.3f} days)"
+                "description": f"Bursting variable with dominant period: {primary_period:.3f} days"
             }
-        elif primary_classification == 'close_peak':
+        elif primary_classification in ['double dip', 'eclipsing binaries']:
             return {
-                "type": "close_binary",
+                "type": display_type,
+                "confidence": min(0.9, primary_confidence),
+                "description": f"Eclipsing binary system with orbital period: {primary_period:.3f} days"
+            }
+        elif primary_classification in ['resolved close peaks', 'resolved distant peaks']:
+            return {
+                "type": display_type,
                 "confidence": min(0.8, primary_confidence),
-                "description": f"Close binary or pulsating variable (period: {primary_period:.3f} days)"
+                "description": f"Complex variable with resolved peaks - dominant period: {primary_period:.3f} days"
             }
-        else:  # 'other'
+        elif primary_classification in ['beater', 'beater/complex peak']:
             return {
-                "type": "irregular",
+                "type": display_type,
+                "confidence": min(0.75, primary_confidence),
+                "description": f"Beating variable with primary period: {primary_period:.3f} days"
+            }
+        elif primary_classification == 'shape changer':
+            return {
+                "type": display_type,
+                "confidence": min(0.8, primary_confidence),
+                "description": f"Shape-changing variable star - period: {primary_period:.3f} days"
+            }
+        elif primary_classification == 'co-rotating optically thin material':
+            return {
+                "type": display_type,
+                "confidence": min(0.8, primary_confidence),
+                "description": f"Spotted star with co-rotating material - rotation period: {primary_period:.3f} days"
+            }
+        elif primary_classification == 'long term trend':
+            return {
+                "type": display_type,
                 "confidence": min(0.6, primary_confidence),
-                "description": f"Irregular or unclassified variability (period: {primary_period:.3f} days)"
+                "description": f"Long-term variable trend - characteristic timescale: {primary_period:.3f} days"
+            }
+        elif primary_classification == 'stochastic':
+            return {
+                "type": display_type,
+                "confidence": min(0.5, primary_confidence),
+                "description": f"Stochastic/irregular variability - dominant timescale: {primary_period:.3f} days"
+            }
+        else:
+            return {
+                "type": "other",
+                "confidence": min(0.6, primary_confidence),
+                "description": f"Unclassified variability (period: {primary_period:.3f} days)"
             }
 
     # Low confidence detection

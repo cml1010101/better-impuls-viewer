@@ -215,29 +215,69 @@ class GoogleSheetsLoader:
         """
         Normalize LC category strings to standard classifications.
         
-        Maps various category strings to the main types:
-        - dipper, dipper? -> dipper
-        - distant peaks, distant_peaks -> distant_peaks
-        - close peak, close_peak -> close_peak
+        Maps various category strings from Google Sheets to the 14 main types:
         - sinusoidal, sinusoidal? -> sinusoidal
-        - everything else -> other
+        - double dip, double_dip -> double dip
+        - shape changer, shape_changer -> shape changer
+        - beater -> beater
+        - beater/complex peak -> beater/complex peak
+        - resolved close peaks -> resolved close peaks
+        - resolved distant peaks -> resolved distant peaks
+        - eclipsing binaries -> eclipsing binaries
+        - pulsator -> pulsator
+        - burster -> burster
+        - dipper, dipper? -> dipper
+        - co-rotating optically thin material -> co-rotating optically thin material
+        - long term trend -> long term trend
+        - stochastic -> stochastic
         """
         category = category.lower().strip()
         
         # Remove question marks and normalize
         category = category.replace('?', '').strip()
         
-        # Map common variations
-        if 'dipper' in category:
-            return 'dipper'
-        elif 'distant' in category and 'peak' in category:
-            return 'distant_peaks'
-        elif 'close' in category and 'peak' in category:
-            return 'close_peak'
-        elif 'sinusoidal' in category:
+        # Map common variations to the exact CLASS_NAMES
+        if 'sinusoidal' in category:
             return 'sinusoidal'
+        elif 'double' in category and 'dip' in category:
+            return 'double dip'
+        elif 'shape' in category and 'chang' in category:
+            return 'shape changer'
+        elif 'beater' in category and ('complex' in category or 'peak' in category):
+            return 'beater/complex peak'
+        elif 'beater' in category:
+            return 'beater'
+        elif 'resolved' in category and 'close' in category:
+            return 'resolved close peaks'
+        elif 'resolved' in category and 'distant' in category:
+            return 'resolved distant peaks'
+        elif ('distant' in category and 'peak' in category) and 'resolved' not in category:
+            return 'resolved distant peaks'  # Legacy mapping
+        elif ('close' in category and 'peak' in category) and 'resolved' not in category:
+            return 'resolved close peaks'  # Legacy mapping
+        elif 'eclipsing' in category or 'binary' in category:
+            return 'eclipsing binaries'
+        elif 'pulsator' in category or 'pulsating' in category:
+            return 'pulsator'
+        elif 'burster' in category or 'burst' in category:
+            return 'burster'
+        elif 'dipper' in category:
+            return 'dipper'
+        elif 'co-rotating' in category or ('rotating' in category and 'material' in category):
+            return 'co-rotating optically thin material'
+        elif 'long' in category and 'trend' in category:
+            return 'long term trend'
+        elif 'stochastic' in category or 'irregular' in category:
+            return 'stochastic'
         else:
-            return 'other'
+            # Try to match against CLASS_NAMES directly
+            for class_name in CLASS_NAMES:
+                if class_name.lower().replace(' ', '') in category.replace(' ', ''):
+                    return class_name
+            
+            # Default fallback - pick first category for unknown
+            print(f"Warning: Unknown category '{category}', defaulting to 'stochastic'")
+            return 'stochastic'
     
     def _load_star_data(self, star_number: int) -> Tuple[np.ndarray, np.ndarray]:
         """

@@ -559,9 +559,9 @@ const Dashboard: React.FC = () => {
               <ul>
                 <li><strong>Phase Folding</strong>: Candidate periods from periodogram are used to phase-fold the light curve data</li>
                 <li><strong>Convolutional Analysis</strong>: Multi-layer CNN processes folded light curves to detect genuine periodic patterns</li>
-                <li><strong>Dual Output</strong>: Network provides confidence scores (0-1) and variability classification (regular/binary/other)</li>
+                <li><strong>Dual Output</strong>: Network provides confidence scores (0-1) and variability classification across 14 astronomical types</li>
                 <li><strong>Pattern Recognition</strong>: CNN learns to distinguish real variable stars from noise artifacts and spurious periods</li>
-                <li><strong>Shape-Based Classification</strong>: Classifies variability type based on folded light curve morphology</li>
+                <li><strong>Shape-Based Classification</strong>: Classifies variability type based on folded light curve morphology into 14 categories</li>
               </ul>
 
               <h4>🔄 CNN-Driven Classification</h4>
@@ -572,9 +572,12 @@ const Dashboard: React.FC = () => {
                 <li><strong>Quality Control</strong>: Campaign duration: <strong>{campaignData.length > 0 ? ((Math.max(...campaignData.map(d => d.time)) - Math.min(...campaignData.map(d => d.time))).toFixed(1)) : 'N/A'} days</strong></li>
                 <li><strong>Classification Types</strong>:
                   <ul>
-                    <li><em>Regular</em>: Single-period variables with clean sinusoidal patterns</li>
-                    <li><em>Binary</em>: Ellipsoidal variations, eclipsing systems, or multi-period objects</li>
-                    <li><em>Complex</em>: Irregular variability or multi-component systems</li>
+                    <li><em>Regular Variables</em>: Sinusoidal patterns, pulsators</li>
+                    <li><em>Binary Systems</em>: Eclipsing binaries, double dips</li>
+                    <li><em>Complex Variables</em>: Shape changers, resolved peaks, beaters</li>
+                    <li><em>Spotted Stars</em>: Co-rotating material, spot modulation</li>
+                    <li><em>Transient Objects</em>: Dippers, bursters</li>
+                    <li><em>Long-term/Irregular</em>: Trends, stochastic variability</li>
                   </ul>
                 </li>
               </ul>
