@@ -6,15 +6,25 @@ A modern web application for astronomical data analysis, providing interactive v
 
 ## 🚀 Features
 
-- **Multi-Star Selection**: Choose from available astronomical targets
+- **Multi-Star Selection**: Choose from available astronomical targets (5 sample stars with different variability types)
 - **Multi-Telescope Support**: Analyze data from Hubble, Kepler, and TESS
 - **Campaign Management**: Automatically identifies and displays the 3 most massive campaigns per dataset
 - **Interactive Light Curves**: Scatter plot visualization of time-series photometry
 - **Lomb-Scargle Periodogram**: Frequency analysis with logarithmic period display
 - **Phase Folding**: Manual period input with real-time phase-folded light curve generation
-- **🆕 Automatic Period Detection**: AI-powered period determination using both periodogram analysis and PyTorch sinusoidal regression
-- **🆕 Variability Classification**: Automatically classifies objects as regular variables, binary systems, or other types
-- **Modern UI**: Responsive design with gradient backgrounds and intuitive controls
+- **🆕 Enhanced Automatic Period Detection**: CNN-powered period validation with periodogram analysis
+- **🆕 Advanced Variability Classification**: Classifies objects into 8+ types:
+  - Regular Variables (sinusoidal patterns)
+  - Eclipsing Objects (transit dips)
+  - Eclipsing Binaries (multiple periods)
+  - Double-Peaked Variables (distant peaks)
+  - Close Binaries (close peaks)
+  - Complex Multi-period Systems
+  - Irregular Variables
+  - Uncertain Classifications
+- **🆕 Google Sheets Integration**: Train models using real astronomical data from Google Sheets
+- **🆕 Machine Learning Pipeline**: Complete CNN training workflow with real data
+- **Modern UI**: Responsive design with color-coded classification badges and intuitive controls
 
 ## 🛠 Technology Stack
 
@@ -23,8 +33,11 @@ A modern web application for astronomical data analysis, providing interactive v
 - **pandas**: Data manipulation and analysis
 - **numpy**: Numerical computing
 - **astropy**: Astronomical calculations (Lomb-Scargle periodogram)
-- **PyTorch**: Deep learning framework for sinusoidal curve fitting
+- **PyTorch**: Deep learning framework for CNN period validation
 - **scipy**: Scientific computing for peak detection and signal analysis
+- **scikit-learn**: Machine learning utilities for training pipeline
+- **python-dotenv**: Environment variable management
+- **requests**: HTTP client for Google Sheets integration
 - **CORS Support**: Cross-origin requests for frontend communication
 
 ### Frontend
@@ -44,7 +57,7 @@ A modern web application for astronomical data analysis, providing interactive v
 ### Backend Setup
 ```bash
 cd backend
-pip install fastapi uvicorn pandas matplotlib astropy
+pip install fastapi uvicorn pandas numpy astropy torch scipy scikit-learn python-dotenv requests pydantic
 python server.py
 ```
 
@@ -131,24 +144,66 @@ The repository includes simulated astronomical data with:
 - `GET /data/{star_number}/{telescope}/{campaign_id}` - Get processed light curve data
 - `GET /periodogram/{star_number}/{telescope}/{campaign_id}` - Get Lomb-Scargle periodogram
 - `GET /phase_fold/{star_number}/{telescope}/{campaign_id}?period={period}` - Get phase-folded data
-- `GET /auto_periods/{star_number}/{telescope}/{campaign_id}` - **NEW**: Automatically determine periods and classify variability type
+- `GET /auto_periods/{star_number}/{telescope}/{campaign_id}` - **Enhanced**: CNN-powered period detection and classification
+- `POST /train_model` - **NEW**: Train CNN model using Google Sheets data
+
+## 🔬 Machine Learning Features
+
+### Automatic Period Detection
+The system uses a sophisticated dual-method approach:
+
+1. **Enhanced Lomb-Scargle Periodogram**: Improved peak detection using robust statistics and period weighting
+2. **CNN Period Validation**: Convolutional neural network analyzes phase-folded light curves for pattern recognition
+
+### Advanced Classification System
+Objects are automatically classified into detailed categories:
+
+- **🟢 Regular Variable**: Clean sinusoidal patterns with single dominant period
+- **🔴 Eclipsing Object**: Transit-like dips indicating exoplanets or eclipsing systems  
+- **🟠 Eclipsing Binary**: Multiple period systems with ratio analysis
+- **🔵 Double-Peaked**: Variables with distant peak separation
+- **🟤 Close Binary**: Close peak patterns indicating tight binary systems
+- **🟣 Complex Multi-period**: Systems with multiple significant periods
+- **⚫ Irregular**: Unclassified or chaotic variability
+- **⚪ Uncertain**: Low confidence detections requiring manual review
+
+### Google Sheets Training Pipeline
+Train the CNN model using real astronomical data:
+
+```bash
+# Set up your Google Sheets URL in .env
+GOOGLE_SHEET_URL=https://docs.google.com/spreadsheets/d/your-sheet-id/edit
+
+# Train the model
+curl -X POST http://localhost:8000/train_model
+```
+
+See [TRAINING_GUIDE.md](TRAINING_GUIDE.md) for complete documentation.
 
 ## 🎨 Architecture
 
 ```
 better-impuls-viewer/
 ├── backend/
-│   ├── server.py          # FastAPI application
-│   ├── process.py         # Data processing functions
-│   ├── display.py         # Original matplotlib visualization
-│   └── app.py            # Original command-line interface
+│   ├── server.py            # FastAPI application
+│   ├── config.py           # Configuration and environment variables
+│   ├── models.py           # Pydantic data models
+│   ├── data_processing.py  # Data preprocessing utilities
+│   ├── period_detection.py # CNN period validation and periodogram analysis
+│   ├── google_sheets.py    # Google Sheets integration
+│   ├── model_training.py   # CNN training pipeline
+│   ├── process.py          # Legacy data processing functions
+│   ├── display.py          # Original matplotlib visualization
+│   └── app.py             # Original command-line interface
 ├── frontend/
 │   ├── src/
-│   │   ├── Dashboard.tsx  # Main dashboard component
-│   │   ├── App.tsx       # Root application component
-│   │   └── *.css         # Styling files
-│   └── package.json      # Dependencies and scripts
-├── sample_data/          # Generated astronomical datasets
+│   │   ├── Dashboard.tsx   # Main dashboard component
+│   │   ├── App.tsx        # Root application component
+│   │   └── *.css          # Styling files with classification colors
+│   └── package.json       # Dependencies and scripts
+├── sample_data/           # Enhanced sample datasets (5 star types)
+├── ml-dataset/           # Machine learning dataset generation
+├── TRAINING_GUIDE.md     # Comprehensive training documentation
 └── README.md            # This file
 ```
 
