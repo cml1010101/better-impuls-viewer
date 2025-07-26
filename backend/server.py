@@ -1,6 +1,5 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import os
 import pandas as pd
@@ -8,60 +7,39 @@ import numpy as np
 from functools import lru_cache
 import hashlib
 import time
-from dotenv import load_dotenv
-from process import find_all_campaigns, sort_data, calculate_lomb_scargle, remove_y_outliers, determine_automatic_periods
 
-# Load environment variables from .env file
-load_dotenv()
+# Import from our modular structure
+from config import Config
+from models import (
+    CampaignInfo, ProcessedData, PeriodogramData, PhaseFoldedData, 
+    AutoPeriodsData, ModelTrainingResult
+)
+from data_processing import (
+    find_all_campaigns, sort_data, remove_y_outliers, 
+    load_star_data_file, calculate_data_statistics
+)
+from period_detection import calculate_lomb_scargle, determine_automatic_periods
+from model_training import ModelTrainer
 
 app = FastAPI(title="Better Impuls Viewer API", version="1.0.0")
 
 # Add CORS middleware to allow frontend to communicate with backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # Vite and other common dev servers
+    allow_origins=Config.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Data models
-class CampaignInfo(BaseModel):
-    campaign_id: str
-    telescope: str
-    star_number: int
-    data_points: int
-    duration: float
+# Cache for processed data to improve performance
+_file_cache = {}
+_campaigns_cache = {}
+_periodogram_cache = {}
+_processed_data_cache = {}
 
-class ProcessedData(BaseModel):
-    time: List[float]
-    flux: List[float]
-    error: List[float]
-
-class PeriodogramData(BaseModel):
-    periods: List[float]
-    powers: List[float]
-
-class PhaseFoldedData(BaseModel):
-    phase: List[float]
-    flux: List[float]
-
-class AutoPeriodsData(BaseModel):
-    primary_period: Optional[float]
-    secondary_period: Optional[float]
-    classification: Dict[str, Any]
-    methods: Dict[str, Any]
-    error: Optional[str] = None
-
-# Configuration
-DEFAULT_DATA_FOLDER = os.path.expanduser('~/Documents/impuls-data') if os.path.exists(os.path.expanduser('~/Documents/impuls-data')) else '../sample_data'
-DEFAULT_DATA_FOLDER = os.path.abspath(DEFAULT_DATA_FOLDER)
-
-# In-memory caches for expensive operations
-_file_cache = {}  # Cache for loaded files
-_campaigns_cache = {}  # Cache for campaigns
-_periodogram_cache = {}  # Cache for periodograms
-_processed_data_cache = {}  # Cache for processed data
+# Default data folder
+DEFAULT_DATA_FOLDER = "../sample_data"
 
 def get_file_hash(filepath: str) -> str:
     """Get a hash of the file for caching purposes"""
@@ -529,6 +507,24 @@ async def get_automatic_periods(star_number: int, telescope: str, campaign_id: s
 
 from fastapi.responses import Response
 import requests
+
+@app.post("/train_model")
+async def train_model_from_sheets() -> ModelTrainingResult:
+    """Train the CNN model using data from Google Sheets"""
+    try:
+        if not Config.GOOGLE_SHEET_URL:
+            raise HTTPException(status_code=400, detail="GOOGLE_SHEET_URL not configured in environment variables")
+        
+        trainer = ModelTrainer()
+        result = trainer.train_from_google_sheets()
+        
+        if not result.success:
+            raise HTTPException(status_code=500, detail="Model training failed")
+        
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error training model: {str(e)}")
+
 
 @app.get("/sed/{star_number}")
 async def get_sed_image(star_number: int) -> Response:

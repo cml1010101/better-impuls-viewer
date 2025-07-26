@@ -3,5 +3,8 @@ matplotlib
 astropy
 torch
 scipy
-dotenv
+python-dotenv
 requests
+fastapi
+uvicorn
+scikit-learn
