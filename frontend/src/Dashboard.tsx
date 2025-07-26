@@ -41,7 +41,6 @@ const Dashboard: React.FC = () => {
   const [selectedPeriod, setSelectedPeriod] = useState<number | null>(null);
   const [periodInputValue, setPeriodInputValue] = useState<string>(''); // Add controlled input state
   const [phaseFoldedData, setPhaseFoldedData] = useState<PhaseFoldedPoint[]>([]);
-  const [sedImageUrl, setSedImageUrl] = useState<string>('');
   const [loading, setLoading] = useState(false);
 
   // Fetch available stars on component mount
@@ -53,7 +52,6 @@ const Dashboard: React.FC = () => {
   useEffect(() => {
     if (selectedStar) {
       fetchTelescopes(selectedStar);
-      fetchSedImageUrl(selectedStar);
     }
   }, [selectedStar]);
 
@@ -179,17 +177,6 @@ const Dashboard: React.FC = () => {
     }
   };
 
-  const fetchSedImageUrl = async (star: number) => {
-    try {
-      const response = await fetch(`${API_BASE}/sed/${star}`);
-      const data = await response.json();
-      setSedImageUrl(data.sed_url);
-    } catch (error) {
-      console.error('Error fetching SED image URL:', error);
-      setSedImageUrl('');
-    }
-  };
-
   const handlePeriodogramClick = (data: any) => {
     console.log('Periodogram clicked:', data);
     // Handle Plotly.js click events
@@ -266,12 +253,12 @@ const Dashboard: React.FC = () => {
       {loading && <div className="loading">Loading...</div>}
 
       {/* SED Image Section */}
-      {selectedStar && sedImageUrl && (
+      {selectedStar && (
         <div className="sed-section">
           <h3>Spectral Energy Distribution (SED)</h3>
           <div className="sed-image-container">
             <img 
-              src={sedImageUrl} 
+              src={`${API_BASE}/sed/${selectedStar}`} 
               alt={`SED for Star ${selectedStar}`}
               className="sed-image"
               onError={(e) => {
@@ -279,6 +266,7 @@ const Dashboard: React.FC = () => {
                 e.currentTarget.style.display = 'none';
               }}
               onLoad={(e) => {
+                console.log(`Successfully loaded SED image for Star ${selectedStar}`);
                 // Show the image if it loads successfully
                 e.currentTarget.style.display = 'block';
               }}
