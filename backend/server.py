@@ -38,9 +38,6 @@ _campaigns_cache = {}
 _periodogram_cache = {}
 _processed_data_cache = {}
 
-# Default data folder
-DEFAULT_DATA_FOLDER = "../sample_data"
-
 def get_file_hash(filepath: str) -> str:
     """Get a hash of the file for caching purposes"""
     try:
@@ -53,7 +50,7 @@ def get_file_hash(filepath: str) -> str:
 
 def get_data_folder():
     """Get the data folder path"""
-    return DEFAULT_DATA_FOLDER
+    return Config.DATA_DIR
 
 def load_data_file(filepath: str) -> np.ndarray:
     """Load data from a .tbl file with caching"""

@@ -15,6 +15,7 @@ class Config:
     
     # Google Sheets configuration
     GOOGLE_SHEET_URL = os.getenv("GOOGLE_SHEET_URL")
+    GOOGLE_SERVICE_ACCOUNT_KEY_PATH = os.getenv("GOOGLE_SERVICE_ACCOUNT_KEY_PATH", "google_sheets_service_account.json")
     
     # API configuration
     CORS_ORIGINS = ["http://localhost:5173", "http://localhost:3000"]
@@ -30,6 +31,8 @@ class Config:
     # Model configuration
     MODEL_SAVE_PATH = "trained_cnn_model.pth"
     DEVICE = "cpu"  # Can be changed to "cuda" if GPU is available
+
+    DATA_DIR = os.path.expanduser('~/Documents/impuls-data') if os.path.exists(os.path.expanduser('~/Documents/impuls-data')) else '../sample_data'
     
     @classmethod
     def validate(cls):
@@ -38,3 +41,20 @@ class Config:
             print("Warning: GOOGLE_SHEET_URL not set in environment variables")
             return False
         return True
+
+CLASS_NAMES = [
+    "sinusoidal",
+    "double dip",
+    "shape changer",
+    "beater",
+    "beater/complex peak",
+    "resolved close peaks",
+    "resolved distant peaks",
+    "eclipsing binaries",
+    "pulsator",
+    "burster",
+    "dipper",
+    "co-rotating optically thin material",
+    "long term trend",
+    "stochastic"
+]

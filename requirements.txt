@@ -8,3 +8,6 @@ requests
 fastapi
 uvicorn
 scikit-learn
+gspread
+google-auth
+google-api-python-client
