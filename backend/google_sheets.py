@@ -145,29 +145,65 @@ class GoogleSheetsLoader:
 
         CATEGORY_COL_NAME = df.columns[35]  # Assuming LC category is in column AL (index 35)
         
+        print(f"Processing {len(df)} rows from Google Sheets...")
+        print(f"Expected columns: A (star), AK (period1), AL (period2), AN (category)")
+        
         for index, row in df.iterrows():
             if index == 0:
                 # Skip header row
                 continue
             star_number = index - 1
             try:
-                for sensor, (PERIOD1_COL_NAME, PERIOD2_COL_NAME) in sensors.items():
-                    # Check if there is data for the first period
-                    if pd.isna(row[PERIOD1_COL_NAME]) or pd.isna(row[PERIOD2_COL_NAME]):
-                        print(f"Skipping star {star_number} for sensor {sensor} due to missing period data.")
-                        continue
-                    period_1 = float(row[PERIOD1_COL_NAME])
-                    period_2 = float(row[PERIOD2_COL_NAME])
-                    if period_1 <= 0:
-                        print(f"Skipping star {star_number} for sensor {sensor} due to non-positive period 1: {period_1}")
-                        continue
-                    # Load time series data for this star
-                    time_series, flux_series = self._load_star_data(star_number)
+                # Extract basic data
+                star_number = int(row.iloc[star_col]) if pd.notna(row.iloc[star_col]) else None
+                if star_number is None:
+                    continue
+                
+                # Extract periods
+                period_1 = row.iloc[period1_col] if pd.notna(row.iloc[period1_col]) else None
+                period_2 = row.iloc[period2_col] if pd.notna(row.iloc[period2_col]) else None
+                
+                # Filter out invalid periods (-9 means no valid period)
+                if period_1 == -9 or period_1 == "-9":
+                    period_1 = None
+                if period_2 == -9 or period_2 == "-9":
+                    period_2 = None
+                
+                # Convert to float if valid
+                try:
+                    if period_1 is not None:
+                        period_1 = float(period_1)
+                    if period_2 is not None:
+                        period_2 = float(period_2)
+                except (ValueError, TypeError):
+                    print(f"Warning: Invalid period values for star {star_number}")
+                    continue
+                
+                # Skip if no valid periods
+                if period_1 is None and period_2 is None:
+                    continue
+                
+                # Extract and normalize category
+                lc_category = str(row.iloc[category_col]) if pd.notna(row.iloc[category_col]) else "unknown"
+                lc_category = self._normalize_lc_category(lc_category)
+                
+                # Load actual time series data for this star
+                time_series, flux_series = self._load_star_data(star_number)
+                
+                if len(time_series) > 0:
+                    training_point = TrainingDataPoint(
+                        star_number=star_number,
+                        period_1=period_1,
+                        period_2=period_2,
+                        lc_category=lc_category,
+                        time_series=time_series.tolist(),
+                        flux_series=flux_series.tolist()
+                    )
+                    training_data.append(training_point)
                     
-            except KeyError as ke:
-                print(f"Column not found: {ke}. Please check your Google Sheet headers and column mapping.")
-                # You might want to raise this error if missing critical columns is a fatal problem
-                continue
+                    if len(training_data) % 10 == 0:
+                        print(f"Processed {len(training_data)} valid training examples...")
+                    
             except Exception as e:
                 print(f"Error processing row {index}: {e}")
                 continue
@@ -175,7 +211,35 @@ class GoogleSheetsLoader:
         print(f"Extracted {len(training_data)} valid training examples")
         return training_data
     
-    def _load_star_data(self, star_number: int, sensor: str) -> Tuple[np.ndarray, np.ndarray]:
+    def _normalize_lc_category(self, category: str) -> str:
+        """
+        Normalize LC category strings to standard classifications.
+        
+        Maps various category strings to the main types:
+        - dipper, dipper? -> dipper
+        - distant peaks, distant_peaks -> distant_peaks
+        - close peak, close_peak -> close_peak
+        - sinusoidal, sinusoidal? -> sinusoidal
+        - everything else -> other
+        """
+        category = category.lower().strip()
+        
+        # Remove question marks and normalize
+        category = category.replace('?', '').strip()
+        
+        # Map common variations
+        if 'dipper' in category:
+            return 'dipper'
+        elif 'distant' in category and 'peak' in category:
+            return 'distant_peaks'
+        elif 'close' in category and 'peak' in category:
+            return 'close_peak'
+        elif 'sinusoidal' in category:
+            return 'sinusoidal'
+        else:
+            return 'other'
+    
+    def _load_star_data(self, star_number: int) -> Tuple[np.ndarray, np.ndarray]:
         """
         Load time series data for a specific star from sample_data directory.
         

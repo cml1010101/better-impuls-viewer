@@ -162,12 +162,12 @@ class PeriodValidationCNN(nn.Module):
     1. Confidence score (0-1) for period validity
     2. Classification probabilities for variability types
     """
-
-    def __init__(self, input_size: int = 100, num_classes: int = 3):
+    
+    def __init__(self, input_size: int = 100, num_classes: int = 5):
         super(PeriodValidationCNN, self).__init__()
         self.input_size = input_size
-        self.num_classes = num_classes  # regular, binary, other
-
+        self.num_classes = num_classes  # dipper, distant_peaks, close_peak, sinusoidal, other
+        
         # Convolutional layers for pattern recognition in folded curves
         self.conv_layers = nn.Sequential(
             # First conv block - detect basic patterns
@@ -307,7 +307,7 @@ def create_synthetic_training_data(
     n_samples: int = 1000,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    Create synthetic training data for the CNN.
+    Create synthetic training data for the CNN with new classification types.
     This would ideally be replaced with real labeled astronomical data.
 
     Parameters
@@ -328,35 +328,73 @@ def create_synthetic_training_data(
 
     for _ in range(n_samples):
         phase = np.linspace(0, 1, n_bins)
-
-        # Generate different types of curves
-        curve_type = np.random.choice(["regular", "binary", "noise"])
-
-        if curve_type == "regular":
-            # Single sinusoidal pattern
+        
+        # Generate different types of curves based on new classifications
+        curve_type = np.random.choice(['dipper', 'distant_peaks', 'close_peak', 'sinusoidal', 'other'])
+        
+        if curve_type == 'dipper':
+            # Transit-like dips (exoplanet/eclipsing binary characteristic)
+            dip_center = np.random.uniform(0.3, 0.7)
+            dip_width = np.random.uniform(0.05, 0.15)
+            dip_depth = np.random.uniform(0.5, 2.0)
+            
+            # Create symmetric dip
+            dip_mask = np.abs(phase - dip_center) < dip_width/2
+            curve = np.ones(n_bins)
+            curve[dip_mask] -= dip_depth * np.exp(-((phase[dip_mask] - dip_center)/(dip_width/4))**2)
+            confidence = np.random.uniform(0.7, 0.95)
+            class_label = 0  # dipper
+            
+        elif curve_type == 'distant_peaks':
+            # Multiple peaks with significant separation
+            peak1_pos = np.random.uniform(0.1, 0.3)
+            peak2_pos = np.random.uniform(0.6, 0.9)
+            amplitude1 = np.random.uniform(0.8, 1.5)
+            amplitude2 = np.random.uniform(0.5, 1.2)
+            width = np.random.uniform(0.08, 0.15)
+            
+            curve = (amplitude1 * np.exp(-((phase - peak1_pos)/width)**2) + 
+                    amplitude2 * np.exp(-((phase - peak2_pos)/width)**2))
+            confidence = np.random.uniform(0.6, 0.9)
+            class_label = 1  # distant_peaks
+            
+        elif curve_type == 'close_peak':
+            # Multiple peaks close together
+            peak1_pos = np.random.uniform(0.3, 0.5)
+            peak2_pos = peak1_pos + np.random.uniform(0.1, 0.25)
+            amplitude1 = np.random.uniform(0.8, 1.5)
+            amplitude2 = np.random.uniform(0.6, 1.3)
+            width = np.random.uniform(0.06, 0.12)
+            
+            curve = (amplitude1 * np.exp(-((phase - peak1_pos)/width)**2) + 
+                    amplitude2 * np.exp(-((phase - peak2_pos)/width)**2))
+            confidence = np.random.uniform(0.6, 0.9)
+            class_label = 2  # close_peak
+            
+        elif curve_type == 'sinusoidal':
+            # Clean sinusoidal pattern (regular variable star)
             amplitude = np.random.uniform(0.5, 2.0)
-            curve = amplitude * np.sin(
-                2 * np.pi * phase + np.random.uniform(0, 2 * np.pi)
-            )
-            confidence = np.random.uniform(0.7, 1.0)
-            class_label = 0  # regular
-
-        elif curve_type == "binary":
-            # Double-peaked or ellipsoidal pattern
-            amplitude1 = np.random.uniform(0.3, 1.5)
-            amplitude2 = np.random.uniform(0.2, 1.0)
-            curve = amplitude1 * np.sin(2 * np.pi * phase) + amplitude2 * np.sin(
-                4 * np.pi * phase + np.random.uniform(0, 2 * np.pi)
-            )
-            confidence = np.random.uniform(0.6, 0.95)
-            class_label = 1  # binary
-
-        else:  # noise
-            # Random noise pattern
+            n_harmonics = np.random.choice([1, 2])
+            phase_shift = np.random.uniform(0, 2*np.pi)
+            
+            curve = amplitude * np.sin(2 * np.pi * phase + phase_shift)
+            if n_harmonics == 2:
+                curve += 0.3 * amplitude * np.sin(4 * np.pi * phase + np.random.uniform(0, 2*np.pi))
+            
+            confidence = np.random.uniform(0.8, 0.95)
+            class_label = 3  # sinusoidal
+            
+        else:  # other/noise
+            # Random noise pattern or irregular variability
             curve = np.random.normal(0, 0.5, n_bins)
-            confidence = np.random.uniform(0.0, 0.3)
-            class_label = 2  # other/noise
-
+            # Add some random spikes to simulate irregular behavior
+            n_spikes = np.random.choice([0, 1, 2, 3])
+            for _ in range(n_spikes):
+                spike_pos = np.random.randint(0, n_bins)
+                curve[spike_pos] += np.random.uniform(-1.5, 1.5)
+            confidence = np.random.uniform(0.1, 0.4)
+            class_label = 4  # other
+        
         # Add noise
         noise_level = np.random.uniform(0.05, 0.2)
         curve += np.random.normal(0, noise_level, n_bins)
@@ -477,7 +515,8 @@ def validate_periods_with_cnn(
         return []
 
     results = []
-
+    class_names = ['dipper', 'distant_peaks', 'close_peak', 'sinusoidal', 'other']
+    
     with torch.no_grad():
         for period, power in candidate_periods:
             try:
@@ -507,8 +546,8 @@ def validate_periods_with_cnn(
             except Exception as e:
                 print(f"Warning: CNN validation failed for period {period}: {e}")
                 # Fallback confidence based on periodogram power
-                results.append((period, power * 0.5, "regular"))
-
+                results.append((period, power * 0.5, 'other'))
+    
     # Sort by confidence (highest first)
     results.sort(key=lambda x: x[1], reverse=True)
 
@@ -573,60 +612,68 @@ def classify_periodicity_with_cnn(
     # Determine overall classification based on CNN outputs and period relationships
     if secondary_period is not None and secondary_confidence > 0.4:
         # Multiple significant periods detected
-
-        # Check if CNN classifies either as binary
-        if primary_classification == "binary" or secondary_classification == "binary":
-            ratio = max(primary_period, secondary_period) / min(
-                primary_period, secondary_period
-            )
-            avg_confidence = (primary_confidence + secondary_confidence) / 2
-
-            if 1.8 <= ratio <= 2.2:  # Ellipsoidal variation
-                return {
-                    "type": "binary",
-                    "confidence": min(0.95, avg_confidence),
-                    "description": f"Ellipsoidal binary with periods {primary_period:.3f} and {secondary_period:.3f} days (ratio ~2:1)",
-                }
-            else:
-                return {
-                    "type": "binary",
-                    "confidence": min(0.9, avg_confidence),
-                    "description": f"Binary system with periods {primary_period:.3f} and {secondary_period:.3f} days (ratio {ratio:.1f}:1)",
-                }
+        avg_confidence = (primary_confidence + secondary_confidence) / 2
+        
+        # Check for specific multi-period patterns
+        if (primary_classification in ['dipper', 'close_peak'] and 
+            secondary_classification in ['dipper', 'close_peak']):
+            return {
+                "type": "eclipsing_binary",
+                "confidence": min(0.9, avg_confidence),
+                "description": f"Eclipsing binary system with periods {primary_period:.3f} and {secondary_period:.3f} days"
+            }
+        elif (primary_classification == 'distant_peaks' or 
+              secondary_classification == 'distant_peaks'):
+            return {
+                "type": "complex_multiperiod",
+                "confidence": min(0.85, avg_confidence),
+                "description": f"Complex multi-period system (primary: {primary_period:.3f} days, secondary: {secondary_period:.3f} days)"
+            }
         else:
-            # Multiple periods but not classified as binary by CNN
             return {
-                "type": "other",
-                "confidence": min(0.8, primary_confidence),
-                "description": f"Complex multi-period variability (primary: {primary_period:.3f} days, secondary: {secondary_period:.3f} days)",
+                "type": "multiperiod",
+                "confidence": min(0.8, avg_confidence),
+                "description": f"Multi-period variability ({primary_classification} + {secondary_classification})"
             }
-
-    # Single dominant period
+    
+    # Single dominant period classification
     if primary_confidence > 0.3:
-        if primary_classification == "regular":
+        if primary_classification == 'sinusoidal':
             return {
-                "type": "regular",
+                "type": "regular_variable",
                 "confidence": min(0.9, primary_confidence),
-                "description": f"Regular variable star with period {primary_period:.3f} days",
+                "description": f"Regular variable star with clean sinusoidal pattern (period: {primary_period:.3f} days)"
             }
-        elif primary_classification == "binary":
+        elif primary_classification == 'dipper':
             return {
-                "type": "binary",
+                "type": "eclipsing_object",
                 "confidence": min(0.85, primary_confidence),
-                "description": f"Binary system with dominant period {primary_period:.3f} days",
+                "description": f"Eclipsing or transiting object with dip pattern (period: {primary_period:.3f} days)"
+            }
+        elif primary_classification == 'distant_peaks':
+            return {
+                "type": "double_peaked",
+                "confidence": min(0.8, primary_confidence),
+                "description": f"Double-peaked variable star (period: {primary_period:.3f} days)"
+            }
+        elif primary_classification == 'close_peak':
+            return {
+                "type": "close_binary",
+                "confidence": min(0.8, primary_confidence),
+                "description": f"Close binary or pulsating variable (period: {primary_period:.3f} days)"
             }
         else:  # 'other'
             return {
-                "type": "other",
-                "confidence": min(0.7, primary_confidence),
-                "description": f"Irregular variability with period {primary_period:.3f} days",
+                "type": "irregular",
+                "confidence": min(0.6, primary_confidence),
+                "description": f"Irregular or unclassified variability (period: {primary_period:.3f} days)"
             }
 
     # Low confidence detection
     return {
-        "type": "other",
+        "type": "uncertain",
         "confidence": primary_confidence,
-        "description": f"Weak periodicity detected (period: {primary_period:.3f} days, confidence: {primary_confidence:.2f})",
+        "description": f"Weak or uncertain periodicity detected (period: {primary_period:.3f} days, confidence: {primary_confidence:.2f})"
     }
 
 

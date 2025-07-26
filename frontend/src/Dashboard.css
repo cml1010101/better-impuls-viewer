@@ -227,6 +227,57 @@
   color: white;
 }
 
+/* New classification types */
+.classification-regular_variable {
+  background: #10b981;
+  color: white;
+}
+
+.classification-eclipsing_object {
+  background: #dc2626;
+  color: white;
+}
+
+.classification-eclipsing_binary {
+  background: #ea580c;
+  color: white;
+}
+
+.classification-double_peaked {
+  background: #2563eb;
+  color: white;
+}
+
+.classification-close_binary {
+  background: #7c2d12;
+  color: white;
+}
+
+.classification-complex_multiperiod {
+  background: #7c3aed;
+  color: white;
+}
+
+.classification-multiperiod {
+  background: #9333ea;
+  color: white;
+}
+
+.classification-irregular {
+  background: #6b7280;
+  color: white;
+}
+
+.classification-uncertain {
+  background: #94a3b8;
+  color: white;
+}
+
+.classification-other {
+  background: #64748b;
+  color: white;
+}
+
 .classification-confidence {
   padding: 0.25rem 0.75rem;
   background: white;
