@@ -75,6 +75,9 @@ class GoogleSheetsLoader:
         period2_col = 37  # Column AL
         category_col = 39  # Column AN
         
+        print(f"Processing {len(df)} rows from Google Sheets...")
+        print(f"Expected columns: A (star), AK (period1), AL (period2), AN (category)")
+        
         for index, row in df.iterrows():
             try:
                 # Extract basic data
@@ -87,20 +90,30 @@ class GoogleSheetsLoader:
                 period_2 = row.iloc[period2_col] if pd.notna(row.iloc[period2_col]) else None
                 
                 # Filter out invalid periods (-9 means no valid period)
-                if period_1 == -9:
+                if period_1 == -9 or period_1 == "-9":
                     period_1 = None
-                if period_2 == -9:
+                if period_2 == -9 or period_2 == "-9":
                     period_2 = None
+                
+                # Convert to float if valid
+                try:
+                    if period_1 is not None:
+                        period_1 = float(period_1)
+                    if period_2 is not None:
+                        period_2 = float(period_2)
+                except (ValueError, TypeError):
+                    print(f"Warning: Invalid period values for star {star_number}")
+                    continue
                 
                 # Skip if no valid periods
                 if period_1 is None and period_2 is None:
                     continue
                 
-                # Extract category
+                # Extract and normalize category
                 lc_category = str(row.iloc[category_col]) if pd.notna(row.iloc[category_col]) else "unknown"
+                lc_category = self._normalize_lc_category(lc_category)
                 
                 # Load actual time series data for this star
-                # This will be implemented to load from the sample_data directory
                 time_series, flux_series = self._load_star_data(star_number)
                 
                 if len(time_series) > 0:
@@ -114,12 +127,43 @@ class GoogleSheetsLoader:
                     )
                     training_data.append(training_point)
                     
+                    if len(training_data) % 10 == 0:
+                        print(f"Processed {len(training_data)} valid training examples...")
+                    
             except Exception as e:
                 print(f"Error processing row {index}: {e}")
                 continue
         
         print(f"Extracted {len(training_data)} valid training examples")
         return training_data
+    
+    def _normalize_lc_category(self, category: str) -> str:
+        """
+        Normalize LC category strings to standard classifications.
+        
+        Maps various category strings to the main types:
+        - dipper, dipper? -> dipper
+        - distant peaks, distant_peaks -> distant_peaks
+        - close peak, close_peak -> close_peak
+        - sinusoidal, sinusoidal? -> sinusoidal
+        - everything else -> other
+        """
+        category = category.lower().strip()
+        
+        # Remove question marks and normalize
+        category = category.replace('?', '').strip()
+        
+        # Map common variations
+        if 'dipper' in category:
+            return 'dipper'
+        elif 'distant' in category and 'peak' in category:
+            return 'distant_peaks'
+        elif 'close' in category and 'peak' in category:
+            return 'close_peak'
+        elif 'sinusoidal' in category:
+            return 'sinusoidal'
+        else:
+            return 'other'
     
     def _load_star_data(self, star_number: int) -> Tuple[np.ndarray, np.ndarray]:
         """

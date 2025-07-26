@@ -58,6 +58,18 @@ class ModelTrainer:
         confidence_labels = []
         class_labels = []
         
+        # Map classification categories to standard labels
+        category_mapping = {
+            'dipper': 'dipper',
+            'distant_peaks': 'distant_peaks', 
+            'close_peak': 'close_peak',
+            'sinusoidal': 'sinusoidal',
+            'other': 'other'
+        }
+        
+        print("Processing training examples...")
+        processed_count = 0
+        
         # Process each training example
         for data_point in training_data:
             time_series = np.array(data_point.time_series)
@@ -66,11 +78,14 @@ class ModelTrainer:
             # Create data array for phase folding
             data_array = np.column_stack([time_series, flux_series])
             
+            # Map the category to standard form
+            mapped_category = category_mapping.get(data_point.lc_category, 'other')
+            
             # Process each valid period for this star
             periods_to_process = []
-            if data_point.period_1 is not None:
+            if data_point.period_1 is not None and data_point.period_1 > 0:
                 periods_to_process.append(data_point.period_1)
-            if data_point.period_2 is not None:
+            if data_point.period_2 is not None and data_point.period_2 > 0:
                 periods_to_process.append(data_point.period_2)
             
             for period in periods_to_process:
@@ -78,19 +93,21 @@ class ModelTrainer:
                     # Phase-fold the data at this period
                     folded_curve = phase_fold_data(data_array, period, n_bins=100)
                     
-                    # Skip if folding failed
-                    if np.all(folded_curve == 0):
+                    # Skip if folding failed or resulted in all zeros
+                    if np.all(folded_curve == 0) or np.all(np.isnan(folded_curve)):
                         continue
                     
-                    # Generate confidence label based on period quality
-                    # Real astronomical periods should have high confidence
-                    # This is a simplified approach - could be enhanced with more sophisticated metrics
-                    confidence = self._calculate_period_confidence(data_array, period)
+                    # Generate confidence label based on period quality and category
+                    confidence = self._calculate_period_confidence(data_array, period, mapped_category)
                     
                     # Store the results
                     folded_curves.append(folded_curve)
                     confidence_labels.append(confidence)
-                    class_labels.append(data_point.lc_category)
+                    class_labels.append(mapped_category)
+                    processed_count += 1
+                    
+                    if processed_count % 50 == 0:
+                        print(f"Processed {processed_count} training samples...")
                     
                 except Exception as e:
                     print(f"Error processing period {period} for star {data_point.star_number}: {e}")
@@ -105,6 +122,7 @@ class ModelTrainer:
         
         print(f"Generated {len(folded_curves)} training samples")
         print(f"Class distribution: {dict(zip(*np.unique(class_labels, return_counts=True)))}")
+        print(f"Model classes: {class_names}")
         
         # Convert to tensors
         folded_curves_tensor = torch.tensor(folded_curves, dtype=torch.float32).unsqueeze(1)  # Add channel dimension
@@ -113,12 +131,11 @@ class ModelTrainer:
         
         return folded_curves_tensor, confidence_tensor, class_tensor, class_names
     
-    def _calculate_period_confidence(self, data: np.ndarray, period: float) -> float:
+    def _calculate_period_confidence(self, data: np.ndarray, period: float, category: str = 'other') -> float:
         """
-        Calculate a confidence score for a given period based on the folded light curve quality.
+        Calculate a confidence score for a given period based on the folded light curve quality and known category.
         
-        This is a simplified metric - in practice, you'd want more sophisticated measures
-        like chi-squared statistics, phase coherence, etc.
+        This incorporates both curve quality metrics and category-specific confidence adjustments.
         """
         try:
             # Calculate some basic metrics for the folded curve
@@ -136,21 +153,38 @@ class ModelTrainer:
             amplitude_score = min(amplitude / 0.5, 1.0)  # Normalize
             
             # 3. Periodicity check - fold again at 2x period and compare
-            folded_2x = phase_fold_data(data, period * 2, n_bins=50)
-            correlation = np.corrcoef(folded_curve, folded_2x)[0, 1]
-            periodicity_score = max(0, correlation)  # Positive correlation is good
+            try:
+                folded_2x = phase_fold_data(data, period * 2, n_bins=50)
+                correlation = np.corrcoef(folded_curve, folded_2x)[0, 1]
+                periodicity_score = max(0, correlation)  # Positive correlation is good
+            except:
+                periodicity_score = 0.5
             
-            # Combine metrics
-            confidence = (smoothness + amplitude_score + periodicity_score) / 3
+            # 4. Category-specific adjustments
+            category_confidence = {
+                'dipper': 0.85,      # High confidence for clear dip patterns
+                'sinusoidal': 0.90,  # Very high confidence for smooth patterns
+                'distant_peaks': 0.75, # Good confidence for double peaks
+                'close_peak': 0.70,  # Moderate confidence for close peaks
+                'other': 0.50        # Lower baseline for irregular
+            }
             
-            # Add some randomness to simulate real-world uncertainty
-            confidence += np.random.normal(0, 0.1)
+            base_confidence = category_confidence.get(category, 0.5)
+            
+            # Combine metrics with category bias
+            quality_score = (smoothness + amplitude_score + periodicity_score) / 3
+            confidence = (quality_score * 0.7) + (base_confidence * 0.3)
+            
+            # Add some small randomness to simulate real-world uncertainty
+            confidence += np.random.normal(0, 0.05)
             confidence = np.clip(confidence, 0.1, 0.95)
             
             return float(confidence)
             
         except Exception:
-            return 0.5  # Default confidence if calculation fails
+            # Default confidence based on category if calculation fails
+            return {'dipper': 0.7, 'sinusoidal': 0.8, 'distant_peaks': 0.6, 
+                   'close_peak': 0.6, 'other': 0.4}.get(category, 0.5)
     
     def create_data_loaders(self, folded_curves: torch.Tensor, confidence_labels: torch.Tensor, 
                            class_labels: torch.Tensor) -> Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
