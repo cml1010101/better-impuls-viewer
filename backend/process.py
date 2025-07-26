@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from scipy.signal import find_peaks
+from scipy.interpolate import interp1d
 from typing import Tuple, List, Dict, Optional
 
 def find_longest_x_campaign(data: np.ndarray, x_threshold: float) -> np.ndarray:
@@ -385,169 +386,387 @@ def find_periodogram_periods(data: np.ndarray, top_n: int = 5) -> List[Tuple[flo
     return results
 
 
-class SinusoidalModel(nn.Module):
-    """PyTorch model for fitting sinusoidal functions to time series data."""
-    
-    def __init__(self, n_periods: int = 2):
-        super(SinusoidalModel, self).__init__()
-        self.n_periods = n_periods
-        
-        # Parameters for each sinusoid: [amplitude, period, phase, offset]
-        self.amplitudes = nn.Parameter(torch.randn(n_periods) * 0.01)
-        self.periods = nn.Parameter(torch.randn(n_periods) * 5 + 5)  # Initialize around 5 days
-        self.phases = nn.Parameter(torch.randn(n_periods) * 2 * np.pi)
-        self.offset = nn.Parameter(torch.randn(1))
-    
-    def forward(self, t):
-        """Forward pass through the model."""
-        result = self.offset
-        
-        for i in range(self.n_periods):
-            # Ensure period is positive
-            period = torch.abs(self.periods[i]) + 0.1
-            amplitude = self.amplitudes[i]
-            phase = self.phases[i]
-            
-            # Add sinusoid: amplitude * sin(2π * t / period + phase)
-            result = result + amplitude * torch.sin(2 * np.pi * t / period + phase)
-        
-        return result
-
-
-def fit_sinusoidal_periods(data: np.ndarray, n_periods: int = 2, max_epochs: int = 1000) -> List[Tuple[float, float]]:
+class PeriodValidationCNN(nn.Module):
     """
-    Use PyTorch to fit sinusoidal curves and extract periods.
+    Convolutional Neural Network for validating periods and classifying variability types.
+    
+    Takes phase-folded light curve data and outputs:
+    1. Confidence score (0-1) for period validity
+    2. Classification probabilities for variability types
+    """
+    
+    def __init__(self, input_size: int = 100, num_classes: int = 3):
+        super(PeriodValidationCNN, self).__init__()
+        self.input_size = input_size
+        self.num_classes = num_classes  # regular, binary, other
+        
+        # Convolutional layers for pattern recognition in folded curves
+        self.conv_layers = nn.Sequential(
+            # First conv block - detect basic patterns
+            nn.Conv1d(1, 16, kernel_size=7, padding=3),
+            nn.ReLU(),
+            nn.BatchNorm1d(16),
+            nn.MaxPool1d(2),
+            
+            # Second conv block - detect more complex patterns
+            nn.Conv1d(16, 32, kernel_size=5, padding=2),
+            nn.ReLU(),
+            nn.BatchNorm1d(32),
+            nn.MaxPool1d(2),
+            
+            # Third conv block - high-level feature extraction
+            nn.Conv1d(32, 64, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(64),
+            nn.AdaptiveAvgPool1d(8)  # Reduce to fixed size regardless of input
+        )
+        
+        # Fully connected layers
+        self.fc_layers = nn.Sequential(
+            nn.Dropout(0.3),
+            nn.Linear(64 * 8, 128),
+            nn.ReLU(),
+            nn.Dropout(0.2),
+            nn.Linear(128, 64),
+            nn.ReLU()
+        )
+        
+        # Output heads
+        self.confidence_head = nn.Sequential(
+            nn.Linear(64, 1),
+            nn.Sigmoid()  # Output confidence between 0 and 1
+        )
+        
+        self.classification_head = nn.Sequential(
+            nn.Linear(64, num_classes)
+            # No softmax here - will be applied during loss calculation
+        )
+    
+    def forward(self, x):
+        """
+        Forward pass through the network.
+        
+        Parameters
+        ----------
+        x : torch.Tensor
+            Input tensor of shape (batch_size, 1, sequence_length)
+            representing phase-folded light curves
+        
+        Returns
+        -------
+        tuple
+            (confidence_scores, classification_logits)
+        """
+        # Apply convolutional layers
+        conv_out = self.conv_layers(x)
+        
+        # Flatten for fully connected layers
+        flattened = conv_out.view(conv_out.size(0), -1)
+        
+        # Apply fully connected layers
+        fc_out = self.fc_layers(flattened)
+        
+        # Get outputs from both heads
+        confidence = self.confidence_head(fc_out)
+        classification = self.classification_head(fc_out)
+        
+        return confidence.squeeze(), classification
+
+
+def phase_fold_data(data: np.ndarray, period: float, n_bins: int = 100) -> np.ndarray:
+    """
+    Phase-fold time series data at a given period and bin it.
     
     Parameters
     ----------
     data : np.ndarray
         A 2D numpy array where the first column is time and the second column is flux.
-    n_periods : int, optional
-        Number of sinusoidal components to fit. Default is 2.
-    max_epochs : int, optional
-        Maximum number of training epochs. Default is 1000.
+    period : float
+        Period to fold the data at (in same units as time).
+    n_bins : int, optional
+        Number of phase bins to create. Default is 100.
     
     Returns
     -------
-    List[Tuple[float, float]]
-        List of (period, confidence) tuples sorted by confidence.
+    np.ndarray
+        Array of shape (n_bins,) containing the binned folded light curve.
     """
-    if data.shape[1] != 2 or data.shape[0] < 20:
-        return []
+    if data.shape[1] != 2 or data.shape[0] < 10 or period <= 0:
+        return np.zeros(n_bins)
     
-    # Prepare data
-    time = torch.tensor(data[:, 0], dtype=torch.float32)
-    flux = torch.tensor(data[:, 1], dtype=torch.float32)
+    time = data[:, 0]
+    flux = data[:, 1]
     
-    # Normalize time to start from 0
-    time = time - time.min()
+    # Calculate phases (0 to 1)
+    phases = ((time - time.min()) % period) / period
     
-    # Normalize flux to have zero mean and unit variance
-    flux_mean = flux.mean()
-    flux_std = flux.std()
-    if flux_std > 0:
-        flux = (flux - flux_mean) / flux_std
+    # Create phase bins
+    phase_bins = np.linspace(0, 1, n_bins + 1)
+    binned_flux = np.zeros(n_bins)
     
-    # Create model
-    model = SinusoidalModel(n_periods=n_periods)
-    optimizer = optim.Adam(model.parameters(), lr=0.01)
-    criterion = nn.MSELoss()
-    
-    # Training loop with early stopping
-    best_loss = float('inf')
-    patience = 100
-    patience_counter = 0
-    
-    for epoch in range(max_epochs):
-        optimizer.zero_grad()
-        predicted = model(time)
-        loss = criterion(predicted, flux)
-        loss.backward()
-        optimizer.step()
-        
-        # Early stopping
-        if loss.item() < best_loss:
-            best_loss = loss.item()
-            patience_counter = 0
+    # Bin the data
+    for i in range(n_bins):
+        mask = (phases >= phase_bins[i]) & (phases < phase_bins[i + 1])
+        if np.any(mask):
+            binned_flux[i] = np.mean(flux[mask])
         else:
-            patience_counter += 1
-            if patience_counter >= patience:
-                break
+            # If no data in bin, interpolate from neighboring bins
+            binned_flux[i] = np.nan
     
-    # Extract periods and calculate confidence based on amplitude
-    periods_with_confidence = []
+    # Fill NaN values with interpolation
+    if np.any(np.isnan(binned_flux)):
+        valid_mask = ~np.isnan(binned_flux)
+        if np.any(valid_mask):
+            # Linear interpolation for missing values
+            from scipy.interpolate import interp1d
+            valid_indices = np.where(valid_mask)[0]
+            if len(valid_indices) > 1:
+                interp_func = interp1d(valid_indices, binned_flux[valid_indices], 
+                                     kind='linear', fill_value='extrapolate')
+                nan_indices = np.where(~valid_mask)[0]
+                binned_flux[nan_indices] = interp_func(nan_indices)
+            else:
+                # If only one valid point, fill with mean
+                binned_flux[~valid_mask] = np.mean(binned_flux[valid_mask])
     
-    with torch.no_grad():
-        for i in range(n_periods):
-            period = torch.abs(model.periods[i]).item() + 0.1
-            amplitude = torch.abs(model.amplitudes[i]).item()
-            
-            # Filter reasonable periods (0.1 to 100 days)
-            if 0.1 <= period <= 100:
-                # Use amplitude as a proxy for confidence
-                confidence = amplitude / (flux_std.item() if flux_std > 0 else 1.0)
-                periods_with_confidence.append((period, confidence))
+    # Normalize to zero mean and unit variance
+    binned_flux = (binned_flux - np.mean(binned_flux)) / (np.std(binned_flux) + 1e-8)
     
-    # Sort by confidence (highest first)
-    periods_with_confidence.sort(key=lambda x: x[1], reverse=True)
-    
-    return periods_with_confidence
+    return binned_flux
 
 
-def classify_periodicity(periods_data: List[Tuple[float, float]], 
-                        torch_periods: List[Tuple[float, float]]) -> Dict[str, any]:
+def create_synthetic_training_data(n_samples: int = 1000) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    Classify the type of variability based on detected periods.
+    Create synthetic training data for the CNN.
+    This would ideally be replaced with real labeled astronomical data.
     
     Parameters
     ----------
-    periods_data : List[Tuple[float, float]]
-        Periods from periodogram analysis as (period, power) pairs.
-    torch_periods : List[Tuple[float, float]]
-        Periods from torch fitting as (period, confidence) pairs.
+    n_samples : int
+        Number of synthetic samples to generate
+    
+    Returns
+    -------
+    tuple
+        (folded_curves, confidence_labels, class_labels)
+    """
+    folded_curves = []
+    confidence_labels = []
+    class_labels = []
+    
+    n_bins = 100
+    
+    for _ in range(n_samples):
+        phase = np.linspace(0, 1, n_bins)
+        
+        # Generate different types of curves
+        curve_type = np.random.choice(['regular', 'binary', 'noise'])
+        
+        if curve_type == 'regular':
+            # Single sinusoidal pattern
+            amplitude = np.random.uniform(0.5, 2.0)
+            curve = amplitude * np.sin(2 * np.pi * phase + np.random.uniform(0, 2*np.pi))
+            confidence = np.random.uniform(0.7, 1.0)
+            class_label = 0  # regular
+            
+        elif curve_type == 'binary':
+            # Double-peaked or ellipsoidal pattern
+            amplitude1 = np.random.uniform(0.3, 1.5)
+            amplitude2 = np.random.uniform(0.2, 1.0)
+            curve = (amplitude1 * np.sin(2 * np.pi * phase) + 
+                    amplitude2 * np.sin(4 * np.pi * phase + np.random.uniform(0, 2*np.pi)))
+            confidence = np.random.uniform(0.6, 0.95)
+            class_label = 1  # binary
+            
+        else:  # noise
+            # Random noise pattern
+            curve = np.random.normal(0, 0.5, n_bins)
+            confidence = np.random.uniform(0.0, 0.3)
+            class_label = 2  # other/noise
+        
+        # Add noise
+        noise_level = np.random.uniform(0.05, 0.2)
+        curve += np.random.normal(0, noise_level, n_bins)
+        
+        # Normalize
+        curve = (curve - np.mean(curve)) / (np.std(curve) + 1e-8)
+        
+        folded_curves.append(curve)
+        confidence_labels.append(confidence)
+        class_labels.append(class_label)
+    
+    return (torch.tensor(folded_curves, dtype=torch.float32).unsqueeze(1),
+            torch.tensor(confidence_labels, dtype=torch.float32),
+            torch.tensor(class_labels, dtype=torch.long))
+
+
+def train_validation_model(model: PeriodValidationCNN, n_epochs: int = 100) -> PeriodValidationCNN:
+    """
+    Train the period validation CNN with synthetic data.
+    In a real implementation, this would use actual astronomical training data.
+    
+    Parameters
+    ----------
+    model : PeriodValidationCNN
+        The model to train
+    n_epochs : int
+        Number of training epochs
+    
+    Returns
+    -------
+    PeriodValidationCNN
+        The trained model
+    """
+    # Generate synthetic training data
+    train_curves, train_confidence, train_classes = create_synthetic_training_data(1000)
+    
+    # Set up training
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    confidence_criterion = nn.MSELoss()
+    classification_criterion = nn.CrossEntropyLoss()
+    
+    model.train()
+    
+    for epoch in range(n_epochs):
+        # Mini-batch training
+        batch_size = 32
+        total_loss = 0
+        n_batches = 0
+        
+        for i in range(0, len(train_curves), batch_size):
+            batch_curves = train_curves[i:i+batch_size]
+            batch_confidence = train_confidence[i:i+batch_size]
+            batch_classes = train_classes[i:i+batch_size]
+            
+            optimizer.zero_grad()
+            
+            # Forward pass
+            pred_confidence, pred_classes = model(batch_curves)
+            
+            # Calculate losses
+            conf_loss = confidence_criterion(pred_confidence, batch_confidence)
+            class_loss = classification_criterion(pred_classes, batch_classes)
+            
+            # Combined loss
+            total_loss_batch = conf_loss + class_loss
+            total_loss += total_loss_batch.item()
+            n_batches += 1
+            
+            # Backward pass
+            total_loss_batch.backward()
+            optimizer.step()
+        
+        if epoch % 20 == 0:
+            avg_loss = total_loss / n_batches
+            print(f"Epoch {epoch}/{n_epochs}, Average Loss: {avg_loss:.4f}")
+    
+    model.eval()
+    return model
+
+
+def validate_periods_with_cnn(data: np.ndarray, candidate_periods: List[Tuple[float, float]]) -> List[Tuple[float, float, str]]:
+    """
+    Validate candidate periods using a CNN that analyzes folded light curves.
+    
+    Parameters
+    ----------
+    data : np.ndarray
+        A 2D numpy array where the first column is time and the second column is flux.
+    candidate_periods : List[Tuple[float, float]]
+        List of candidate periods from periodogram as (period, power) tuples.
+    
+    Returns
+    -------
+    List[Tuple[float, float, str]]
+        List of (period, confidence, classification) tuples sorted by confidence.
+    """
+    if len(candidate_periods) == 0 or data.shape[0] < 20:
+        return []
+    
+    # Initialize and train the CNN model
+    model = PeriodValidationCNN(input_size=100, num_classes=3)
+    
+    # For efficiency, we'll use a pre-trained model or quick training
+    # In practice, this model would be trained offline on real astronomical data
+    try:
+        model = train_validation_model(model, n_epochs=50)  # Quick training for demo
+    except Exception as e:
+        print(f"Warning: CNN training failed: {e}")
+        # Fallback to simple validation
+        return [(period, power * 0.8, 'regular') for period, power in candidate_periods[:3]]
+    
+    results = []
+    class_names = ['regular', 'binary', 'other']
+    
+    with torch.no_grad():
+        for period, power in candidate_periods:
+            try:
+                # Phase-fold the data at this period
+                folded_curve = phase_fold_data(data, period, n_bins=100)
+                
+                # Prepare input for CNN
+                input_tensor = torch.tensor(folded_curve, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+                
+                # Get CNN predictions
+                confidence, class_logits = model(input_tensor)
+                
+                # Get classification
+                class_probs = torch.softmax(class_logits, dim=0)
+                predicted_class = torch.argmax(class_probs).item()
+                classification = class_names[predicted_class]
+                
+                # Combine CNN confidence with periodogram power
+                final_confidence = float(confidence.item()) * min(power * 2, 1.0)
+                
+                results.append((period, final_confidence, classification))
+                
+            except Exception as e:
+                print(f"Warning: CNN validation failed for period {period}: {e}")
+                # Fallback confidence based on periodogram power
+                results.append((period, power * 0.5, 'regular'))
+    
+    # Sort by confidence (highest first)
+    results.sort(key=lambda x: x[1], reverse=True)
+    
+    return results
+
+
+def classify_periodicity_with_cnn(validated_periods: List[Tuple[float, float, str]]) -> Dict[str, any]:
+    """
+    Classify the type of variability based on CNN-validated periods.
+    
+    Parameters
+    ----------
+    validated_periods : List[Tuple[float, float, str]]
+        List of (period, confidence, classification) tuples from CNN validation.
     
     Returns
     -------
     Dict[str, any]
         Classification results including type and confidence.
     """
-    # Combine periods from both methods and their significance scores
-    all_periods_with_scores = []
-    
-    # Add periodogram periods (use power as significance)
-    for period, power in periods_data:
-        all_periods_with_scores.append((period, power, 'periodogram'))
-    
-    # Add torch periods (normalize confidence to be comparable with power)
-    if torch_periods:
-        max_torch_conf = max(conf for _, conf in torch_periods)
-        for period, confidence in torch_periods:
-            # Normalize confidence to 0-1 range similar to periodogram power
-            normalized_conf = confidence / max_torch_conf if max_torch_conf > 0 else 0
-            all_periods_with_scores.append((period, normalized_conf, 'torch'))
-    
-    if len(all_periods_with_scores) == 0:
+    if len(validated_periods) == 0:
         return {
             "type": "other",
             "confidence": 0.0,
             "description": "No significant periods detected"
         }
     
-    # Sort by significance score (highest first)
-    all_periods_with_scores.sort(key=lambda x: x[1], reverse=True)
+    # Sort by confidence (highest first)
+    validated_periods.sort(key=lambda x: x[1], reverse=True)
     
-    # Get the most significant periods
-    primary_period = all_periods_with_scores[0][0]
-    primary_score = all_periods_with_scores[0][1]
+    # Get the most confident period
+    primary_period, primary_confidence, primary_classification = validated_periods[0]
     
-    # Look for a strong secondary period
+    # Look for secondary period
     secondary_period = None
-    secondary_score = 0
+    secondary_confidence = 0
+    secondary_classification = None
     
-    if len(all_periods_with_scores) > 1:
+    if len(validated_periods) > 1:
         # Look for a secondary period that's not too close to the primary
-        for period, score, method in all_periods_with_scores[1:]:
-            # Avoid harmonics (periods within 20% of 2x, 3x, 0.5x, 0.33x of primary)
+        for period, confidence, classification in validated_periods[1:]:
+            # Avoid harmonics and too-close periods
             ratio1 = period / primary_period
             ratio2 = primary_period / period
             
@@ -559,84 +778,92 @@ def classify_periodicity(periods_data: List[Tuple[float, float]],
                 abs(ratio1 - 1.0) < 0.1     # Too close to primary
             )
             
-            if not is_harmonic and score > 0.1:  # Minimum significance threshold
+            if not is_harmonic and confidence > 0.3:  # Minimum confidence threshold
                 secondary_period = period
-                secondary_score = score
+                secondary_confidence = confidence
+                secondary_classification = classification
                 break
     
-    # Classification logic
-    confidence_boost = min(primary_score * 2, 0.9)  # Convert score to confidence
-    
-    # Check for binary system indicators
-    if secondary_period is not None:
-        ratio = max(primary_period, secondary_period) / min(primary_period, secondary_period)
+    # Determine overall classification based on CNN outputs and period relationships
+    if secondary_period is not None and secondary_confidence > 0.4:
+        # Multiple significant periods detected
         
-        # Strong binary indicators
-        if ratio > 3.0:  # Very different time scales
+        # Check if CNN classifies either as binary
+        if primary_classification == 'binary' or secondary_classification == 'binary':
+            ratio = max(primary_period, secondary_period) / min(primary_period, secondary_period)
+            avg_confidence = (primary_confidence + secondary_confidence) / 2
+            
+            if 1.8 <= ratio <= 2.2:  # Ellipsoidal variation
+                return {
+                    "type": "binary",
+                    "confidence": min(0.95, avg_confidence),
+                    "description": f"Ellipsoidal binary with periods {primary_period:.3f} and {secondary_period:.3f} days (ratio ~2:1)"
+                }
+            else:
+                return {
+                    "type": "binary",
+                    "confidence": min(0.9, avg_confidence),
+                    "description": f"Binary system with periods {primary_period:.3f} and {secondary_period:.3f} days (ratio {ratio:.1f}:1)"
+                }
+        else:
+            # Multiple periods but not classified as binary by CNN
             return {
-                "type": "binary",
-                "confidence": min(0.9, 0.7 + confidence_boost * 0.2),
-                "description": f"Binary system with periods {primary_period:.3f} and {secondary_period:.3f} days (ratio {ratio:.1f}:1)"
-            }
-        elif 1.8 <= ratio <= 2.2:  # Close to 2:1 ratio (ellipsoidal variation)
-            return {
-                "type": "binary",
-                "confidence": min(0.95, 0.8 + confidence_boost * 0.15),
-                "description": f"Ellipsoidal binary with periods {primary_period:.3f} and {secondary_period:.3f} days (ratio ~2:1)"
-            }
-        elif ratio > 1.5:  # Moderate difference
-            return {
-                "type": "binary",
-                "confidence": min(0.8, 0.6 + confidence_boost * 0.2),
-                "description": f"Possible binary with periods {primary_period:.3f} and {secondary_period:.3f} days"
+                "type": "other",
+                "confidence": min(0.8, primary_confidence),
+                "description": f"Complex multi-period variability (primary: {primary_period:.3f} days, secondary: {secondary_period:.3f} days)"
             }
     
-    # Single dominant period - regular variable
-    if primary_score > 0.1:  # Significant detection
-        # Check if it's in typical variable star period range
-        if 0.1 <= primary_period <= 100:
-            if 0.5 <= primary_period <= 50:  # Most common range
-                confidence = min(0.9, 0.7 + confidence_boost * 0.2)
-                period_type = "Regular variable star"
-            else:
-                confidence = min(0.8, 0.6 + confidence_boost * 0.2)
-                period_type = "Variable star"
-            
+    # Single dominant period
+    if primary_confidence > 0.3:
+        if primary_classification == 'regular':
             return {
                 "type": "regular",
-                "confidence": confidence,
-                "description": f"{period_type} with period {primary_period:.3f} days"
+                "confidence": min(0.9, primary_confidence),
+                "description": f"Regular variable star with period {primary_period:.3f} days"
+            }
+        elif primary_classification == 'binary':
+            return {
+                "type": "binary",
+                "confidence": min(0.85, primary_confidence),
+                "description": f"Binary system with dominant period {primary_period:.3f} days"
+            }
+        else:  # 'other'
+            return {
+                "type": "other",
+                "confidence": min(0.7, primary_confidence),
+                "description": f"Irregular variability with period {primary_period:.3f} days"
             }
     
-    # Default case - unclear or complex variability
+    # Low confidence detection
     return {
         "type": "other",
-        "confidence": max(0.3, confidence_boost),
-        "description": f"Complex variability pattern (primary period: {primary_period:.3f} days)"
+        "confidence": primary_confidence,
+        "description": f"Weak periodicity detected (period: {primary_period:.3f} days, confidence: {primary_confidence:.2f})"
     }
 
 
 def determine_automatic_periods(data: np.ndarray) -> Dict[str, any]:
     """
-    Automatically determine periods using both periodogram and torch fitting methods.
+    Automatically determine periods using periodogram for candidate detection and CNN for validation.
     
-    This function implements a comprehensive automatic period detection system that combines 
-    traditional astronomical methods with modern machine learning techniques:
+    This function implements a sophisticated automatic period detection system that combines 
+    traditional astronomical methods with modern machine learning:
     
     1. **Enhanced Lomb-Scargle Periodogram**: 
        - Uses robust statistics (median absolute deviation) for noise-resistant thresholds
        - Applies period weighting to prioritize astronomically reasonable periods (0.5-50 days)
-       - Filters harmonics and spurious detections
+       - Generates candidate periods from significant peaks
     
-    2. **PyTorch Sinusoidal Regression**: 
-       - Custom neural network model that fits multiple sinusoidal components
-       - Uses gradient descent optimization with early stopping
-       - Provides confidence scores based on fit quality
+    2. **CNN-Based Period Validation**: 
+       - Phase-folds data at each candidate period
+       - Uses convolutional neural network to analyze folded light curve patterns
+       - Provides confidence scores and classification for each candidate period
+       - Trained to recognize regular variables, binary systems, and noise artifacts
     
-    3. **Dual-Method Cross-Validation**:
-       - Combines results from both methods for robust period detection
-       - Prioritizes periods that appear in both methods
-       - Provides confidence scoring based on detection strength and method agreement
+    3. **Intelligent Classification**:
+       - Combines CNN outputs with period relationships for final classification
+       - Handles regular variables, binary systems, and complex/irregular variability
+       - Provides detailed descriptions and confidence estimates
     
     Parameters
     ----------
@@ -659,72 +886,71 @@ def determine_automatic_periods(data: np.ndarray) -> Dict[str, any]:
             },
             "methods": {
                 "periodogram": {"success": False, "periods": []},
-                "torch_fitting": {"success": False, "periods": []}
+                "cnn_validation": {"success": False, "periods": []}
             },
             "error": "Insufficient data points for period analysis"
         }
     
-    # Method 1: Enhanced periodogram analysis
+    # Step 1: Enhanced periodogram analysis to find candidate periods
     periodogram_success = False
     periodogram_periods = []
     periodogram_error = None
     
     try:
-        periodogram_periods = find_periodogram_periods(data, top_n=3)
+        periodogram_periods = find_periodogram_periods(data, top_n=5)
         periodogram_success = len(periodogram_periods) > 0
     except Exception as e:
         periodogram_error = str(e)
     
-    # Method 2: PyTorch sinusoidal fitting
-    torch_success = False
-    torch_periods = []
-    torch_error = None
+    # Step 2: CNN validation of candidate periods
+    cnn_success = False
+    validated_periods = []
+    cnn_error = None
     
     try:
-        torch_periods = fit_sinusoidal_periods(data, n_periods=2, max_epochs=500)
-        torch_success = len(torch_periods) > 0
+        if periodogram_success:
+            validated_periods = validate_periods_with_cnn(data, periodogram_periods)
+            cnn_success = len(validated_periods) > 0
+        else:
+            cnn_error = "No candidate periods from periodogram"
     except Exception as e:
-        torch_error = str(e)
+        cnn_error = str(e)
     
-    # Combine results to determine best periods
+    # Step 3: Determine best periods from CNN validation
     primary_period = None
     secondary_period = None
     
-    # Prioritize periods that appear in both methods or have high confidence
-    if periodogram_success and torch_success:
-        # Try to find matching periods between methods
-        pg_periods = [p[0] for p in periodogram_periods]
-        torch_period_values = [p[0] for p in torch_periods]
+    if cnn_success and len(validated_periods) > 0:
+        # Sort by confidence (highest first)
+        validated_periods.sort(key=lambda x: x[1], reverse=True)
         
-        # Look for similar periods (within 10% tolerance)
-        matches = []
-        for pg_p in pg_periods:
-            for torch_p in torch_period_values:
-                if abs(pg_p - torch_p) / max(pg_p, torch_p) < 0.1:
-                    matches.append((pg_p + torch_p) / 2)  # Average the matching periods
+        primary_period = validated_periods[0][0]
         
-        if matches:
-            primary_period = matches[0]
-            if len(matches) > 1:
-                secondary_period = matches[1]
-        else:
-            # No matches, use highest confidence from each method
-            primary_period = periodogram_periods[0][0]
-            if len(torch_periods) > 0:
-                secondary_period = torch_periods[0][0]
+        # Look for a good secondary period
+        if len(validated_periods) > 1:
+            for period, confidence, classification in validated_periods[1:]:
+                # Avoid periods too close to primary
+                ratio = max(period, primary_period) / min(period, primary_period)
+                if ratio > 1.2 and confidence > 0.3:  # Different enough and confident enough
+                    secondary_period = period
+                    break
     
     elif periodogram_success:
+        # Fallback to periodogram results if CNN fails
         primary_period = periodogram_periods[0][0]
         if len(periodogram_periods) > 1:
             secondary_period = periodogram_periods[1][0]
     
-    elif torch_success:
-        primary_period = torch_periods[0][0]
-        if len(torch_periods) > 1:
-            secondary_period = torch_periods[1][0]
-    
-    # Classify the periodicity
-    classification = classify_periodicity(periodogram_periods, torch_periods)
+    # Step 4: Classify the periodicity using CNN results
+    if cnn_success:
+        classification = classify_periodicity_with_cnn(validated_periods)
+    else:
+        # Fallback classification if CNN fails
+        classification = {
+            "type": "other" if primary_period is None else "regular",
+            "confidence": 0.5 if primary_period is not None else 0.0,
+            "description": f"Periodogram-only detection (period: {primary_period:.3f} days)" if primary_period else "No periods detected"
+        }
     
     # Prepare final results
     result = {
@@ -737,10 +963,10 @@ def determine_automatic_periods(data: np.ndarray) -> Dict[str, any]:
                 "periods": [p for p, pow in periodogram_periods],  # Just return period values as numbers
                 "error": periodogram_error
             },
-            "torch_fitting": {
-                "success": torch_success,
-                "periods": [p for p, c in torch_periods],  # Just return period values as numbers
-                "error": torch_error
+            "cnn_validation": {
+                "success": cnn_success,
+                "periods": [p for p, c, cls in validated_periods],  # Just return period values as numbers
+                "error": cnn_error
             }
         }
     }

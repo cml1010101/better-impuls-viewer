@@ -44,7 +44,7 @@ interface AutoPeriodsData {
   classification: AutoPeriodClassification;
   methods: {
     periodogram?: AutoPeriodMethod;
-    torch_fitting?: AutoPeriodMethod;
+    cnn_validation?: AutoPeriodMethod;
   };
   error?: string;
 }
@@ -477,15 +477,15 @@ const Dashboard: React.FC = () => {
                   </div>
                 )}
                 
-                {autoPeriodsData.methods.torch_fitting && (
-                  <div className={`method-result ${autoPeriodsData.methods.torch_fitting.success ? 'success' : 'failed'}`}>
-                    <div className="method-name">PyTorch Fitting</div>
+                {autoPeriodsData.methods.cnn_validation && (
+                  <div className={`method-result ${autoPeriodsData.methods.cnn_validation.success ? 'success' : 'failed'}`}>
+                    <div className="method-name">CNN Validation</div>
                     <div className="method-status">
-                      {autoPeriodsData.methods.torch_fitting.success ? '✓' : '✗'}
+                      {autoPeriodsData.methods.cnn_validation.success ? '✓' : '✗'}
                     </div>
-                    {autoPeriodsData.methods.torch_fitting.success && (
+                    {autoPeriodsData.methods.cnn_validation.success && (
                       <div className="method-periods">
-                        {autoPeriodsData.methods.torch_fitting.periods.slice(0, 3).map((period, idx) => (
+                        {autoPeriodsData.methods.cnn_validation.periods.slice(0, 3).map((period, idx) => (
                           <span key={idx} className="method-period">
                             {Number(period).toFixed(3)}d
                           </span>
@@ -555,24 +555,26 @@ const Dashboard: React.FC = () => {
                 <li><strong>Harmonic Filtering</strong>: Avoids spurious detections from noise artifacts and harmonic aliases</li>
               </ul>
 
-              <h4>🤖 Method 2: PyTorch Sinusoidal Regression</h4>
+              <h4>🤖 Method 2: CNN Period Validation</h4>
               <ul>
-                <li><strong>Neural Network Fitting</strong>: Custom PyTorch model that fits multiple sinusoidal components using gradient descent</li>
-                <li><strong>Early Stopping</strong>: Prevents overfitting with patience-based convergence monitoring</li>
-                <li><strong>Confidence Scoring</strong>: Provides reliability estimates based on amplitude strength relative to noise</li>
-                <li><strong>Multi-Component Support</strong>: Can simultaneously fit 2+ periodic signals for binary systems</li>
+                <li><strong>Phase Folding</strong>: Candidate periods from periodogram are used to phase-fold the light curve data</li>
+                <li><strong>Convolutional Analysis</strong>: Multi-layer CNN processes folded light curves to detect genuine periodic patterns</li>
+                <li><strong>Dual Output</strong>: Network provides confidence scores (0-1) and variability classification (regular/binary/other)</li>
+                <li><strong>Pattern Recognition</strong>: CNN learns to distinguish real variable stars from noise artifacts and spurious periods</li>
+                <li><strong>Shape-Based Classification</strong>: Classifies variability type based on folded light curve morphology</li>
               </ul>
 
-              <h4>🔄 Cross-Validation & Classification</h4>
+              <h4>🔄 CNN-Driven Classification</h4>
               <ul>
-                <li><strong>Method Agreement</strong>: Prioritizes periods detected by both methods (within 10% tolerance)</li>
-                <li><strong>Binary Detection</strong>: Identifies multiple period systems with intelligent ratio analysis</li>
+                <li><strong>Period Validation</strong>: CNN validates each periodogram candidate and assigns confidence scores</li>
+                <li><strong>Intelligent Filtering</strong>: Rejects spurious periods and noise artifacts based on folded curve analysis</li>
+                <li><strong>Shape-Based Detection</strong>: Uses light curve morphology to distinguish variability types</li>
                 <li><strong>Quality Control</strong>: Campaign duration: <strong>{campaignData.length > 0 ? ((Math.max(...campaignData.map(d => d.time)) - Math.min(...campaignData.map(d => d.time))).toFixed(1)) : 'N/A'} days</strong></li>
                 <li><strong>Classification Types</strong>:
                   <ul>
-                    <li><em>Regular</em>: Single dominant period system</li>
-                    <li><em>Binary</em>: Multiple periods with 2:1 ellipsoidal variation or &gt;3:1 independent periods</li>
-                    <li><em>Complex</em>: Irregular or multi-component variability</li>
+                    <li><em>Regular</em>: Single-period variables with clean sinusoidal patterns</li>
+                    <li><em>Binary</em>: Ellipsoidal variations, eclipsing systems, or multi-period objects</li>
+                    <li><em>Complex</em>: Irregular variability or multi-component systems</li>
                   </ul>
                 </li>
               </ul>
