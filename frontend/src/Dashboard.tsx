@@ -85,6 +85,8 @@ const Dashboard: React.FC = () => {
   const [phaseFoldedData, setPhaseFoldedData] = useState<PhaseFoldedPoint[]>([]);
   const [autoPeriodsData, setAutoPeriodsData] = useState<AutoPeriodsData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [sedImageAvailable, setSedImageAvailable] = useState<boolean>(false);
+  const [sedImageLoading, setSedImageLoading] = useState<boolean>(false);
 
   // Initialize from URL parameters on component mount
   useEffect(() => {
@@ -136,6 +138,14 @@ const Dashboard: React.FC = () => {
       fetchPhaseFoldedData(selectedStar, selectedTelescope, selectedCampaign, selectedPeriod);
     }
   }, [selectedStar, selectedTelescope, selectedCampaign, selectedPeriod]);
+
+  // Check SED image availability when star changes
+  useEffect(() => {
+    if (selectedStar) {
+      setSedImageLoading(true);
+      setSedImageAvailable(false);
+    }
+  }, [selectedStar]);
 
   const fetchStars = async () => {
     try {
@@ -489,6 +499,31 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
       )}
+      {/* SED Image Section - Only show if image is available */}
+      {selectedStar && sedImageAvailable && (
+        <div className="sed-section">
+          <h3>Spectral Energy Distribution (SED)</h3>
+          <div className="sed-image-container">
+            <img 
+              src={`${API_BASE}/sed/${selectedStar}`} 
+              alt={`SED for Star ${selectedStar}`}
+              className="sed-image"
+              onError={() => {
+                // Hide the entire SED section if image fails to load
+                setSedImageAvailable(false);
+                setSedImageLoading(false);
+              }}
+              onLoad={(e) => {
+                console.log(`Successfully loaded SED image for Star ${selectedStar}`);
+                // Show the image if it loads successfully
+                e.currentTarget.style.display = 'block';
+                setSedImageAvailable(true);
+                setSedImageLoading(false);
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Show error message if auto period detection failed */}
       {autoPeriodsData && autoPeriodsData.error && (
@@ -551,6 +586,22 @@ const Dashboard: React.FC = () => {
             </div>
           </details>
         </div>
+      )}
+      {/* Hidden image to test SED availability */}
+      {selectedStar && sedImageLoading && (
+        <img 
+          src={`${API_BASE}/sed/${selectedStar}`} 
+          alt=""
+          style={{ display: 'none' }}
+          onError={() => {
+            setSedImageAvailable(false);
+            setSedImageLoading(false);
+          }}
+          onLoad={() => {
+            setSedImageAvailable(true);
+            setSedImageLoading(false);
+          }}
+        />
       )}
 
       {/* Charts - New Layout: Light curve on top, periodogram and phase-folded side by side */}

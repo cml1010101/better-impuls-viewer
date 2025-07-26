@@ -8,7 +8,11 @@ import numpy as np
 from functools import lru_cache
 import hashlib
 import time
+from dotenv import load_dotenv
 from process import find_all_campaigns, sort_data, calculate_lomb_scargle, remove_y_outliers, determine_automatic_periods
+
+# Load environment variables from .env file
+load_dotenv()
 
 app = FastAPI(title="Better Impuls Viewer API", version="1.0.0")
 
@@ -50,8 +54,8 @@ class AutoPeriodsData(BaseModel):
     error: Optional[str] = None
 
 # Configuration
-DEFAULT_DATA_FOLDER = '~/Documents/impuls-data' if os.path.exists(os.path.expanduser('~/Documents/impuls-data')) else '../sample_data'
-DEFAULT_DATA_FOLDER = os.path.abspath(os.path.expanduser(DEFAULT_DATA_FOLDER))
+DEFAULT_DATA_FOLDER = os.path.expanduser('~/Documents/impuls-data') if os.path.exists(os.path.expanduser('~/Documents/impuls-data')) else '../sample_data'
+DEFAULT_DATA_FOLDER = os.path.abspath(DEFAULT_DATA_FOLDER)
 
 # In-memory caches for expensive operations
 _file_cache = {}  # Cache for loaded files
@@ -522,6 +526,27 @@ async def get_automatic_periods(star_number: int, telescope: str, campaign_id: s
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error determining automatic periods: {str(e)}")
+
+from fastapi.responses import Response
+import requests
+
+@app.get("/sed/{star_number}")
+async def get_sed_image(star_number: int) -> Response:
+    """Get SED image URL for a specific star"""
+    sed_base_url = os.getenv('SED_URL')
+    username = os.getenv('SED_USERNAME')
+    password = os.getenv('SED_PASSWORD')
+    
+    if not sed_base_url:
+        raise HTTPException(status_code=500, detail="SED_URL not configured in environment variables")
+    
+    # Construct the SED image URL
+    sed_url = f"http://{username}:{password}@{sed_base_url}/{star_number}_SED.png"
+
+    response = requests.get(sed_url)
+    if response.status_code != 200:
+        raise HTTPException(status_code=response.status_code, detail="Error fetching SED image")
+    return Response(content=response.content, media_type="image/png")
 
 if __name__ == "__main__":
     import uvicorn
