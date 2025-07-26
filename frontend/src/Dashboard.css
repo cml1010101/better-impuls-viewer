@@ -76,7 +76,7 @@
   height: auto;
   border-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  display: none; /* Initially hidden, shown when successfully loaded */
+  display: block; /* Show by default when the section is rendered */
 }
 
 .light-curve-section {
