@@ -663,6 +663,13 @@ def train_validation_model(model: PeriodValidationCNN, n_epochs: int = 100) -> P
     model.eval()
     return model
 
+period_model = PeriodValidationCNN(input_size=100, num_classes=3)
+try:
+    period_model = train_validation_model(period_model, n_epochs=50)  # Quick training for demo
+except Exception as e:
+    print(f"Warning: CNN training failed: {e}")
+    # Fallback to simple validation
+    period_model = None
 
 def validate_periods_with_cnn(data: np.ndarray, candidate_periods: List[Tuple[float, float]]) -> List[Tuple[float, float, str]]:
     """
@@ -683,18 +690,6 @@ def validate_periods_with_cnn(data: np.ndarray, candidate_periods: List[Tuple[fl
     if len(candidate_periods) == 0 or data.shape[0] < 20:
         return []
     
-    # Initialize and train the CNN model
-    model = PeriodValidationCNN(input_size=100, num_classes=3)
-    
-    # For efficiency, we'll use a pre-trained model or quick training
-    # In practice, this model would be trained offline on real astronomical data
-    try:
-        model = train_validation_model(model, n_epochs=50)  # Quick training for demo
-    except Exception as e:
-        print(f"Warning: CNN training failed: {e}")
-        # Fallback to simple validation
-        return [(period, power * 0.8, 'regular') for period, power in candidate_periods[:3]]
-    
     results = []
     class_names = ['regular', 'binary', 'other']
     
@@ -708,7 +703,7 @@ def validate_periods_with_cnn(data: np.ndarray, candidate_periods: List[Tuple[fl
                 input_tensor = torch.tensor(folded_curve, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
                 
                 # Get CNN predictions
-                confidence, class_logits = model(input_tensor)
+                confidence, class_logits = period_model(input_tensor)
                 
                 # Get classification
                 class_probs = torch.softmax(class_logits, dim=0)
@@ -729,7 +724,6 @@ def validate_periods_with_cnn(data: np.ndarray, candidate_periods: List[Tuple[fl
     results.sort(key=lambda x: x[1], reverse=True)
     
     return results
-
 
 def classify_periodicity_with_cnn(validated_periods: List[Tuple[float, float, str]]) -> Dict[str, any]:
     """
