@@ -43,16 +43,24 @@ class GoogleOAuthManager:
         self._setup_oauth_config()
     
     def _setup_oauth_config(self):
-        """Setup OAuth configuration from environment or defaults."""
-        # Try to get OAuth config from environment variables
-        env_client_id = os.getenv('GOOGLE_OAUTH_CLIENT_ID')
-        env_client_secret = os.getenv('GOOGLE_OAUTH_CLIENT_SECRET')
-        env_redirect_uri = os.getenv('GOOGLE_OAUTH_REDIRECT_URI')
+        """Setup OAuth configuration from environment or user credentials."""
+        # Try to get OAuth config from user credentials first
+        client_creds = self.credentials_manager.get_google_oauth_client_credentials()
         
-        if env_client_id:
-            self.config.client_id = env_client_id
-        if env_client_secret:
-            self.config.client_secret = env_client_secret
+        if client_creds['client_id'] and client_creds['client_secret']:
+            self.config.client_id = client_creds['client_id']
+            self.config.client_secret = client_creds['client_secret']
+        else:
+            # Fallback to environment variables for development
+            env_client_id = os.getenv('GOOGLE_OAUTH_CLIENT_ID')
+            env_client_secret = os.getenv('GOOGLE_OAUTH_CLIENT_SECRET')
+            
+            if env_client_id and env_client_secret:
+                self.config.client_id = env_client_id
+                self.config.client_secret = env_client_secret
+        
+        # Always check for redirect URI override
+        env_redirect_uri = os.getenv('GOOGLE_OAUTH_REDIRECT_URI')
         if env_redirect_uri:
             self.config.redirect_uri = env_redirect_uri
     
@@ -65,7 +73,13 @@ class GoogleOAuthManager:
             
         Returns:
             Authorization URL for user to visit
+            
+        Raises:
+            ValueError: If OAuth client credentials are not configured
         """
+        if not self.is_oauth_configured():
+            raise ValueError("OAuth client credentials not configured. Please set up your Google Cloud Console project first.")
+        
         if not state:
             state = hashlib.sha256(f"{time.time()}".encode()).hexdigest()[:16]
         
@@ -81,6 +95,19 @@ class GoogleOAuthManager:
         
         base_url = 'https://accounts.google.com/o/oauth2/v2/auth'
         return f"{base_url}?{urlencode(params)}"
+    
+    def is_oauth_configured(self) -> bool:
+        """
+        Check if OAuth client credentials are properly configured.
+        
+        Returns:
+            True if client ID and secret are set and valid, False otherwise
+        """
+        return (self.config.client_id != "your-client-id.apps.googleusercontent.com" and
+                self.config.client_secret != "your-client-secret" and
+                self.config.client_id and 
+                self.config.client_secret and
+                '.apps.googleusercontent.com' in self.config.client_id)
     
     def exchange_code_for_tokens(self, authorization_code: str) -> Dict[str, Any]:
         """
@@ -269,14 +296,21 @@ class GoogleOAuthManager:
         """
         access_token = self.credentials_manager.get_google_oauth_token()
         refresh_token = self.credentials_manager.get_google_refresh_token()
+        oauth_configured = self.is_oauth_configured()
         
         status = {
             'authenticated': False,
             'has_access_token': access_token is not None,
             'has_refresh_token': refresh_token is not None,
+            'oauth_configured': oauth_configured,
             'user_info': None,
-            'token_valid': False
+            'token_valid': False,
+            'config_error': None
         }
+        
+        if not oauth_configured:
+            status['config_error'] = "OAuth client credentials not configured"
+            return status
         
         if access_token:
             status['token_valid'] = self._is_token_valid(access_token)

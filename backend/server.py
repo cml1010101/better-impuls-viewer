@@ -214,7 +214,9 @@ async def get_credentials_status():
             "url_configured": status['google_sheets_url_set'],
             "authenticated": oauth_status['authenticated'],
             "user_info": oauth_status.get('user_info'),
-            "has_refresh_token": oauth_status['has_refresh_token']
+            "has_refresh_token": oauth_status['has_refresh_token'],
+            "oauth_configured": oauth_status['oauth_configured'],
+            "config_error": oauth_status.get('config_error')
         },
         "sed_service": {
             "configured": status['sed_service']
@@ -323,6 +325,112 @@ async def get_google_oauth_status():
     """Get current Google OAuth status"""
     oauth_manager = get_oauth_manager()
     return oauth_manager.get_oauth_status()
+
+@app.post("/oauth/google/configure")
+async def configure_google_oauth_client(request: Dict[str, str]):
+    """Configure Google OAuth client credentials"""
+    credentials_manager = get_credentials_manager()
+    
+    try:
+        client_id = request.get('client_id', '').strip()
+        client_secret = request.get('client_secret', '').strip()
+        
+        if not client_id or not client_secret:
+            raise HTTPException(status_code=400, detail="Both client_id and client_secret are required")
+        
+        # Basic validation
+        if not client_id.endswith('.apps.googleusercontent.com'):
+            raise HTTPException(status_code=400, detail="Invalid client ID format. Should end with '.apps.googleusercontent.com'")
+        
+        if len(client_secret) < 10:
+            raise HTTPException(status_code=400, detail="Client secret appears to be too short")
+        
+        # Store credentials
+        credentials_manager.set_google_oauth_client_credentials(client_id, client_secret)
+        
+        # Recreate OAuth manager to use new credentials
+        global _oauth_manager
+        _oauth_manager = None
+        
+        return {"success": True, "message": "OAuth client credentials configured successfully"}
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error configuring OAuth credentials: {str(e)}")
+
+@app.delete("/oauth/google/configure")
+async def clear_google_oauth_client():
+    """Clear Google OAuth client credentials"""
+    credentials_manager = get_credentials_manager()
+    
+    try:
+        credentials_manager.clear_google_oauth_client_credentials()
+        
+        # Also clear any existing authentication
+        credentials_manager.clear_google_credentials()
+        
+        # Recreate OAuth manager
+        global _oauth_manager
+        _oauth_manager = None
+        
+        return {"success": True, "message": "OAuth client credentials cleared successfully"}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error clearing OAuth credentials: {str(e)}")
+
+@app.get("/oauth/google/setup-guide")
+async def get_oauth_setup_guide():
+    """Get instructions for setting up Google OAuth"""
+    return {
+        "steps": [
+            {
+                "step": 1,
+                "title": "Go to Google Cloud Console",
+                "description": "Visit https://console.cloud.google.com/ and sign in with your Google account"
+            },
+            {
+                "step": 2,
+                "title": "Create or Select a Project",
+                "description": "Either create a new project or select an existing one from the project dropdown"
+            },
+            {
+                "step": 3,
+                "title": "Enable APIs",
+                "description": "Go to 'APIs & Services' > 'Library' and enable 'Google Sheets API' and 'Google Drive API'"
+            },
+            {
+                "step": 4,
+                "title": "Create OAuth Credentials",
+                "description": "Go to 'APIs & Services' > 'Credentials' > 'Create Credentials' > 'OAuth client ID'"
+            },
+            {
+                "step": 5,
+                "title": "Configure OAuth Consent",
+                "description": "If prompted, configure the OAuth consent screen. For personal use, select 'External' and fill in required fields"
+            },
+            {
+                "step": 6,
+                "title": "Set Application Type",
+                "description": "Choose 'Web application' as the application type"
+            },
+            {
+                "step": 7,
+                "title": "Add Redirect URI",
+                "description": "Add 'http://localhost:8000/oauth/google/callback' to the Authorized redirect URIs"
+            },
+            {
+                "step": 8,
+                "title": "Copy Credentials",
+                "description": "After creating, copy the Client ID and Client Secret and paste them into the form below"
+            }
+        ],
+        "redirect_uri": "http://localhost:8000/oauth/google/callback",
+        "required_scopes": [
+            "https://www.googleapis.com/auth/spreadsheets.readonly",
+            "https://www.googleapis.com/auth/userinfo.email"
+        ]
+    }
 
 @app.get("/data_folder/browse")
 async def browse_data_folders(path: str = None):

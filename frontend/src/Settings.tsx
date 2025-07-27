@@ -11,6 +11,8 @@ interface CredentialsStatus {
       name: string;
     };
     has_refresh_token: boolean;
+    oauth_configured: boolean;
+    config_error?: string;
   };
   sed_service: {
     configured: boolean;
@@ -28,6 +30,9 @@ interface SettingsProps {
 const Settings: React.FC<SettingsProps> = ({ onClose }) => {
   const [credentialsStatus, setCredentialsStatus] = useState<CredentialsStatus | null>(null);
   const [googleSheetsUrl, setGoogleSheetsUrl] = useState('');
+  const [googleClientId, setGoogleClientId] = useState('');
+  const [googleClientSecret, setGoogleClientSecret] = useState('');
+  const [showOAuthSetup, setShowOAuthSetup] = useState(false);
   const [sedUrl, setSedUrl] = useState('');
   const [sedUsername, setSedUsername] = useState('');
   const [sedPassword, setSedPassword] = useState('');
@@ -151,6 +156,63 @@ const Settings: React.FC<SettingsProps> = ({ onClose }) => {
     }
   };
 
+  const handleConfigureOAuth = async () => {
+    if (!googleClientId.trim() || !googleClientSecret.trim()) {
+      showMessage('Both Client ID and Client Secret are required', 'error');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/oauth/google/configure`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          client_id: googleClientId.trim(),
+          client_secret: googleClientSecret.trim(),
+        }),
+      });
+
+      if (response.ok) {
+        showMessage('OAuth credentials configured successfully!', 'success');
+        setGoogleClientId('');
+        setGoogleClientSecret('');
+        setShowOAuthSetup(false);
+        await loadCredentialsStatus();
+      } else {
+        const error = await response.json();
+        showMessage(`Error configuring OAuth: ${error.detail}`, 'error');
+      }
+    } catch (error) {
+      showMessage(`Error configuring OAuth: ${error}`, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClearOAuthConfig = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/oauth/google/configure`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        showMessage('OAuth configuration cleared successfully!', 'success');
+        await loadCredentialsStatus();
+      } else {
+        const error = await response.json();
+        showMessage(`Error clearing OAuth config: ${error.detail}`, 'error');
+      }
+    } catch (error) {
+      showMessage(`Error clearing OAuth config: ${error}`, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleBrowseDataFolder = async () => {
     // Check if we're running in Electron
     if (window.electronAPI && window.electronAPI.isElectron) {
@@ -220,12 +282,99 @@ const Settings: React.FC<SettingsProps> = ({ onClose }) => {
             </div>
             
             <div className="status-indicator">
+              <span className={`status-dot ${credentialsStatus?.google_sheets.oauth_configured ? 'green' : 'red'}`}></span>
+              <span>OAuth Configured: {credentialsStatus?.google_sheets.oauth_configured ? 'Yes' : 'No'}</span>
+              {credentialsStatus?.google_sheets.config_error && (
+                <div className="config-error">{credentialsStatus.google_sheets.config_error}</div>
+              )}
+            </div>
+            
+            <div className="status-indicator">
               <span className={`status-dot ${credentialsStatus?.google_sheets.authenticated ? 'green' : 'red'}`}></span>
               <span>Authenticated: {credentialsStatus?.google_sheets.authenticated ? 'Yes' : 'No'}</span>
               {credentialsStatus?.google_sheets.user_info && (
                 <span className="user-info"> ({credentialsStatus.google_sheets.user_info.email})</span>
               )}
             </div>
+
+            {!credentialsStatus?.google_sheets.oauth_configured && (
+              <div className="oauth-setup-section">
+                <div className="oauth-setup-header">
+                  <h4>OAuth Setup Required</h4>
+                  <p>You need to set up Google OAuth credentials to authenticate with Google Sheets.</p>
+                  <button 
+                    onClick={() => setShowOAuthSetup(!showOAuthSetup)}
+                    className="setup-toggle-button"
+                  >
+                    {showOAuthSetup ? 'Hide Setup Instructions' : 'Show Setup Instructions'}
+                  </button>
+                </div>
+
+                {showOAuthSetup && (
+                  <div className="oauth-setup-content">
+                    <div className="setup-instructions">
+                      <h5>Setup Instructions:</h5>
+                      <ol>
+                        <li>Go to <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer">Google Cloud Console</a></li>
+                        <li>Create a new project or select an existing one</li>
+                        <li>Enable the Google Sheets API and Google Drive API</li>
+                        <li>Go to "APIs & Services" → "Credentials" → "Create Credentials" → "OAuth client ID"</li>
+                        <li>Choose "Web application" as the application type</li>
+                        <li>Add this redirect URI: <code>http://localhost:8000/oauth/google/callback</code></li>
+                        <li>Copy the Client ID and Client Secret and paste them below</li>
+                      </ol>
+                    </div>
+
+                    <div className="oauth-form">
+                      <div className="form-group">
+                        <label htmlFor="googleClientId">Google OAuth Client ID:</label>
+                        <input
+                          type="text"
+                          id="googleClientId"
+                          value={googleClientId}
+                          onChange={(e) => setGoogleClientId(e.target.value)}
+                          placeholder="your-client-id.apps.googleusercontent.com"
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label htmlFor="googleClientSecret">Google OAuth Client Secret:</label>
+                        <input
+                          type="password"
+                          id="googleClientSecret"
+                          value={googleClientSecret}
+                          onChange={(e) => setGoogleClientSecret(e.target.value)}
+                          placeholder="Your client secret"
+                        />
+                      </div>
+
+                      <button 
+                        onClick={handleConfigureOAuth}
+                        disabled={loading || !googleClientId.trim() || !googleClientSecret.trim()}
+                        className="auth-button configure-oauth"
+                      >
+                        {loading ? 'Configuring...' : 'Configure OAuth'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {credentialsStatus?.google_sheets.oauth_configured && (
+              <div className="oauth-configured">
+                <div className="oauth-status">
+                  ✅ OAuth credentials configured successfully
+                </div>
+                <button 
+                  onClick={handleClearOAuthConfig}
+                  disabled={loading}
+                  className="auth-button clear-oauth"
+                >
+                  {loading ? 'Clearing...' : 'Clear OAuth Configuration'}
+                </button>
+              </div>
+            )}
 
             <div className="form-group">
               <label htmlFor="googleSheetsUrl">Google Sheets URL:</label>
@@ -239,22 +388,31 @@ const Settings: React.FC<SettingsProps> = ({ onClose }) => {
             </div>
 
             <div className="auth-buttons">
-              {!credentialsStatus?.google_sheets.authenticated ? (
-                <button 
-                  onClick={handleGoogleAuth} 
-                  disabled={loading || !credentialsStatus?.google_sheets.url_configured}
-                  className="auth-button google-auth"
-                >
-                  {loading ? 'Authenticating...' : 'Authenticate with Google'}
-                </button>
-              ) : (
-                <button 
-                  onClick={handleRevokeGoogleAuth} 
-                  disabled={loading}
-                  className="auth-button revoke-auth"
-                >
-                  {loading ? 'Revoking...' : 'Revoke Authentication'}
-                </button>
+              {credentialsStatus?.google_sheets.oauth_configured && (
+                <>
+                  {!credentialsStatus?.google_sheets.authenticated ? (
+                    <button 
+                      onClick={handleGoogleAuth} 
+                      disabled={loading || !credentialsStatus?.google_sheets.url_configured}
+                      className="auth-button google-auth"
+                    >
+                      {loading ? 'Authenticating...' : 'Authenticate with Google'}
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={handleRevokeGoogleAuth} 
+                      disabled={loading}
+                      className="auth-button revoke-auth"
+                    >
+                      {loading ? 'Revoking...' : 'Revoke Authentication'}
+                    </button>
+                  )}
+                </>
+              )}
+              {!credentialsStatus?.google_sheets.oauth_configured && (
+                <div className="oauth-required-message">
+                  Please configure OAuth credentials above to enable Google Sheets authentication.
+                </div>
               )}
             </div>
           </div>
