@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Plot from 'react-plotly.js';
 import './Dashboard.css';
+import { API_BASE } from './api';
 
 // Types
 interface Campaign {
@@ -26,8 +27,6 @@ interface PhaseFoldedPoint {
   phase: number;
   flux: number;
 }
-
-const API_BASE = 'http://localhost:8000';
 
 const Dashboard: React.FC = () => {
   const [stars, setStars] = useState<number[]>([]);

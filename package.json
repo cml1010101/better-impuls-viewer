@@ -1,0 +1,57 @@
+{
+  "name": "better-impuls-viewer",
+  "version": "1.0.0",
+  "description": "Electron app bundling React frontend and FastAPI backend for impuls data viewer",
+  "main": "electron/main.js",
+  "scripts": {
+    "electron": "electron .",
+    "electron-dev": "ELECTRON_IS_DEV=1 electron .",
+    "build-frontend": "cd frontend && npm run build",
+    "build-backend": "python3 -m venv python-env && python-env/bin/pip install -r requirements.txt",
+    "build": "npm run build-frontend && npm run build-backend",
+    "package": "electron-builder",
+    "dist": "npm run build && npm run package",
+    "test-bundle": "./scripts/test-bundle.sh",
+    "clean": "rm -rf dist electron-dist build python-env bundled-backend node_modules frontend/node_modules"
+  },
+  "devDependencies": {
+    "electron": "^32.0.0",
+    "electron-builder": "^25.0.0"
+  },
+  "dependencies": {
+    "child_process": "^1.0.2",
+    "path": "^0.12.7"
+  },
+  "build": {
+    "appId": "com.better-impuls-viewer.app",
+    "productName": "Better Impuls Viewer",
+    "directories": {
+      "output": "electron-dist"
+    },
+    "files": [
+      "electron/**/*",
+      "frontend/dist/**/*",
+      "backend/**/*",
+      "sample_data/**/*",
+      "python-env/**/*",
+      "requirements.txt"
+    ],
+    "linux": {
+      "target": "AppImage",
+      "category": "Science"
+    },
+    "publish": null,
+    "extraFiles": [
+      {
+        "from": "python-env",
+        "to": "python-env"
+      },
+      {
+        "from": "requirements.txt",
+        "to": "requirements.txt"
+      }
+    ]
+  },
+  "author": "Better Impuls Viewer Team",
+  "license": "MIT"
+}

@@ -14,6 +14,26 @@ frontend/.env.development.local
 frontend/.env.test.local
 frontend/.env.production.local
 
+# Electron build artifacts and dependencies
+node_modules/
+dist/
+build/
+electron-dist/
+*.AppImage
+*.deb
+*.rpm
+*.dmg
+*.exe
+*.msi
+
+# Bundled Python environment
+python-env/
+bundled-backend/
+
+# Electron cache and temp files
+.electron-*
+electron-builder-cache/
+
 # IDE artifacts
 .vscode/
 .idea/
@@ -22,3 +42,8 @@ frontend/.env.production.local
 # OS artifacts
 .DS_Store
 Thumbs.db
+
+# Large files and temporary build artifacts
+*.tar.gz
+*.zip
+*.7z

@@ -19,7 +19,7 @@ app = FastAPI(title="Better Impuls Viewer API", version="1.0.0")
 # Add CORS middleware to allow frontend to communicate with backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # Vite and other common dev servers
+    allow_origins=["http://localhost:5173", "http://localhost:3000", "file://"],  # Added file:// for Electron
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -47,8 +47,30 @@ class PhaseFoldedData(BaseModel):
     flux: List[float]
 
 # Configuration
-DEFAULT_DATA_FOLDER = os.path.expanduser('~/Documents/impuls-data') if os.path.exists(os.path.expanduser('~/Documents/impuls-data')) else '../sample_data'
-DEFAULT_DATA_FOLDER = os.path.abspath(DEFAULT_DATA_FOLDER)
+def get_data_folder_path():
+    """Determine the data folder path based on the environment"""
+    # Check if we're running in a bundled Electron app
+    if os.environ.get('DATA_FOLDER'):
+        return os.environ.get('DATA_FOLDER')
+    
+    # Check common locations for data folder
+    possible_paths = [
+        os.path.expanduser('~/Documents/impuls-data'),
+        os.path.join(os.path.dirname(__file__), '..', 'sample_data'),
+        '../sample_data',
+        './sample_data',
+        'sample_data'
+    ]
+    
+    for path in possible_paths:
+        full_path = os.path.abspath(path)
+        if os.path.exists(full_path):
+            return full_path
+    
+    # Default fallback
+    return os.path.abspath('../sample_data')
+
+DEFAULT_DATA_FOLDER = get_data_folder_path()
 
 # In-memory caches for expensive operations
 _file_cache = {}  # Cache for loaded files
