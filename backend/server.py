@@ -103,7 +103,7 @@ def get_campaigns_for_star_telescope(star_number: int, telescope: str) -> List[C
         cache_entry = _processed_data_cache[cache_key]
         # Check if cache is still valid (file hasn't changed)
         folder = get_data_folder()
-        filename = f"{star_number}-{telescope}.tbl"
+        filename = f"{str(star_number).zfill(3)}-{telescope}.tbl"
         filepath = os.path.join(folder, filename)
         
         if os.path.exists(filepath):
@@ -112,7 +112,7 @@ def get_campaigns_for_star_telescope(star_number: int, telescope: str) -> List[C
                 return cache_entry['campaigns']
     
     folder = get_data_folder()
-    filename = f"{star_number}-{telescope}.tbl"
+    filename = f"{str(star_number).zfill(3)}-{telescope}.tbl"
     filepath = os.path.join(folder, filename)
     
     if not os.path.exists(filepath):
@@ -214,7 +214,7 @@ async def get_telescopes_for_star(star_number: int) -> List[str]:
     telescopes = set()
     
     for filename in all_files:
-        if filename.startswith(f"{star_number}-") and filename.endswith('.tbl'):
+        if filename.startswith(f"{str(star_number).zfill(3)}-") and filename.endswith('.tbl'):
             try:
                 parts = filename.split('-')
                 if len(parts) >= 2:
@@ -241,7 +241,7 @@ async def get_campaign_data(star_number: int, telescope: str, campaign_id: str) 
         cache_entry = _processed_data_cache[cache_key]
         # Check if cache is still valid
         folder = get_data_folder()
-        filename = f"{star_number}-{telescope}.tbl"
+        filename = f"{str(star_number).zfill(3)}-{telescope}.tbl"
         filepath = os.path.join(folder, filename)
         
         if os.path.exists(filepath):
@@ -250,7 +250,7 @@ async def get_campaign_data(star_number: int, telescope: str, campaign_id: str) 
                 return cache_entry['data']
     
     folder = get_data_folder()
-    filename = f"{star_number}-{telescope}.tbl"
+    filename = f"{str(star_number).zfill(3)}-{telescope}.tbl"
     filepath = os.path.join(folder, filename)
     
     if not os.path.exists(filepath):
@@ -320,7 +320,7 @@ async def get_periodogram(star_number: int, telescope: str, campaign_id: str) ->
         cache_entry = _periodogram_cache[cache_key]
         # Check if cache is still valid
         folder = get_data_folder()
-        filename = f"{star_number}-{telescope}.tbl"
+        filename = f"{str(star_number).zfill(3)}-{telescope}.tbl"
         filepath = os.path.join(folder, filename)
         
         if os.path.exists(filepath):
@@ -329,7 +329,7 @@ async def get_periodogram(star_number: int, telescope: str, campaign_id: str) ->
                 return cache_entry['data']
     
     folder = get_data_folder()
-    filename = f"{star_number}-{telescope}.tbl"
+    filename = f"{str(star_number).zfill(3)}-{telescope}.tbl"
     filepath = os.path.join(folder, filename)
     
     if not os.path.exists(filepath):
@@ -397,7 +397,7 @@ async def get_phase_folded_data(
         raise HTTPException(status_code=400, detail="Period must be positive and finite")
     
     folder = get_data_folder()
-    filename = f"{star_number}-{telescope}.tbl"
+    filename = f"{str(star_number).zfill(3)}-{telescope}.tbl"
     filepath = os.path.join(folder, filename)
     
     if not os.path.exists(filepath):
@@ -444,7 +444,7 @@ async def get_automatic_periods(star_number: int, telescope: str, campaign_id: s
         cache_entry = _processed_data_cache[cache_key]
         # Check if cache is still valid
         folder = get_data_folder()
-        filename = f"{star_number}-{telescope}.tbl"
+        filename = f"{str(star_number).zfill(3)}-{telescope}.tbl"
         filepath = os.path.join(folder, filename)
         
         if os.path.exists(filepath):
@@ -453,7 +453,7 @@ async def get_automatic_periods(star_number: int, telescope: str, campaign_id: s
                 return cache_entry['data']
     
     folder = get_data_folder()
-    filename = f"{star_number}-{telescope}.tbl"
+    filename = f"{str(star_number).zfill(3)}-{telescope}.tbl"
     filepath = os.path.join(folder, filename)
     
     if not os.path.exists(filepath):

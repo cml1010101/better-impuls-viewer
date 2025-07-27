@@ -327,7 +327,7 @@ def get_star_data_files(star_number: int, data_dir: str) -> List[str]:
     
     star_files = []
     for file in os.listdir(data_dir):
-        if file.startswith(f"{star_number}-") and file.endswith(".tbl"):
+        if file.startswith(f"{str(star_number).zfill(3)}-") and file.endswith(".tbl"):
             star_files.append(os.path.join(data_dir, file))
     
     return star_files

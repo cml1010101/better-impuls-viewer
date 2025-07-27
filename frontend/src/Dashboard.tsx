@@ -88,6 +88,10 @@ const Dashboard: React.FC = () => {
   const [sedImageAvailable, setSedImageAvailable] = useState<boolean>(false);
   const [sedImageLoading, setSedImageLoading] = useState<boolean>(false);
 
+  useEffect(() => {
+    document.title = selectedStar ? `${selectedStar} - ${selectedTelescope}` : 'Better IMPULS Viewer';
+  }, [selectedStar, selectedTelescope]);
+
   // Initialize from URL parameters on component mount
   useEffect(() => {
     const urlParams = getUrlParams();

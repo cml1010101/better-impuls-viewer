@@ -304,7 +304,7 @@ class GoogleSheetsLoader:
         # Find files for this star
         star_files = []
         for file in os.listdir(sample_data_dir):
-            if file.startswith(f"{star_number}-") and file.endswith(".tbl"):
+            if file.startswith(f"{str(star_number).zfill(3)}-") and file.endswith(".tbl"):
                 star_files.append(file)
         
         if not star_files:
