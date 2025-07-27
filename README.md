@@ -6,13 +6,37 @@ A modern web application for astronomical data analysis, providing interactive v
 
 ## 🚀 Features
 
-- **Multi-Star Selection**: Choose from available astronomical targets
+- **Multi-Star Selection**: Choose from available astronomical targets (5 sample stars with different variability types)
 - **Multi-Telescope Support**: Analyze data from Hubble, Kepler, and TESS
 - **Campaign Management**: Automatically identifies and displays the 3 most massive campaigns per dataset
 - **Interactive Light Curves**: Scatter plot visualization of time-series photometry
 - **Lomb-Scargle Periodogram**: Frequency analysis with logarithmic period display
 - **Phase Folding**: Manual period input with real-time phase-folded light curve generation
-- **Modern UI**: Responsive design with gradient backgrounds and intuitive controls
+- **🆕 Enhanced Automatic Period Detection**: Dual-method approach combining traditional periodogram analysis with CNN validation
+- **🆕 Advanced Variability Classification**: Intelligent classification into 14 astronomical categories:
+  - Sinusoidal (regular variables)
+  - Double dip (eclipsing systems)
+  - Shape changer (morphology evolution)
+  - Beater (beat frequency patterns)
+  - Beater/complex peak (multi-frequency)
+  - Resolved close peaks (close binary systems)
+  - Resolved distant peaks (separated double systems)
+  - Eclipsing binaries (transit systems)
+  - Pulsator (multi-harmonic pulsations)
+  - Burster (episodic outbursts)
+  - Dipper (YSO-like dipping)
+  - Co-rotating optically thin material (spotted stars)
+  - Long term trend (secular evolution)
+  - Stochastic (irregular/noise-dominated)
+- **🆕 Enhanced Google Sheets Integration**: Complete data pipeline supporting 15+ sensor types (CDIPS, ELEANOR, QLP, SPOC, TESS, TASOC, TGLC, EVEREST, K2SC, K2SFF, K2VARCAT, ZTF, WISE)
+- **🆕 5-Period Training Strategy**: Advanced ML training approach that generates:
+  - 1-2 correct periods from catalog data (high confidence)
+  - 2 incorrect periodogram peaks (medium confidence) 
+  - 2 random periods (low confidence)
+- **🆕 Robust CNN Architecture**: Multi-layer convolutional network for period validation and classification
+- **🆕 Model Persistence**: Automatic model storage and loading - no need to retrain unnecessarily
+- **🆕 CSV Export**: Export training data to CSV format for external analysis and development
+- **Modern UI**: Responsive design with color-coded classification badges and intuitive controls
 
 ## 🛠 Technology Stack
 
@@ -21,6 +45,11 @@ A modern web application for astronomical data analysis, providing interactive v
 - **pandas**: Data manipulation and analysis
 - **numpy**: Numerical computing
 - **astropy**: Astronomical calculations (Lomb-Scargle periodogram)
+- **PyTorch**: Deep learning framework for CNN period validation
+- **scipy**: Scientific computing for peak detection and signal analysis
+- **scikit-learn**: Machine learning utilities for training pipeline
+- **python-dotenv**: Environment variable management
+- **requests**: HTTP client for Google Sheets integration
 - **CORS Support**: Cross-origin requests for frontend communication
 
 ### Frontend
@@ -40,7 +69,7 @@ A modern web application for astronomical data analysis, providing interactive v
 ### Backend Setup
 ```bash
 cd backend
-pip install fastapi uvicorn pandas matplotlib astropy
+pip install fastapi uvicorn pandas numpy astropy torch scipy scikit-learn python-dotenv requests pydantic
 python server.py
 ```
 
@@ -75,6 +104,42 @@ The application implements several astronomical data processing techniques:
 - **Lomb-Scargle Periodogram**: Calculates frequency spectrum for unevenly sampled time series
 - **Phase Folding**: Wraps time series data to a specified period for periodic signal analysis
 
+### 🤖 Automatic Period Determination (NEW)
+
+The system now includes intelligent period detection using two complementary methods:
+
+#### 1. Enhanced Periodogram Analysis
+- **Robust Peak Detection**: Uses median absolute deviation for noise-resistant thresholds
+- **Period Weighting**: Prioritizes astronomically reasonable periods (0.5-50 days)
+- **Harmonic Filtering**: Avoids spurious detections from high-frequency noise
+
+#### 2. PyTorch Sinusoidal Regression
+- **Deep Learning Approach**: Fits multiple sinusoidal components using gradient descent
+- **Flexible Modeling**: Automatically determines amplitudes, periods, and phases
+- **Early Stopping**: Prevents overfitting with patience-based convergence
+
+#### 3. Intelligent Classification
+- **Regular Variables**: Single dominant period systems
+- **Binary Systems**: Multiple period detection with ratio analysis
+- **Complex Objects**: Irregular or multi-component variability
+
+**Example API Response:**
+```json
+{
+  "primary_period": 2.361,
+  "secondary_period": 10.303,
+  "classification": {
+    "type": "regular",
+    "confidence": 0.88,
+    "description": "Regular variable star with period 2.361 days"
+  },
+  "methods": {
+    "periodogram": {"success": true, "periods": [...]},
+    "torch_fitting": {"success": true, "periods": [...]}
+  }
+}
+```
+
 ## 🎯 Sample Data
 
 The repository includes simulated astronomical data with:
@@ -91,23 +156,140 @@ The repository includes simulated astronomical data with:
 - `GET /data/{star_number}/{telescope}/{campaign_id}` - Get processed light curve data
 - `GET /periodogram/{star_number}/{telescope}/{campaign_id}` - Get Lomb-Scargle periodogram
 - `GET /phase_fold/{star_number}/{telescope}/{campaign_id}?period={period}` - Get phase-folded data
+- `GET /auto_periods/{star_number}/{telescope}/{campaign_id}` - **Enhanced**: CNN-powered period detection and classification
+- `GET /model_status` - **NEW**: Check trained model status and information
+- `POST /train_model` - **NEW**: Train CNN model using Google Sheets data with model persistence
+- `POST /export_training_csv` - **NEW**: Export Google Sheets training data to CSV format
+
+## 🔬 Machine Learning Features
+
+### Automatic Period Detection
+The system uses a sophisticated dual-method approach:
+
+1. **Enhanced Lomb-Scargle Periodogram**: Improved peak detection using robust statistics and period weighting
+2. **CNN Period Validation**: Convolutional neural network analyzes phase-folded light curves for pattern recognition
+
+### Advanced Classification System
+Objects are automatically classified into detailed categories:
+
+- **🟢 Regular Variable**: Clean sinusoidal patterns with single dominant period
+- **🔴 Eclipsing Object**: Transit-like dips indicating exoplanets or eclipsing systems  
+- **🟠 Eclipsing Binary**: Multiple period systems with ratio analysis
+- **🔵 Double-Peaked**: Variables with distant peak separation
+- **🟤 Close Binary**: Close peak patterns indicating tight binary systems
+- **🟣 Complex Multi-period**: Systems with multiple significant periods
+- **⚫ Irregular**: Unclassified or chaotic variability
+- **⚪ Uncertain**: Low confidence detections requiring manual review
+
+### Google Sheets Training Pipeline
+Train the CNN model using real astronomical data:
+
+```bash
+# Set up your Google Sheets URL in .env
+GOOGLE_SHEET_URL=https://docs.google.com/spreadsheets/d/your-sheet-id/edit
+
+# Check model status before training
+curl http://localhost:8000/model_status
+
+# Train the model with all available stars (skips training if model exists)
+curl -X POST http://localhost:8000/train_model
+
+# Force retrain even if model exists
+curl -X POST http://localhost:8000/train_model \
+  -H "Content-Type: application/json" \
+  -d '{"force_retrain": true}'
+
+# Train with specific stars only
+curl -X POST http://localhost:8000/train_model \
+  -H "Content-Type: application/json" \
+  -d '{"stars_to_extract": [1, 2, 3, 4, 5]}'
+```
+
+### Model Persistence Features
+- **Automatic Model Storage**: Trained models are saved locally as `trained_cnn_model.pth`
+- **Smart Loading**: System automatically uses existing trained models instead of retraining
+- **Model Information**: Check model status, training metadata, and class information
+- **Force Retrain**: Option to retrain models when needed for updates
+
+### CSV Export for External Analysis
+Export training data to CSV format for external analysis and model development:
+
+```bash
+# Export all training data to CSV
+curl -X POST http://localhost:8000/export_training_csv
+
+# Export specific stars to custom directory
+curl -X POST http://localhost:8000/export_training_csv \
+  -H "Content-Type: application/json" \
+  -d '{"stars_to_extract": [1, 2, 3], "output_dir": "custom_dataset"}'
+```
+
+**CSV Output Features:**
+- **Phase-Folded Data**: Each row contains phase and flux values for machine learning
+- **Rich Metadata**: Includes star number, period, category, sensor, period type, and confidence
+- **Complete Training Set**: Exports all 5 periods per light curve with realistic confidence scores
+- **Analysis Ready**: CSV format suitable for pandas, R, or other analysis tools
+
+### 🎯 Enhanced 5-Period Training Strategy
+
+The system implements an advanced training methodology that generates **5 periods per light curve** to create a robust and balanced dataset:
+
+#### Period Types Generated:
+1. **Correct Periods (1-2 samples)**: 
+   - Source: Google Sheets catalog data (columns AK, AL for legacy; F-AI for multi-sensor)
+   - Confidence: 0.85-0.95 (high)
+   - Purpose: Teaches the CNN what genuine periods look like
+
+2. **Incorrect Periodogram Peaks (2 samples)**:
+   - Source: Lomb-Scargle periodogram peaks that are NOT close to correct periods  
+   - Confidence: 0.3-0.6 (medium)
+   - Purpose: Teaches the CNN to distinguish real periods from spurious peaks
+
+3. **Random Periods (1-2 samples)**:
+   - Source: Randomly generated within astronomical ranges (0.1-50 days)
+   - Confidence: 0.05-0.25 (low)
+   - Purpose: Provides negative examples for robust validation
+
+#### Benefits:
+- **Balanced Dataset**: Equal representation of good, questionable, and bad periods
+- **Realistic Training**: CNN learns from the same types of false positives it will encounter in real analysis
+- **Confidence Calibration**: Network learns to assign appropriate confidence scores
+- **Robust Validation**: Significantly reduces false positive period detections
+
+#### Multi-Sensor Support:
+The system supports 15+ astronomical survey sensors:
+- **TESS**: CDIPS, ELEANOR, QLP, SPOC, TESS-16, TASOC, TGLC
+- **Kepler/K2**: EVEREST, K2SC, K2SFF, K2VARCAT  
+- **Ground-based**: ZTF (R/G bands), WISE (W1/W2)
+
+Each sensor contributes independent training samples, maximizing dataset diversity and model generalization.
+
+See [TRAINING_GUIDE.md](TRAINING_GUIDE.md) for complete documentation.
 
 ## 🎨 Architecture
 
 ```
 better-impuls-viewer/
 ├── backend/
-│   ├── server.py          # FastAPI application
-│   ├── process.py         # Data processing functions
-│   ├── display.py         # Original matplotlib visualization
-│   └── app.py            # Original command-line interface
+│   ├── server.py            # FastAPI application
+│   ├── config.py           # Configuration and environment variables
+│   ├── models.py           # Pydantic data models
+│   ├── data_processing.py  # Data preprocessing utilities
+│   ├── period_detection.py # CNN period validation and periodogram analysis
+│   ├── google_sheets.py    # Google Sheets integration
+│   ├── model_training.py   # CNN training pipeline
+│   ├── process.py          # Legacy data processing functions
+│   ├── display.py          # Original matplotlib visualization
+│   └── app.py             # Original command-line interface
 ├── frontend/
 │   ├── src/
-│   │   ├── Dashboard.tsx  # Main dashboard component
-│   │   ├── App.tsx       # Root application component
-│   │   └── *.css         # Styling files
-│   └── package.json      # Dependencies and scripts
-├── sample_data/          # Generated astronomical datasets
+│   │   ├── Dashboard.tsx   # Main dashboard component
+│   │   ├── App.tsx        # Root application component
+│   │   └── *.css          # Styling files with classification colors
+│   └── package.json       # Dependencies and scripts
+├── sample_data/           # Enhanced sample datasets (5 star types)
+├── ml-dataset/           # Machine learning dataset generation
+├── TRAINING_GUIDE.md     # Comprehensive training documentation
 └── README.md            # This file
 ```
 

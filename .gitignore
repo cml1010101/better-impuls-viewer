@@ -43,6 +43,8 @@ electron-builder-cache/
 .DS_Store
 Thumbs.db
 
+.env
+
 # Large files and temporary build artifacts
 *.tar.gz
 *.zip
