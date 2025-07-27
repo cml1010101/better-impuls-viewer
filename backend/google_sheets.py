@@ -9,6 +9,8 @@ from typing import List, Dict, Optional, Tuple
 import requests
 from urllib.parse import urlparse
 import re
+import csv
+import os
 from config import Config, CLASS_NAMES
 from models import TrainingDataPoint
 
@@ -530,6 +532,142 @@ class GoogleSheetsLoader:
             categories[category] = categories.get(category, 0) + 1
         
         return categories
+    
+    def export_training_data_to_csv(self, output_dir: str = "ml-dataset", 
+                                   stars_to_extract: List[int] = None) -> str:
+        """
+        Export training data to CSV format for external analysis and training.
+        
+        Creates CSV files containing phase-folded light curves with corresponding
+        category and confidence information suitable for machine learning training.
+        
+        Args:
+            output_dir: Directory to save CSV files
+            stars_to_extract: Optional list of specific stars to extract
+            
+        Returns:
+            Path to the exported CSV file
+        """
+        # Create output directory if it doesn't exist
+        os.makedirs(output_dir, exist_ok=True)
+        
+        # Extract training data using existing method
+        print("Extracting training data from Google Sheets...")
+        training_data = self.extract_training_data(stars_to_extract)
+        
+        if len(training_data) == 0:
+            raise ValueError("No training data to export")
+        
+        # Generate phase-folded data for each training example
+        csv_rows = []
+        processed_count = 0
+        
+        print(f"Processing {len(training_data)} training examples for CSV export...")
+        
+        for data_point in training_data:
+            try:
+                # Create data array for phase folding
+                time_series = np.array(data_point.time_series)
+                flux_series = np.array(data_point.flux_series)
+                data_array = np.column_stack([time_series, flux_series])
+                
+                # Skip if period is invalid
+                if data_point.period_1 is None or data_point.period_1 <= 0:
+                    continue
+                
+                # Phase-fold the data
+                from period_detection import phase_fold_data
+                folded_curve = phase_fold_data(data_array, data_point.period_1, n_bins=100)
+                
+                # Skip if folding failed
+                if np.all(folded_curve == 0) or np.all(np.isnan(folded_curve)):
+                    continue
+                
+                # Create phase array (0 to 1)
+                phases = np.linspace(0, 1, len(folded_curve))
+                
+                # Create row data with metadata
+                base_row = {
+                    'star_number': data_point.star_number,
+                    'period': data_point.period_1,
+                    'lc_category': data_point.lc_category,
+                    'sensor': data_point.sensor or 'unknown',
+                    'period_type': data_point.period_type or 'unknown',
+                    'period_confidence': data_point.period_confidence or 0.5
+                }
+                
+                # Add phase-folded data points
+                for phase, flux in zip(phases, folded_curve):
+                    row = base_row.copy()
+                    row.update({
+                        'phase': phase,
+                        'flux': flux
+                    })
+                    csv_rows.append(row)
+                
+                processed_count += 1
+                if processed_count % 50 == 0:
+                    print(f"Processed {processed_count}/{len(training_data)} training examples...")
+                    
+            except Exception as e:
+                print(f"Error processing training example for star {data_point.star_number}: {e}")
+                continue
+        
+        if len(csv_rows) == 0:
+            raise ValueError("No valid phase-folded data generated for CSV export")
+        
+        # Write to CSV file
+        csv_filename = f"training_data_{len(training_data)}_examples.csv"
+        csv_path = os.path.join(output_dir, csv_filename)
+        
+        fieldnames = ['star_number', 'period', 'lc_category', 'sensor', 'period_type', 
+                     'period_confidence', 'phase', 'flux']
+        
+        print(f"Writing {len(csv_rows)} rows to {csv_path}...")
+        
+        with open(csv_path, 'w', newline='', encoding='utf-8') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(csv_rows)
+        
+        print(f"Successfully exported training data to: {csv_path}")
+        print(f"Total rows: {len(csv_rows)}")
+        print(f"Unique training examples: {processed_count}")
+        
+        # Create summary file
+        summary_path = os.path.join(output_dir, f"export_summary_{len(training_data)}_examples.txt")
+        with open(summary_path, 'w') as f:
+            f.write(f"Training Data Export Summary\n")
+            f.write(f"============================\n\n")
+            f.write(f"Export date: {pd.Timestamp.now()}\n")
+            f.write(f"Total training examples: {len(training_data)}\n")
+            f.write(f"Successfully processed: {processed_count}\n")
+            f.write(f"Total CSV rows: {len(csv_rows)}\n")
+            f.write(f"CSV file: {csv_filename}\n\n")
+            
+            # Category distribution
+            categories = {}
+            for point in training_data:
+                cat = point.lc_category
+                categories[cat] = categories.get(cat, 0) + 1
+            
+            f.write("Category Distribution:\n")
+            for cat, count in sorted(categories.items()):
+                f.write(f"  {cat}: {count}\n")
+            
+            # Period type distribution
+            period_types = {}
+            for point in training_data:
+                ptype = point.period_type or 'unknown'
+                period_types[ptype] = period_types.get(ptype, 0) + 1
+            
+            f.write("\nPeriod Type Distribution:\n")
+            for ptype, count in sorted(period_types.items()):
+                f.write(f"  {ptype}: {count}\n")
+        
+        print(f"Export summary saved to: {summary_path}")
+        
+        return csv_path
 
 
 # Example usage and testing
@@ -613,6 +751,14 @@ if __name__ == "__main__":
                 print(f"  LC Category: {sample_point.lc_category}")
                 print(f"  Time Series Length: {len(sample_point.time_series)}")
                 print(f"  Flux Series Length: {len(sample_point.flux_series)}")
+                
+            # Test CSV export with a small subset
+            print("\nTesting CSV export...")
+            csv_path = loader.export_training_data_to_csv(
+                output_dir="test_ml_dataset", 
+                stars_to_extract=list(range(5))  # Export first 5 stars as test
+            )
+            print(f"CSV export test completed: {csv_path}")
                 
         except Exception as e:
             print(f"Error testing Google Sheets loader: {e}")

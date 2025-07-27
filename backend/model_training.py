@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Any
 import os
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
@@ -408,6 +408,53 @@ def load_trained_model(model_path: str = None) -> Tuple[PeriodValidationCNN, Lis
     print(f"Model classes: {class_names}")
     
     return model, class_names
+
+
+def model_exists(model_path: str = None) -> bool:
+    """
+    Check if a trained model exists at the specified path.
+    
+    Args:
+        model_path: Path to model file. If None, uses Config.MODEL_SAVE_PATH
+        
+    Returns:
+        True if model file exists, False otherwise
+    """
+    model_path = model_path or Config.MODEL_SAVE_PATH
+    return os.path.exists(model_path)
+
+
+def get_model_info(model_path: str = None) -> Dict[str, Any]:
+    """
+    Get information about a saved model without loading it.
+    
+    Args:
+        model_path: Path to model file. If None, uses Config.MODEL_SAVE_PATH
+        
+    Returns:
+        Dictionary with model information or None if model doesn't exist
+    """
+    model_path = model_path or Config.MODEL_SAVE_PATH
+    
+    if not os.path.exists(model_path):
+        return None
+    
+    try:
+        checkpoint = torch.load(model_path, map_location='cpu')
+        
+        info = {
+            'model_path': model_path,
+            'file_size_mb': os.path.getsize(model_path) / (1024 * 1024),
+            'model_config': checkpoint.get('model_config', {}),
+            'class_names': checkpoint.get('class_names', []),
+            'training_metadata': checkpoint.get('training_metadata', {})
+        }
+        
+        return info
+        
+    except Exception as e:
+        print(f"Error reading model info: {e}")
+        return None
 
 
 # Example usage and training script

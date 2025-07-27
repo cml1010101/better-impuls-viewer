@@ -505,14 +505,47 @@ async def get_automatic_periods(star_number: int, telescope: str, campaign_id: s
 from fastapi.responses import Response
 import requests
 
+@app.get("/model_status")
+async def get_model_status() -> Dict[str, Any]:
+    """
+    Get information about the current trained model status.
+    
+    Returns model information if a trained model exists, or status if no model is available.
+    """
+    try:
+        from model_training import get_model_info, model_exists
+        
+        if model_exists():
+            model_info = get_model_info()
+            if model_info:
+                return {
+                    "model_available": True,
+                    "model_info": model_info
+                }
+        
+        return {
+            "model_available": False,
+            "message": "No trained model found. Use /train_model to train a new model.",
+            "model_path": Config.MODEL_SAVE_PATH
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error checking model status: {str(e)}")
+
+
 @app.post("/train_model")
-async def train_model_from_sheets(stars_to_extract: Optional[List[int]] = None) -> ModelTrainingResult:
+async def train_model_from_sheets(
+    stars_to_extract: Optional[List[int]] = None,
+    force_retrain: bool = False
+) -> ModelTrainingResult:
     """
     Train the CNN model using data from Google Sheets with enhanced 5-period strategy.
     
     Parameters:
     - stars_to_extract: Optional list of star numbers to include in training. 
                        If None, all available stars will be used.
+    - force_retrain: If True, trains a new model even if one already exists.
+                    If False, returns existing model info if available.
     
     The enhanced system generates 5 training samples per light curve:
     - 1-2 correct periods (high confidence)
@@ -523,6 +556,20 @@ async def train_model_from_sheets(stars_to_extract: Optional[List[int]] = None) 
         if not Config.GOOGLE_SHEET_URL:
             raise HTTPException(status_code=400, detail="GOOGLE_SHEET_URL not configured in environment variables")
         
+        from model_training import model_exists, get_model_info
+        
+        # Check if model already exists and force_retrain is False
+        if not force_retrain and model_exists():
+            model_info = get_model_info()
+            if model_info:
+                return ModelTrainingResult(
+                    success=True,
+                    epochs_trained=model_info['training_metadata'].get('epochs_trained', 0),
+                    final_loss=model_info['training_metadata'].get('final_loss', 0.0),
+                    model_path=model_info['model_path'],
+                    training_samples=model_info['training_metadata'].get('training_samples', 0)
+                )
+        
         trainer = ModelTrainer()
         result = trainer.train_from_google_sheets(stars_to_extract)
         
@@ -532,6 +579,63 @@ async def train_model_from_sheets(stars_to_extract: Optional[List[int]] = None) 
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error training model: {str(e)}")
+
+
+@app.post("/export_training_csv")
+async def export_training_data_to_csv(
+    stars_to_extract: Optional[List[int]] = None,
+    output_dir: str = "ml-dataset"
+) -> Dict[str, Any]:
+    """
+    Export training data from Google Sheets to CSV format for external analysis.
+    
+    Creates CSV files containing phase-folded light curves with corresponding
+    category and confidence information suitable for machine learning training.
+    
+    Parameters:
+    - stars_to_extract: Optional list of star numbers to include in export. 
+                       If None, all available stars will be used.
+    - output_dir: Directory to save the CSV files (default: "ml-dataset")
+    
+    Returns:
+    - Dictionary with export summary information
+    """
+    try:
+        if not Config.GOOGLE_SHEET_URL:
+            raise HTTPException(status_code=400, detail="GOOGLE_SHEET_URL not configured in environment variables")
+        
+        from google_sheets import GoogleSheetsLoader
+        
+        loader = GoogleSheetsLoader()
+        csv_path = loader.export_training_data_to_csv(
+            output_dir=output_dir,
+            stars_to_extract=stars_to_extract
+        )
+        
+        # Get file info
+        import os
+        if os.path.exists(csv_path):
+            file_size = os.path.getsize(csv_path)
+            
+            # Count rows in CSV
+            with open(csv_path, 'r') as f:
+                row_count = sum(1 for _ in f) - 1  # Subtract header
+        else:
+            file_size = 0
+            row_count = 0
+        
+        return {
+            "success": True,
+            "csv_path": csv_path,
+            "file_size_bytes": file_size,
+            "total_rows": row_count,
+            "output_directory": output_dir,
+            "stars_requested": stars_to_extract,
+            "message": f"Successfully exported training data to {csv_path}"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error exporting training data: {str(e)}")
 
 
 @app.get("/sed/{star_number}")

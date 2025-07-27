@@ -555,16 +555,47 @@ def train_validation_model(
     return model
 
 
-# Initialize and train the global model
-period_model = PeriodValidationCNN(input_size=100, num_classes=len(CLASS_NAMES))
-try:
-    period_model = train_validation_model(
-        period_model, n_epochs=50
-    )  # Quick training for demo
-except Exception as e:
-    print(f"Warning: CNN training failed: {e}")
-    # Fallback to simple validation
-    period_model = None
+# Global model variable
+period_model = None
+
+def get_or_load_model() -> Optional[PeriodValidationCNN]:
+    """
+    Get the trained CNN model, loading from disk if available or training if needed.
+    
+    Returns:
+        PeriodValidationCNN or None if model unavailable
+    """
+    global period_model
+    
+    if period_model is not None:
+        return period_model
+    
+    # Try to load saved model first
+    try:
+        import os
+        from model_training import load_trained_model
+        
+        if os.path.exists(Config.MODEL_SAVE_PATH):
+            print(f"Loading saved CNN model from {Config.MODEL_SAVE_PATH}")
+            period_model, class_names = load_trained_model(Config.MODEL_SAVE_PATH)
+            print("Successfully loaded trained CNN model")
+            return period_model
+        else:
+            print(f"No saved model found at {Config.MODEL_SAVE_PATH}")
+    except Exception as e:
+        print(f"Could not load saved model: {e}")
+    
+    # If no saved model, try to train a quick synthetic model as fallback
+    try:
+        print("Training basic CNN model with synthetic data as fallback...")
+        period_model = PeriodValidationCNN(input_size=100, num_classes=len(CLASS_NAMES))
+        period_model = train_validation_model(period_model, n_epochs=50)
+        print("Trained basic CNN model successfully")
+        return period_model
+    except Exception as e:
+        print(f"Warning: CNN training failed: {e}")
+        period_model = None
+        return None
 
 
 
@@ -587,7 +618,12 @@ def validate_periods_with_cnn(
     List[Tuple[float, float, str]]
         List of (period, confidence, classification) tuples sorted by confidence.
     """
-    if len(candidate_periods) == 0 or data.shape[0] < 20 or period_model is None:
+    if len(candidate_periods) == 0 or data.shape[0] < 20:
+        return []
+    
+    # Get or load the model
+    model = get_or_load_model()
+    if model is None:
         return []
 
     results = []
@@ -607,7 +643,7 @@ def validate_periods_with_cnn(
                 )
 
                 # Get CNN predictions
-                confidence, class_logits = period_model(input_tensor)
+                confidence, class_logits = model(input_tensor)
 
                 # Get classification
                 class_probs = torch.softmax(class_logits, dim=0)

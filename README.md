@@ -34,6 +34,8 @@ A modern web application for astronomical data analysis, providing interactive v
   - 2 incorrect periodogram peaks (medium confidence) 
   - 2 random periods (low confidence)
 - **🆕 Robust CNN Architecture**: Multi-layer convolutional network for period validation and classification
+- **🆕 Model Persistence**: Automatic model storage and loading - no need to retrain unnecessarily
+- **🆕 CSV Export**: Export training data to CSV format for external analysis and development
 - **Modern UI**: Responsive design with color-coded classification badges and intuitive controls
 
 ## 🛠 Technology Stack
@@ -155,7 +157,9 @@ The repository includes simulated astronomical data with:
 - `GET /periodogram/{star_number}/{telescope}/{campaign_id}` - Get Lomb-Scargle periodogram
 - `GET /phase_fold/{star_number}/{telescope}/{campaign_id}?period={period}` - Get phase-folded data
 - `GET /auto_periods/{star_number}/{telescope}/{campaign_id}` - **Enhanced**: CNN-powered period detection and classification
-- `POST /train_model` - **NEW**: Train CNN model using Google Sheets data
+- `GET /model_status` - **NEW**: Check trained model status and information
+- `POST /train_model` - **NEW**: Train CNN model using Google Sheets data with model persistence
+- `POST /export_training_csv` - **NEW**: Export Google Sheets training data to CSV format
 
 ## 🔬 Machine Learning Features
 
@@ -184,14 +188,47 @@ Train the CNN model using real astronomical data:
 # Set up your Google Sheets URL in .env
 GOOGLE_SHEET_URL=https://docs.google.com/spreadsheets/d/your-sheet-id/edit
 
-# Train the model with all available stars
+# Check model status before training
+curl http://localhost:8000/model_status
+
+# Train the model with all available stars (skips training if model exists)
 curl -X POST http://localhost:8000/train_model
+
+# Force retrain even if model exists
+curl -X POST http://localhost:8000/train_model \
+  -H "Content-Type: application/json" \
+  -d '{"force_retrain": true}'
 
 # Train with specific stars only
 curl -X POST http://localhost:8000/train_model \
   -H "Content-Type: application/json" \
   -d '{"stars_to_extract": [1, 2, 3, 4, 5]}'
 ```
+
+### Model Persistence Features
+- **Automatic Model Storage**: Trained models are saved locally as `trained_cnn_model.pth`
+- **Smart Loading**: System automatically uses existing trained models instead of retraining
+- **Model Information**: Check model status, training metadata, and class information
+- **Force Retrain**: Option to retrain models when needed for updates
+
+### CSV Export for External Analysis
+Export training data to CSV format for external analysis and model development:
+
+```bash
+# Export all training data to CSV
+curl -X POST http://localhost:8000/export_training_csv
+
+# Export specific stars to custom directory
+curl -X POST http://localhost:8000/export_training_csv \
+  -H "Content-Type: application/json" \
+  -d '{"stars_to_extract": [1, 2, 3], "output_dir": "custom_dataset"}'
+```
+
+**CSV Output Features:**
+- **Phase-Folded Data**: Each row contains phase and flux values for machine learning
+- **Rich Metadata**: Includes star number, period, category, sensor, period type, and confidence
+- **Complete Training Set**: Exports all 5 periods per light curve with realistic confidence scores
+- **Analysis Ready**: CSV format suitable for pandas, R, or other analysis tools
 
 ### 🎯 Enhanced 5-Period Training Strategy
 
