@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, dialog } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const { execSync } = require('child_process');
@@ -19,7 +19,8 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       enableRemoteModule: false,
-      webSecurity: true
+      webSecurity: true,
+      preload: path.join(__dirname, 'preload.js')
     },
     icon: path.join(__dirname, 'assets', 'icon.png') // Optional: add an icon
   });
@@ -189,6 +190,21 @@ function waitForBackend(callback, retries = 30) {
 
   req.end();
 }
+
+// IPC handlers for Electron-specific functionality
+ipcMain.handle('select-data-folder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory'],
+    title: 'Select Data Folder',
+    message: 'Choose the folder containing your star data files (.tbl format)'
+  });
+  
+  if (!result.canceled && result.filePaths.length > 0) {
+    return result.filePaths[0];
+  }
+  
+  return null;
+});
 
 // App event handlers
 app.whenReady().then(() => {

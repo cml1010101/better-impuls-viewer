@@ -42,8 +42,11 @@ class Config:
             return configured_path
         
         # Check if we're running in a bundled Electron app
-        if os.environ.get('DATA_FOLDER'):
-            return os.environ.get('DATA_FOLDER')
+        data_folder_env = os.environ.get('DATA_FOLDER')
+        if data_folder_env:
+            full_path = os.path.abspath(data_folder_env)
+            if os.path.exists(full_path):
+                return full_path
         
         # Check common locations for data folder
         possible_paths = [
@@ -59,8 +62,14 @@ class Config:
             if os.path.exists(full_path):
                 return full_path
         
-        # Default fallback
-        return os.path.abspath('sample_data')
+        # Create sample_data directory as fallback if it doesn't exist
+        fallback_path = os.path.abspath('sample_data')
+        try:
+            os.makedirs(fallback_path, exist_ok=True)
+        except Exception as e:
+            print(f"Warning: Could not create fallback data directory {fallback_path}: {e}")
+        
+        return fallback_path
     
     @classmethod
     def _get_configured_data_folder(cls):
@@ -93,15 +102,31 @@ class Config:
             return False
 
 # Initialize DATA_DIR as a module-level variable but allow dynamic updates
-DATA_DIR = Config.get_data_dir()
+try:
+    DATA_DIR = Config.get_data_dir()
+    if not DATA_DIR:
+        DATA_DIR = os.path.abspath('sample_data')
+        os.makedirs(DATA_DIR, exist_ok=True)
+except Exception as e:
+    print(f"Warning: Error initializing DATA_DIR: {e}")
+    DATA_DIR = os.path.abspath('sample_data')
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+    except Exception as create_error:
+        print(f"Error creating fallback DATA_DIR: {create_error}")
 
 def get_data_folder():
     """Get the current data folder path, checking for updates from credentials manager."""
     global DATA_DIR
-    # Re-evaluate the data directory in case configuration changed
-    current_dir = Config.get_data_dir()
-    DATA_DIR = current_dir
-    return DATA_DIR
+    try:
+        # Re-evaluate the data directory in case configuration changed
+        current_dir = Config.get_data_dir()
+        if current_dir:
+            DATA_DIR = current_dir
+        return DATA_DIR
+    except Exception as e:
+        print(f"Warning: Error getting data folder: {e}")
+        return DATA_DIR
 
 CLASS_NAMES = [
     "sinusoidal",

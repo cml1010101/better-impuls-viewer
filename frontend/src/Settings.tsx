@@ -151,35 +151,48 @@ const Settings: React.FC<SettingsProps> = ({ onClose }) => {
     }
   };
 
-  const handleBrowseDataFolder = () => {
-    // Create a hidden file input element for directory selection
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.webkitdirectory = true; // This enables directory selection
-    input.style.display = 'none';
-    
-    input.onchange = (event: any) => {
-      const files = event.target.files;
-      if (files && files.length > 0) {
-        // Get the directory path from the first file
-        const firstFile = files[0];
-        const fullPath = firstFile.webkitRelativePath;
-        const folderPath = fullPath.substring(0, fullPath.lastIndexOf('/'));
-        
-        // In Electron, we can access the full directory path
-        if (firstFile.path) {
-          const dirPath = firstFile.path.substring(0, firstFile.path.lastIndexOf('/'));
-          setDataFolderPath(dirPath);
-        } else {
-          // Fallback for web browsers
-          setDataFolderPath(folderPath);
+  const handleBrowseDataFolder = async () => {
+    // Check if we're running in Electron
+    if (window.electronAPI && window.electronAPI.isElectron) {
+      try {
+        const selectedPath = await window.electronAPI.selectDataFolder();
+        if (selectedPath) {
+          setDataFolderPath(selectedPath);
         }
+      } catch (error) {
+        console.error('Error selecting folder in Electron:', error);
+        showMessage('Error selecting folder. Please try typing the path manually.', 'error');
       }
-    };
-    
-    document.body.appendChild(input);
-    input.click();
-    document.body.removeChild(input);
+    } else {
+      // Fallback for web browsers - use webkitdirectory
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.webkitdirectory = true;
+      input.style.display = 'none';
+      
+      input.onchange = (event: any) => {
+        const files = event.target.files;
+        if (files && files.length > 0) {
+          // Get the directory path from the first file
+          const firstFile = files[0];
+          const fullPath = firstFile.webkitRelativePath;
+          const folderPath = fullPath.substring(0, fullPath.lastIndexOf('/'));
+          
+          // Try to get full path if available
+          if (firstFile.path) {
+            const dirPath = firstFile.path.substring(0, firstFile.path.lastIndexOf('/'));
+            setDataFolderPath(dirPath);
+          } else {
+            setDataFolderPath(folderPath);
+            showMessage('Note: In web browsers, you may need to manually enter the full path.', 'error');
+          }
+        }
+      };
+      
+      document.body.appendChild(input);
+      input.click();
+      document.body.removeChild(input);
+    }
   };
 
   return (
