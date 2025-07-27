@@ -1,0 +1,18 @@
+/* Dashboard component styles */
+.dashboard {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+.loading {
+  text-align: center;
+  padding: 2rem;
+  font-size: 1.1rem;
+  color: #667eea;
+  font-weight: 600;
+}
+
+.hiddenImage {
+  display: none;
+}

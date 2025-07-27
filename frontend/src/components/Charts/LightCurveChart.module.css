@@ -1,0 +1,18 @@
+/* Light Curve Chart styles */
+.chartSection {
+  background: white;
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.chartSection h3 {
+  margin: 0 0 0.5rem 0;
+  color: #333;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.lightCurveSection {
+  grid-column: 1 / -1;
+}
