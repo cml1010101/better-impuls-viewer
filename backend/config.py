@@ -18,7 +18,7 @@ class Config:
     GOOGLE_SERVICE_ACCOUNT_KEY_PATH = os.getenv("GOOGLE_SERVICE_ACCOUNT_KEY_PATH", "google_sheets_service_account.json")
     
     # API configuration
-    CORS_ORIGINS = ["http://localhost:5173", "http://localhost:3000"]
+    CORS_ORIGINS = ["http://localhost:5173", "http://localhost:3000", "file://"]
     
     # Data processing configuration
     DEFAULT_THRESHOLD = 1.0
@@ -32,7 +32,31 @@ class Config:
     MODEL_SAVE_PATH = "trained_cnn_model.pth"
     DEVICE = "cpu"  # Can be changed to "cuda" if GPU is available
 
-    DATA_DIR = os.path.expanduser('~/Documents/impuls-data') if os.path.exists(os.path.expanduser('~/Documents/impuls-data')) else 'sample_data'
+    @classmethod
+    def get_data_dir(cls):
+        """Get the data directory path, supporting Electron environment."""
+        # Check if we're running in a bundled Electron app
+        if os.environ.get('DATA_FOLDER'):
+            return os.environ.get('DATA_FOLDER')
+        
+        # Check common locations for data folder
+        possible_paths = [
+            os.path.expanduser('~/Documents/impuls-data'),
+            os.path.join(os.path.dirname(__file__), '..', 'sample_data'),
+            '../sample_data',
+            './sample_data',
+            'sample_data'
+        ]
+        
+        for path in possible_paths:
+            full_path = os.path.abspath(path)
+            if os.path.exists(full_path):
+                return full_path
+        
+        # Default fallback
+        return os.path.abspath('sample_data')
+
+    DATA_DIR = get_data_dir.__func__()
     
     @classmethod
     def validate(cls):
