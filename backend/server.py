@@ -64,9 +64,7 @@ def get_file_hash(filepath: str) -> str:
     except:
         return hashlib.md5(filepath.encode()).hexdigest()
 
-def get_data_folder():
-    """Get the data folder path"""
-    return DATA_DIR
+
 
 def load_data_file(filepath: str) -> np.ndarray:
     """Load data from a .tbl file with caching"""
