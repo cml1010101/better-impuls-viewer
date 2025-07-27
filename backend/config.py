@@ -17,6 +17,9 @@ class Config:
     GOOGLE_SHEET_URL = os.getenv("GOOGLE_SHEET_URL")
     GOOGLE_SERVICE_ACCOUNT_KEY_PATH = os.getenv("GOOGLE_SERVICE_ACCOUNT_KEY_PATH", "google_sheets_service_account.json")
     
+    # CSV data configuration
+    CSV_TRAINING_DATA_PATH = os.getenv("CSV_TRAINING_DATA_PATH", "training_data.csv")
+    
     # API configuration
     CORS_ORIGINS = ["http://localhost:5173", "http://localhost:3000"]
     

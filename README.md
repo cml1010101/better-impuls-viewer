@@ -29,6 +29,7 @@ A modern web application for astronomical data analysis, providing interactive v
   - Long term trend (secular evolution)
   - Stochastic (irregular/noise-dominated)
 - **🆕 Enhanced Google Sheets Integration**: Complete data pipeline supporting 15+ sensor types (CDIPS, ELEANOR, QLP, SPOC, TESS, TASOC, TGLC, EVEREST, K2SC, K2SFF, K2VARCAT, ZTF, WISE)
+- **🆕 CSV Training Data Input**: Simple CSV-based training data input as an alternative to Google Sheets
 - **🆕 5-Period Training Strategy**: Advanced ML training approach that generates:
   - 1-2 correct periods from catalog data (high confidence)
   - 2 incorrect periodogram peaks (medium confidence) 
@@ -180,6 +181,36 @@ Objects are automatically classified into detailed categories:
 - **🟣 Complex Multi-period**: Systems with multiple significant periods
 - **⚫ Irregular**: Unclassified or chaotic variability
 - **⚪ Uncertain**: Low confidence detections requiring manual review
+
+### CSV Training Data Input
+Train models using CSV files instead of Google Sheets:
+
+```bash
+# Create CSV training data file
+echo "star_number,period_1,period_2,lc_category,sensor" > training_data.csv
+echo "1,2.5,-9,dipper,csv" >> training_data.csv
+echo "2,7.8,-9,resolved distant peaks,csv" >> training_data.csv
+
+# Set CSV path in .env
+CSV_TRAINING_DATA_PATH=training_data.csv
+
+# Train model with CSV data
+curl -X POST http://localhost:8000/train_model \
+  -H "Content-Type: application/json" \
+  -d '{"data_source": "csv"}'
+
+# Test CSV loading from command line
+python backend/google_sheets.py --csv-input training_data.csv --stars "1:3"
+```
+
+**CSV Format Requirements:**
+- `star_number`: Integer star identifier
+- `period_1`: Primary period in days (-9 for no period)
+- `lc_category`: Light curve category (see classification types above)
+- `period_2`: Secondary period (optional)
+- `sensor`: Sensor name (optional, defaults to 'csv')
+
+See [CSV_TRAINING_GUIDE.md](CSV_TRAINING_GUIDE.md) for detailed documentation.
 
 ### Google Sheets Training Pipeline
 Train the CNN model using real astronomical data:

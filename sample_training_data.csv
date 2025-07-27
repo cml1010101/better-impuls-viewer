@@ -1,0 +1,6 @@
+star_number,period_1,period_2,lc_category,sensor
+1,2.5,-9,dipper,csv
+2,7.8,-9,resolved distant peaks,csv
+3,15.3,-9,sinusoidal,csv
+4,5.2,-9,resolved close peaks,csv
+5,12.7,-9,stochastic,csv

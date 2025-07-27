@@ -16,12 +16,12 @@ import pickle
 
 from config import Config, CLASS_NAMES
 from models import TrainingDataPoint, ModelTrainingResult
-from google_sheets import GoogleSheetsLoader, parse_star_range
+from google_sheets import GoogleSheetsLoader, CSVDataLoader, parse_star_range
 from period_detection import PeriodValidationCNN, phase_fold_data
 
 
 class ModelTrainer:
-    """Handles training of the CNN model using Google Sheets data."""
+    """Handles training of the CNN model using Google Sheets or CSV data."""
     
     def __init__(self, model_save_path: str = None):
         """Initialize the model trainer."""
@@ -35,7 +35,44 @@ class ModelTrainer:
         self.learning_rate = 0.001
         self.validation_split = 0.2
         
-    def load_training_data(self, stars_to_extract: Union[str, List[int], None] = None) -> List[TrainingDataPoint]:
+    def load_training_data(self, stars_to_extract: Union[str, List[int], None] = None, 
+                          data_source: str = "auto", csv_file_path: str = None) -> List[TrainingDataPoint]:
+        """
+        Load training data from Google Sheets or CSV file.
+        
+        Args:
+            stars_to_extract: Star range specification
+            data_source: "auto", "google_sheets", or "csv"
+            csv_file_path: Path to CSV file (overrides Config.CSV_TRAINING_DATA_PATH)
+            
+        Returns:
+            List of TrainingDataPoint objects
+        """
+        if data_source == "csv" or (data_source == "auto" and not Config.GOOGLE_SHEET_URL):
+            return self._load_training_data_from_csv(stars_to_extract, csv_file_path)
+        elif data_source == "google_sheets" or (data_source == "auto" and Config.GOOGLE_SHEET_URL):
+            return self._load_training_data_from_google_sheets(stars_to_extract)
+        else:
+            raise ValueError("No valid data source configured. Set GOOGLE_SHEET_URL or CSV_TRAINING_DATA_PATH")
+    
+    def _load_training_data_from_csv(self, stars_to_extract: Union[str, List[int], None] = None,
+                                   csv_file_path: str = None) -> List[TrainingDataPoint]:
+        """Load training data from CSV file."""
+        csv_path = csv_file_path or Config.CSV_TRAINING_DATA_PATH
+        
+        if not os.path.exists(csv_path):
+            raise FileNotFoundError(f"CSV training data file not found: {csv_path}")
+        
+        loader = CSVDataLoader(csv_path)
+        training_data = loader.extract_training_data(stars_to_extract)
+        
+        if len(training_data) == 0:
+            raise ValueError("No training data loaded from CSV")
+        
+        print(f"Loaded {len(training_data)} training examples from CSV")
+        return training_data
+    
+    def _load_training_data_from_google_sheets(self, stars_to_extract: Union[str, List[int], None] = None) -> List[TrainingDataPoint]:
         """Load training data from Google Sheets."""
         if not Config.GOOGLE_SHEET_URL:
             raise ValueError("GOOGLE_SHEET_URL not configured")
@@ -46,7 +83,7 @@ class ModelTrainer:
         if len(training_data) == 0:
             raise ValueError("No training data loaded from Google Sheets")
         
-        print(f"Loaded {len(training_data)} training examples")
+        print(f"Loaded {len(training_data)} training examples from Google Sheets")
         return training_data
     
     def preprocess_training_data(self, training_data: List[TrainingDataPoint]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, List[str]]:
