@@ -601,7 +601,12 @@ The packaged application includes:
    - Ensure frontend build completed successfully
    - Check for JavaScript errors in DevTools
 
-4. **Large file sizes:**
+4. **DevTools Autofill errors (harmless):**
+   - Errors like "Autofill.enable wasn't found" are suppressed automatically
+   - These are Chrome DevTools features not available in Electron
+   - No impact on application functionality
+
+5. **Large file sizes:**
    - Python environment can be 50-100MB
    - Consider excluding unused Python packages
    - Use `.gitignore` to exclude build artifacts

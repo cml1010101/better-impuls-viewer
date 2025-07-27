@@ -20,9 +20,21 @@ function createWindow() {
       contextIsolation: true,
       enableRemoteModule: false,
       webSecurity: true,
+      enableWebSQL: false,
+      spellcheck: false,
       preload: path.join(__dirname, 'preload.js')
     },
     icon: path.join(__dirname, 'assets', 'icon.png') // Optional: add an icon
+  });
+
+  // Filter out DevTools autofill errors to reduce console noise
+  mainWindow.webContents.on('console-message', (event, level, message) => {
+    // Suppress known DevTools autofill errors that don't affect functionality
+    if (message.includes('Autofill.enable') || 
+        message.includes('Autofill.setAddresses') ||
+        message.includes("wasn't found")) {
+      event.preventDefault();
+    }
   });
 
   // In development, load from vite dev server
