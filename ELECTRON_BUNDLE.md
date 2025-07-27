@@ -605,8 +605,14 @@ The packaged application includes:
    - Errors like "Autofill.enable wasn't found" are suppressed automatically
    - These are Chrome DevTools features not available in Electron
    - No impact on application functionality
+   - Fixed in latest version to prevent any restart loops
 
-5. **Large file sizes:**
+5. **Application restart loop:**
+   - If the app keeps restarting, check for JavaScript errors in main process
+   - Ensure all Electron event handlers are properly implemented
+   - Latest version includes fixes for console message handling
+
+6. **Large file sizes:**
    - Python environment can be 50-100MB
    - Consider excluding unused Python packages
    - Use `.gitignore` to exclude build artifacts

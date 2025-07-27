@@ -177,7 +177,15 @@ function startElectron() {
   return new Promise((resolve, reject) => {
     log('Starting Electron...');
     
-    const electronProcess = spawn('npm', ['run', 'electron-dev'], {
+    // Use --no-sandbox in CI environments or when DISPLAY is not available
+    const isCI = process.env.CI || !process.env.DISPLAY;
+    const electronScript = isCI ? 'electron-dev-ci' : 'electron-dev';
+    
+    if (isCI) {
+      log('Detected CI environment, using --no-sandbox flag');
+    }
+    
+    const electronProcess = spawn('npm', ['run', electronScript], {
       stdio: 'inherit',
       shell: true,
       env: {

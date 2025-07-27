@@ -33,7 +33,16 @@ function createWindow() {
     if (message.includes('Autofill.enable') || 
         message.includes('Autofill.setAddresses') ||
         message.includes("wasn't found")) {
-      event.preventDefault();
+      // Just return without logging these messages - they're harmless DevTools warnings
+      return;
+    }
+    // Log other console messages normally
+    if (level === 1) {
+      console.log(`Frontend console: ${message}`);
+    } else if (level === 2) {
+      console.warn(`Frontend console warning: ${message}`);
+    } else if (level === 3) {
+      console.error(`Frontend console error: ${message}`);
     }
   });
 

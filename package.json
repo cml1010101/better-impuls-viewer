@@ -6,6 +6,7 @@
   "scripts": {
     "electron": "electron .",
     "electron-dev": "ELECTRON_IS_DEV=1 electron .",
+    "electron-dev-ci": "ELECTRON_IS_DEV=1 electron . --no-sandbox",
     "dev": "node scripts/electron-dev.js",
     "dev-simple": "npm run electron-dev",
     "start-backend": "cd backend && python3 server.py",
