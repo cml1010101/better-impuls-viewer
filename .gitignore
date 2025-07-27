@@ -22,3 +22,5 @@ frontend/.env.production.local
 # OS artifacts
 .DS_Store
 Thumbs.db
+
+.env

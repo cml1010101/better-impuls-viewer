@@ -1,1 +1,4 @@
 .env
+google_sheets_service_account.json
+ml-dataset
+trained_cnn_model.pth

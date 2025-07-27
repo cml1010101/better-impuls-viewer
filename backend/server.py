@@ -1,6 +1,5 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import os
 import pandas as pd
@@ -8,53 +7,36 @@ import numpy as np
 from functools import lru_cache
 import hashlib
 import time
-from dotenv import load_dotenv
-from process import find_all_campaigns, sort_data, calculate_lomb_scargle, remove_y_outliers
 
-# Load environment variables from .env file
-load_dotenv()
+# Import from our modular structure
+from config import Config
+from models import (
+    CampaignInfo, ProcessedData, PeriodogramData, PhaseFoldedData, 
+    AutoPeriodsData, ModelTrainingResult
+)
+from data_processing import (
+    find_all_campaigns, sort_data, remove_y_outliers, 
+    load_star_data_file, calculate_data_statistics
+)
+from period_detection import calculate_lomb_scargle, determine_automatic_periods
+from model_training import ModelTrainer
 
 app = FastAPI(title="Better Impuls Viewer API", version="1.0.0")
 
 # Add CORS middleware to allow frontend to communicate with backend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],  # Vite and other common dev servers
+    allow_origins=Config.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Data models
-class CampaignInfo(BaseModel):
-    campaign_id: str
-    telescope: str
-    star_number: int
-    data_points: int
-    duration: float
-
-class ProcessedData(BaseModel):
-    time: List[float]
-    flux: List[float]
-    error: List[float]
-
-class PeriodogramData(BaseModel):
-    periods: List[float]
-    powers: List[float]
-
-class PhaseFoldedData(BaseModel):
-    phase: List[float]
-    flux: List[float]
-
-# Configuration
-DEFAULT_DATA_FOLDER = os.path.expanduser('~/Documents/impuls-data') if os.path.exists(os.path.expanduser('~/Documents/impuls-data')) else '../sample_data'
-DEFAULT_DATA_FOLDER = os.path.abspath(DEFAULT_DATA_FOLDER)
-
-# In-memory caches for expensive operations
-_file_cache = {}  # Cache for loaded files
-_campaigns_cache = {}  # Cache for campaigns
-_periodogram_cache = {}  # Cache for periodograms
-_processed_data_cache = {}  # Cache for processed data
+# Cache for processed data to improve performance
+_file_cache = {}
+_campaigns_cache = {}
+_periodogram_cache = {}
+_processed_data_cache = {}
 
 def get_file_hash(filepath: str) -> str:
     """Get a hash of the file for caching purposes"""
@@ -68,7 +50,7 @@ def get_file_hash(filepath: str) -> str:
 
 def get_data_folder():
     """Get the data folder path"""
-    return DEFAULT_DATA_FOLDER
+    return Config.DATA_DIR
 
 def load_data_file(filepath: str) -> np.ndarray:
     """Load data from a .tbl file with caching"""
@@ -121,7 +103,7 @@ def get_campaigns_for_star_telescope(star_number: int, telescope: str) -> List[C
         cache_entry = _processed_data_cache[cache_key]
         # Check if cache is still valid (file hasn't changed)
         folder = get_data_folder()
-        filename = f"{star_number}-{telescope}.tbl"
+        filename = f"{str(star_number).zfill(3)}-{telescope}.tbl"
         filepath = os.path.join(folder, filename)
         
         if os.path.exists(filepath):
@@ -130,7 +112,7 @@ def get_campaigns_for_star_telescope(star_number: int, telescope: str) -> List[C
                 return cache_entry['campaigns']
     
     folder = get_data_folder()
-    filename = f"{star_number}-{telescope}.tbl"
+    filename = f"{str(star_number).zfill(3)}-{telescope}.tbl"
     filepath = os.path.join(folder, filename)
     
     if not os.path.exists(filepath):
@@ -232,7 +214,7 @@ async def get_telescopes_for_star(star_number: int) -> List[str]:
     telescopes = set()
     
     for filename in all_files:
-        if filename.startswith(f"{star_number}-") and filename.endswith('.tbl'):
+        if filename.startswith(f"{str(star_number).zfill(3)}-") and filename.endswith('.tbl'):
             try:
                 parts = filename.split('-')
                 if len(parts) >= 2:
@@ -259,7 +241,7 @@ async def get_campaign_data(star_number: int, telescope: str, campaign_id: str) 
         cache_entry = _processed_data_cache[cache_key]
         # Check if cache is still valid
         folder = get_data_folder()
-        filename = f"{star_number}-{telescope}.tbl"
+        filename = f"{str(star_number).zfill(3)}-{telescope}.tbl"
         filepath = os.path.join(folder, filename)
         
         if os.path.exists(filepath):
@@ -268,7 +250,7 @@ async def get_campaign_data(star_number: int, telescope: str, campaign_id: str) 
                 return cache_entry['data']
     
     folder = get_data_folder()
-    filename = f"{star_number}-{telescope}.tbl"
+    filename = f"{str(star_number).zfill(3)}-{telescope}.tbl"
     filepath = os.path.join(folder, filename)
     
     if not os.path.exists(filepath):
@@ -282,7 +264,7 @@ async def get_campaign_data(star_number: int, telescope: str, campaign_id: str) 
         # For processing, use only first 2 columns (time, flux)
         data_for_processing = raw_array[:, :2]
         
-        # Use cached campaigns function
+        # Use cached campaigns function with same threshold as campaigns endpoint
         campaigns_data = get_campaigns_from_data(data_for_processing, None)
         
         # Extract campaign index from campaign_id (e.g., "c1" -> 0, "c2" -> 1)
@@ -338,7 +320,7 @@ async def get_periodogram(star_number: int, telescope: str, campaign_id: str) ->
         cache_entry = _periodogram_cache[cache_key]
         # Check if cache is still valid
         folder = get_data_folder()
-        filename = f"{star_number}-{telescope}.tbl"
+        filename = f"{str(star_number).zfill(3)}-{telescope}.tbl"
         filepath = os.path.join(folder, filename)
         
         if os.path.exists(filepath):
@@ -347,7 +329,7 @@ async def get_periodogram(star_number: int, telescope: str, campaign_id: str) ->
                 return cache_entry['data']
     
     folder = get_data_folder()
-    filename = f"{star_number}-{telescope}.tbl"
+    filename = f"{str(star_number).zfill(3)}-{telescope}.tbl"
     filepath = os.path.join(folder, filename)
     
     if not os.path.exists(filepath):
@@ -357,7 +339,7 @@ async def get_periodogram(star_number: int, telescope: str, campaign_id: str) ->
         # Load and process data (cached)
         data = load_data_file(filepath)
         
-        # Find all campaigns (cached)
+        # Find all campaigns (cached) - use same threshold as campaigns endpoint
         campaigns_data = get_campaigns_from_data(data, None)
         
         # Extract campaign index from campaign_id
@@ -415,7 +397,7 @@ async def get_phase_folded_data(
         raise HTTPException(status_code=400, detail="Period must be positive and finite")
     
     folder = get_data_folder()
-    filename = f"{star_number}-{telescope}.tbl"
+    filename = f"{str(star_number).zfill(3)}-{telescope}.tbl"
     filepath = os.path.join(folder, filename)
     
     if not os.path.exists(filepath):
@@ -425,7 +407,7 @@ async def get_phase_folded_data(
         # Load and process data (cached)
         data = load_data_file(filepath)
         
-        # Find all campaigns (cached)
+        # Find all campaigns (cached) - use same threshold as campaigns endpoint
         campaigns_data = get_campaigns_from_data(data, None)
         
         # Extract campaign index from campaign_id
@@ -452,8 +434,209 @@ async def get_phase_folded_data(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error calculating phase-folded data: {str(e)}")
 
+@app.get("/auto_periods/{star_number}/{telescope}/{campaign_id}")
+async def get_automatic_periods(star_number: int, telescope: str, campaign_id: str) -> AutoPeriodsData:
+    """Get automatically determined periods for a specific campaign using multiple methods"""
+    cache_key = f"auto_periods_{star_number}_{telescope}_{campaign_id}"
+    
+    # Check cache first
+    if cache_key in _processed_data_cache:
+        cache_entry = _processed_data_cache[cache_key]
+        # Check if cache is still valid
+        folder = get_data_folder()
+        filename = f"{str(star_number).zfill(3)}-{telescope}.tbl"
+        filepath = os.path.join(folder, filename)
+        
+        if os.path.exists(filepath):
+            current_hash = get_file_hash(filepath)
+            if cache_entry.get('file_hash') == current_hash:
+                return cache_entry['data']
+    
+    folder = get_data_folder()
+    filename = f"{str(star_number).zfill(3)}-{telescope}.tbl"
+    filepath = os.path.join(folder, filename)
+    
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail=f"Data file not found: {filename}")
+    
+    try:
+        # Load and process data (cached)
+        data = load_data_file(filepath)
+        
+        # Find all campaigns (cached) - use same threshold as campaigns endpoint
+        campaigns_data = get_campaigns_from_data(data, None)
+        
+        # Extract campaign index from campaign_id
+        try:
+            campaign_index = int(campaign_id.replace('c', '')) - 1
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid campaign ID: {campaign_id}")
+        
+        if campaign_index < 0 or campaign_index >= len(campaigns_data):
+            raise HTTPException(status_code=404, detail=f"Campaign {campaign_id} not found")
+        
+        # Get the specific campaign data
+        campaign_data = campaigns_data[campaign_index]
+        campaign_data = remove_y_outliers(campaign_data)
+        campaign_data = sort_data(campaign_data)
+        
+        # Perform automatic period determination
+        period_analysis = determine_automatic_periods(campaign_data)
+        
+        result = AutoPeriodsData(
+            primary_period=period_analysis.get("primary_period"),
+            secondary_period=period_analysis.get("secondary_period"),
+            classification=period_analysis.get("classification", {}),
+            methods=period_analysis.get("methods", {}),
+            error=period_analysis.get("error")
+        )
+        
+        # Cache the result
+        _processed_data_cache[cache_key] = {
+            'data': result,
+            'file_hash': get_file_hash(filepath),
+            'timestamp': time.time()
+        }
+        
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error determining automatic periods: {str(e)}")
+
 from fastapi.responses import Response
 import requests
+
+@app.get("/model_status")
+async def get_model_status() -> Dict[str, Any]:
+    """
+    Get information about the current trained model status.
+    
+    Returns model information if a trained model exists, or status if no model is available.
+    """
+    try:
+        from model_training import get_model_info, model_exists
+        
+        if model_exists():
+            model_info = get_model_info()
+            if model_info:
+                return {
+                    "model_available": True,
+                    "model_info": model_info
+                }
+        
+        return {
+            "model_available": False,
+            "message": "No trained model found. Use /train_model to train a new model.",
+            "model_path": Config.MODEL_SAVE_PATH
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error checking model status: {str(e)}")
+
+
+@app.post("/train_model")
+async def train_model_from_sheets(
+    stars_to_extract: Optional[List[int]] = None,
+    force_retrain: bool = False
+) -> ModelTrainingResult:
+    """
+    Train the CNN model using data from Google Sheets with enhanced 5-period strategy.
+    
+    Parameters:
+    - stars_to_extract: Optional list of star numbers to include in training. 
+                       If None, all available stars will be used.
+    - force_retrain: If True, trains a new model even if one already exists.
+                    If False, returns existing model info if available.
+    
+    The enhanced system generates 5 training samples per light curve:
+    - 1-2 correct periods (high confidence)
+    - 2 periodogram peaks that are not correct (medium confidence) 
+    - 2 random periods (low confidence)
+    """
+    try:
+        if not Config.GOOGLE_SHEET_URL:
+            raise HTTPException(status_code=400, detail="GOOGLE_SHEET_URL not configured in environment variables")
+        
+        from model_training import model_exists, get_model_info
+        
+        # Check if model already exists and force_retrain is False
+        if not force_retrain and model_exists():
+            model_info = get_model_info()
+            if model_info:
+                return ModelTrainingResult(
+                    success=True,
+                    epochs_trained=model_info['training_metadata'].get('epochs_trained', 0),
+                    final_loss=model_info['training_metadata'].get('final_loss', 0.0),
+                    model_path=model_info['model_path'],
+                    training_samples=model_info['training_metadata'].get('training_samples', 0)
+                )
+        
+        trainer = ModelTrainer()
+        result = trainer.train_from_google_sheets(stars_to_extract)
+        
+        if not result.success:
+            raise HTTPException(status_code=500, detail="Model training failed")
+        
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error training model: {str(e)}")
+
+
+@app.post("/export_training_csv")
+async def export_training_data_to_csv(
+    stars_to_extract: Optional[List[int]] = None,
+    output_dir: str = "ml-dataset"
+) -> Dict[str, Any]:
+    """
+    Export training data from Google Sheets to CSV format for external analysis.
+    
+    Creates CSV files containing phase-folded light curves with corresponding
+    category and confidence information suitable for machine learning training.
+    
+    Parameters:
+    - stars_to_extract: Optional list of star numbers to include in export. 
+                       If None, all available stars will be used.
+    - output_dir: Directory to save the CSV files (default: "ml-dataset")
+    
+    Returns:
+    - Dictionary with export summary information
+    """
+    try:
+        if not Config.GOOGLE_SHEET_URL:
+            raise HTTPException(status_code=400, detail="GOOGLE_SHEET_URL not configured in environment variables")
+        
+        from google_sheets import GoogleSheetsLoader
+        
+        loader = GoogleSheetsLoader()
+        csv_path = loader.export_training_data_to_csv(
+            output_dir=output_dir,
+            stars_to_extract=stars_to_extract
+        )
+        
+        # Get file info
+        import os
+        if os.path.exists(csv_path):
+            file_size = os.path.getsize(csv_path)
+            
+            # Count rows in CSV
+            with open(csv_path, 'r') as f:
+                row_count = sum(1 for _ in f) - 1  # Subtract header
+        else:
+            file_size = 0
+            row_count = 0
+        
+        return {
+            "success": True,
+            "csv_path": csv_path,
+            "file_size_bytes": file_size,
+            "total_rows": row_count,
+            "output_directory": output_dir,
+            "stars_requested": stars_to_extract,
+            "message": f"Successfully exported training data to {csv_path}"
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error exporting training data: {str(e)}")
+
 
 @app.get("/sed/{star_number}")
 async def get_sed_image(star_number: int) -> Response:
