@@ -633,7 +633,7 @@ const Dashboard: React.FC = () => {
               ]}
               layout={{
                 width: undefined,
-                height: 250,
+                height: 200,
                 margin: { l: 60, r: 20, t: 20, b: 60 },
                 xaxis: {
                   title: { text: 'Time (days)' },
@@ -687,7 +687,7 @@ const Dashboard: React.FC = () => {
                   ]}
                   layout={{
                     width: undefined,
-                    height: 250,
+                    height: 200,
                     margin: { l: 60, r: 20, t: 20, b: 60 },
                     xaxis: {
                       title: { text: 'Period (days)' },
@@ -767,7 +767,7 @@ const Dashboard: React.FC = () => {
                   ]}
                   layout={{
                     width: undefined,
-                    height: 250,
+                    height: 200,
                     margin: { l: 60, r: 20, t: 20, b: 60 },
                     xaxis: {
                       title: { text: 'Phase' },

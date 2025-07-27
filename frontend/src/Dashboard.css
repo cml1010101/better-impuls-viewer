@@ -2,7 +2,7 @@
 .dashboard {
   max-width: 1400px;
   margin: 0 auto;
-  padding: 2rem 1rem;
+  padding: 1rem;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   min-height: 100%;
 }
@@ -12,8 +12,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: 1rem;
-  margin-bottom: 1.5rem;
-  padding: 1rem;
+  margin-bottom: 1rem;
+  padding: 0.75rem;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border-radius: 8px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
@@ -44,22 +44,22 @@
 .charts-container {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 /* SED Image Section */
 .sed-section {
   background: white;
   border-radius: 8px;
-  padding: 1rem;
+  padding: 0.75rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .sed-section h3 {
-  margin: 0 0 1rem 0;
+  margin: 0 0 0.75rem 0;
   color: #333;
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 600;
   text-align: center;
 }
@@ -68,13 +68,13 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  max-height: 400px;
+  max-height: 300px;
   overflow: hidden;
 }
 
 .sed-image {
   max-width: 100%;
-  max-height: 400px;
+  max-height: 300px;
   height: auto;
   border-radius: 4px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
@@ -88,14 +88,14 @@
 .bottom-charts {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 /* More compact chart sections */
 .chart-section {
   background: white;
   border-radius: 8px;
-  padding: 1rem;
+  padding: 0.75rem;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
@@ -169,49 +169,49 @@
   font-weight: 600;
 }
 
-/* Auto periods section styles */
+/* Auto periods section styles - Much more compact */
 .auto-periods-section {
   background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
   border: 2px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .auto-periods-section h3 {
-  margin: 0 0 1rem 0;
+  margin: 0 0 0.75rem 0;
   color: #2d3748;
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   font-weight: 700;
 }
 
 .auto-periods-content {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 1.5rem;
+  gap: 1rem;
 }
 
 .classification-info {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.25rem;
 }
 
 .classification-badge {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.75rem;
   flex-wrap: wrap;
 }
 
 .classification-type {
-  padding: 0.5rem 1rem;
-  border-radius: 20px;
-  font-weight: 700;
-  font-size: 0.9rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 0.8rem;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
 }
 
 .classification-regular {
@@ -311,26 +311,26 @@
 }
 
 .classification-confidence {
-  padding: 0.25rem 0.75rem;
+  padding: 0.2rem 0.5rem;
   background: white;
-  border: 2px solid #e2e8f0;
-  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
   font-weight: 600;
   color: #4a5568;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
 }
 
 .classification-description {
   color: #4a5568;
   font-style: italic;
   margin: 0;
-  font-size: 0.95rem;
+  font-size: 0.85rem;
 }
 
 .periods-info {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.5rem;
 }
 
 .period-result {
@@ -338,33 +338,34 @@
   justify-content: space-between;
   align-items: center;
   background: white;
-  padding: 1rem;
-  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
   border: 1px solid #e2e8f0;
 }
 
 .period-label {
   font-weight: 600;
   color: #2d3748;
+  font-size: 0.85rem;
 }
 
 .period-value {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.5rem;
 }
 
 .period-value strong {
   color: #1a202c;
-  font-size: 1.1rem;
+  font-size: 0.95rem;
 }
 
 .use-period-btn {
-  padding: 0.5rem 1rem;
+  padding: 0.25rem 0.5rem;
   border: none;
-  border-radius: 6px;
+  border-radius: 4px;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   font-weight: 600;
   transition: all 0.2s;
 }
@@ -391,26 +392,27 @@
 
 .methods-info {
   background: white;
-  padding: 1rem;
-  border-radius: 8px;
+  padding: 0.75rem;
+  border-radius: 6px;
   border: 1px solid #e2e8f0;
 }
 
 .methods-header {
   font-weight: 600;
   color: #2d3748;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.85rem;
 }
 
 .methods-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.5rem;
 }
 
 .method-result {
-  padding: 0.75rem;
-  border-radius: 6px;
+  padding: 0.5rem;
+  border-radius: 4px;
   border: 1px solid #e2e8f0;
 }
 
@@ -426,13 +428,13 @@
 
 .method-name {
   font-weight: 600;
-  font-size: 0.9rem;
-  margin-bottom: 0.25rem;
+  font-size: 0.8rem;
+  margin-bottom: 0.15rem;
 }
 
 .method-status {
-  font-size: 1.2rem;
-  margin-bottom: 0.5rem;
+  font-size: 1rem;
+  margin-bottom: 0.25rem;
 }
 
 .method-periods {
@@ -443,9 +445,9 @@
 
 .method-period {
   background: #edf2f7;
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  font-size: 0.8rem;
+  padding: 0.15rem 0.35rem;
+  border-radius: 3px;
+  font-size: 0.7rem;
   font-weight: 500;
   color: #4a5568;
 }
@@ -454,8 +456,8 @@
   background: #fed7d7;
   border: 2px solid #fc8181;
   border-radius: 8px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
 }
 
 .auto-periods-error h3 {
@@ -469,9 +471,9 @@
   color: #742a2a;
 }
 
-/* Algorithm Documentation Styles */
+/* Algorithm Documentation Styles - More compact */
 .algorithm-documentation {
-  margin-bottom: 1.5rem;
+  margin-bottom: 1rem;
 }
 
 .algorithm-documentation details {
@@ -482,7 +484,7 @@
 }
 
 .algorithm-documentation summary {
-  padding: 1rem;
+  padding: 0.75rem;
   cursor: pointer;
   background: linear-gradient(135deg, #4c51bf 0%, #667eea 100%);
   color: white;
@@ -497,12 +499,12 @@
 .algorithm-documentation summary h3 {
   margin: 0;
   display: inline;
-  font-size: 1.1rem;
+  font-size: 1rem;
 }
 
 .documentation-content {
-  padding: 1.5rem;
-  line-height: 1.6;
+  padding: 1rem;
+  line-height: 1.5;
 }
 
 .documentation-content p {
@@ -572,19 +574,19 @@
 
   /* Auto periods responsive */
   .auto-periods-section {
-    padding: 1rem;
+    padding: 0.75rem;
   }
 
   .classification-badge {
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.5rem;
+    gap: 0.25rem;
   }
 
   .period-result {
     flex-direction: column;
     align-items: flex-start;
-    gap: 0.75rem;
+    gap: 0.5rem;
   }
 
   .period-value {

@@ -25,6 +25,27 @@ from model_training import ModelTrainer
 from credentials_manager import get_credentials_manager
 from google_oauth import get_oauth_manager
 
+def get_data_filepath(star_number: int, telescope: str) -> str:
+    """Get the correct filepath for a star and telescope, trying both naming formats"""
+    folder = get_data_folder()
+    
+    # Try 3-digit padded format first
+    filename = f"{str(star_number).zfill(3)}-{telescope}.tbl"
+    filepath = os.path.join(folder, filename)
+    
+    if os.path.exists(filepath):
+        return filepath
+    
+    # Try simple format
+    filename = f"{star_number}-{telescope}.tbl"
+    filepath = os.path.join(folder, filename)
+    
+    if os.path.exists(filepath):
+        return filepath
+    
+    # If neither exists, return the padded format (for error reporting)
+    return os.path.join(folder, f"{str(star_number).zfill(3)}-{telescope}.tbl")
+
 app = FastAPI(title="Better Impuls Viewer API", version="1.0.0")
 
 # Add CORS middleware to allow frontend to communicate with backend
@@ -448,7 +469,11 @@ async def get_telescopes_for_star(star_number: int) -> List[str]:
     telescopes = set()
     
     for filename in all_files:
-        if filename.startswith(f"{str(star_number).zfill(3)}-") and filename.endswith('.tbl'):
+        # Try both 3-digit padded and simple format
+        star_prefix_padded = f"{str(star_number).zfill(3)}-"
+        star_prefix_simple = f"{star_number}-"
+        
+        if (filename.startswith(star_prefix_padded) or filename.startswith(star_prefix_simple)) and filename.endswith('.tbl'):
             try:
                 parts = filename.split('-')
                 if len(parts) >= 2:
