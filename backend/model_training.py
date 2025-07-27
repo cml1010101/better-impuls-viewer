@@ -392,7 +392,7 @@ def load_trained_model(model_path: str = None) -> Tuple[PeriodValidationCNN, Lis
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Model file not found: {model_path}")
     
-    checkpoint = torch.load(model_path, map_location=Config.DEVICE)
+    checkpoint = torch.load(model_path, map_location=Config.DEVICE, weights_only=False)
     
     # Reconstruct model
     model_config = checkpoint['model_config']

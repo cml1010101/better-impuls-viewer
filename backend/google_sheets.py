@@ -542,7 +542,7 @@ class GoogleSheetsLoader:
         import os
         # Assuming data_processing.py is in the same directory or accessible
         # If data_processing is not imported or accessible here, you'll need to adjust
-        from .data_processing import find_longest_x_campaign, sort_data, remove_y_outliers
+        from data_processing import find_longest_x_campaign, sort_data, remove_y_outliers
         
         # Look for data files in sample_data directory
         sample_data_dir = Config.DATA_DIR
@@ -567,7 +567,7 @@ class GoogleSheetsLoader:
         try:
             # Load data using pandas
             # Ensure correct delimiter and skip rows based on your .tbl file format
-            data = pd.read_csv(file_path, sep=r'\s+', comment='#', header=None)
+            data = pd.read_csv(file_path, sep=r'\s+', comment='#', header=None, skiprows=[0, 1, 2])
             # Assuming first two columns are time and flux, adjust if different
             # You might need to inspect your .tbl files to confirm the exact column indices
             time_series = data.iloc[:, 0].values
