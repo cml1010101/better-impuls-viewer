@@ -16,6 +16,12 @@ interface ModelStatus {
   message?: string;
 }
 
+interface TrainingFile {
+  filename: string;
+  upload_time: number;
+  size_bytes: number;
+}
+
 interface TrainingResult {
   success: boolean;
   epochs_trained: number;
@@ -28,14 +34,18 @@ const Training: React.FC = () => {
   const [modelStatus, setModelStatus] = useState<ModelStatus | null>(null);
   const [isTraining, setIsTraining] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [starRange, setStarRange] = useState('');
   const [forceRetrain, setForceRetrain] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState<'success' | 'error' | 'info' | ''>('');
   const [trainingProgress, setTrainingProgress] = useState('');
+  const [trainingFiles, setTrainingFiles] = useState<TrainingFile[]>([]);
+  const [selectedFile, setSelectedFile] = useState<string>('');
 
   useEffect(() => {
     loadModelStatus();
+    loadTrainingFiles();
   }, []);
 
   const loadModelStatus = async () => {
@@ -50,6 +60,22 @@ const Training: React.FC = () => {
     }
   };
 
+  const loadTrainingFiles = async () => {
+    try {
+      const response = await fetch(`${API_BASE}/training_data/files`);
+      if (response.ok) {
+        const data = await response.json();
+        setTrainingFiles(data.files);
+        // Select the first file by default if none selected
+        if (data.files.length > 0 && !selectedFile) {
+          setSelectedFile(data.files[0].filename);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading training files:', error);
+    }
+  };
+
   const showMessage = (text: string, type: 'success' | 'error' | 'info') => {
     setMessage(text);
     setMessageType(type);
@@ -57,6 +83,72 @@ const Training: React.FC = () => {
       setMessage('');
       setMessageType('');
     }, 10000);
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.csv')) {
+      showMessage('Please select a CSV file', 'error');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const response = await fetch(`${API_BASE}/training_data/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        showMessage(`CSV uploaded successfully: ${data.message}`, 'success');
+        await loadTrainingFiles();
+        // Select the newly uploaded file
+        if (data.filename) {
+          setSelectedFile(data.filename);
+        }
+      } else {
+        const error = await response.json();
+        showMessage(`Error uploading CSV: ${error.detail}`, 'error');
+      }
+    } catch (error) {
+      showMessage(`Error uploading CSV: ${error}`, 'error');
+    } finally {
+      setIsUploading(false);
+      // Reset file input
+      event.target.value = '';
+    }
+  };
+
+  const handleDeleteFile = async (filename: string) => {
+    if (!confirm(`Are you sure you want to delete ${filename}?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE}/training_data/files/${filename}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        showMessage('File deleted successfully', 'success');
+        await loadTrainingFiles();
+        // Clear selected file if it was deleted
+        if (selectedFile === filename) {
+          setSelectedFile('');
+        }
+      } else {
+        const error = await response.json();
+        showMessage(`Error deleting file: ${error.detail}`, 'error');
+      }
+    } catch (error) {
+      showMessage(`Error deleting file: ${error}`, 'error');
+    }
   };
 
   const parseStarRange = (range: string): number[] | null => {
@@ -90,6 +182,11 @@ const Training: React.FC = () => {
   };
 
   const handleTrainModel = async () => {
+    if (!selectedFile) {
+      showMessage('Please select a CSV file first', 'error');
+      return;
+    }
+
     setIsTraining(true);
     setTrainingProgress('Initializing training...');
     
@@ -102,10 +199,38 @@ const Training: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          csv_filename: selectedFile,
           stars_to_extract: starsToExtract,
           force_retrain: forceRetrain,
         }),
       });
+
+      if (response.ok) {
+        const result: TrainingResult = await response.json();
+        
+        if (result.success) {
+          showMessage(
+            `Training completed successfully! 
+            Epochs: ${result.epochs_trained}, 
+            Final Loss: ${result.final_loss.toFixed(4)}, 
+            Training Samples: ${result.training_samples}`,
+            'success'
+          );
+          await loadModelStatus();
+        } else {
+          showMessage('Training failed', 'error');
+        }
+      } else {
+        const error = await response.json();
+        showMessage(`Training failed: ${error.detail}`, 'error');
+      }
+    } catch (error) {
+      showMessage(`Training failed: ${error}`, 'error');
+    } finally {
+      setIsTraining(false);
+      setTrainingProgress('');
+    }
+  };
 
       if (response.ok) {
         const result: TrainingResult = await response.json();
@@ -127,6 +252,11 @@ const Training: React.FC = () => {
   };
 
   const handleExportCSV = async () => {
+    if (!selectedFile) {
+      showMessage('Please select a CSV file first', 'error');
+      return;
+    }
+
     setIsExporting(true);
     
     try {
@@ -138,6 +268,7 @@ const Training: React.FC = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
+          csv_filename: selectedFile,
           stars_to_extract: starsToExtract,
         }),
       });
@@ -153,6 +284,16 @@ const Training: React.FC = () => {
         showMessage(`Export failed: ${error.detail}`, 'error');
       }
     } catch (error) {
+      showMessage(`Export failed: ${error}`, 'error');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+      } else {
+        const error = await response.json();
+        showMessage(`Export failed: ${error.detail}`, 'error');
+      }
+    } catch (error) {
       showMessage(`Export error: ${error}`, 'error');
     } finally {
       setIsExporting(false);
@@ -163,7 +304,7 @@ const Training: React.FC = () => {
     <div className="training-container">
       <div className="training-header">
         <h2>Model Training & Management</h2>
-        <p>Train machine learning models using Google Sheets data and manage training datasets.</p>
+        <p>Train machine learning models using CSV training data and manage training datasets.</p>
       </div>
 
       {message && (
@@ -171,6 +312,79 @@ const Training: React.FC = () => {
           {message}
         </div>
       )}
+
+      {/* CSV File Management Section */}
+      <div className="training-section">
+        <h3>Training Data Files</h3>
+        
+        <div className="csv-upload-section">
+          <div className="upload-area">
+            <label htmlFor="csv-upload" className="upload-label">
+              <div className="upload-content">
+                <div className="upload-icon">📁</div>
+                <div className="upload-text">
+                  <strong>Upload CSV Training Data</strong>
+                  <p>Select a CSV file containing period data for training</p>
+                </div>
+              </div>
+            </label>
+            <input
+              id="csv-upload"
+              type="file"
+              accept=".csv"
+              onChange={handleFileUpload}
+              disabled={isUploading}
+              style={{ display: 'none' }}
+            />
+            {isUploading && <div className="upload-progress">Uploading...</div>}
+          </div>
+
+          <div className="csv-requirements">
+            <h4>CSV Format Requirements:</h4>
+            <ul>
+              <li><strong>Star</strong> - Star number/identifier</li>
+              <li><strong>LC_Category</strong> - Light curve category</li>
+              <li><strong>{'{Sensor}_period_1'}</strong> and <strong>{'{Sensor}_period_2'}</strong> - Period data for each sensor</li>
+            </ul>
+            <p><strong>Supported sensors:</strong> CDIPS, ELEANOR, QLP, SPOC, TESS16, TASOC, TGLC, EVEREST, K2SC, K2SFF, K2VARCAT, ZTF_R, ZTF_G, W1, W2</p>
+          </div>
+        </div>
+
+        {trainingFiles.length > 0 && (
+          <div className="training-files">
+            <h4>Uploaded Files:</h4>
+            <div className="file-list">
+              {trainingFiles.map((file) => (
+                <div key={file.filename} className={`file-item ${selectedFile === file.filename ? 'selected' : ''}`}>
+                  <div className="file-info">
+                    <div className="file-name">{file.filename}</div>
+                    <div className="file-details">
+                      Uploaded: {new Date(file.upload_time * 1000).toLocaleDateString()} | 
+                      Size: {(file.size_bytes / 1024 / 1024).toFixed(2)} MB
+                    </div>
+                  </div>
+                  <div className="file-actions">
+                    <button
+                      onClick={() => setSelectedFile(file.filename)}
+                      className={`select-btn ${selectedFile === file.filename ? 'selected' : ''}`}
+                      disabled={isTraining || isExporting}
+                    >
+                      {selectedFile === file.filename ? 'Selected' : 'Select'}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteFile(file.filename)}
+                      className="delete-btn"
+                      disabled={isTraining || isExporting}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Model Status Section */}
       <div className="training-section">

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from typing import List, Dict, Any, Optional
@@ -23,7 +23,7 @@ from data_processing import (
 from period_detection import calculate_lomb_scargle, determine_automatic_periods
 from model_training import ModelTrainer
 from credentials_manager import get_credentials_manager
-from google_oauth import get_oauth_manager
+
 
 def get_data_filepath(star_number: int, telescope: str) -> str:
     """Get the correct filepath for a star and telescope, trying both naming formats"""
@@ -59,7 +59,6 @@ app.add_middleware(
 
 # Pydantic models for API requests
 class CredentialsRequest(BaseModel):
-    google_sheets_url: Optional[str] = None
     sed_url: Optional[str] = None
     sed_username: Optional[str] = None
     sed_password: Optional[str] = None
@@ -68,6 +67,7 @@ class CredentialsRequest(BaseModel):
 class ModelTrainingRequest(BaseModel):
     stars_to_extract: Optional[List[int]] = None
     force_retrain: bool = False
+    csv_filename: Optional[str] = None  # Specify which uploaded CSV to use
 
 # Cache for processed data to improve performance
 _file_cache = {}
@@ -204,20 +204,10 @@ async def root():
 async def get_credentials_status():
     """Get status of all credential types"""
     credentials_manager = get_credentials_manager()
-    oauth_manager = get_oauth_manager()
     
     status = credentials_manager.get_credentials_status()
-    oauth_status = oauth_manager.get_oauth_status()
     
     return {
-        "google_sheets": {
-            "url_configured": status['google_sheets_url_set'],
-            "authenticated": oauth_status['authenticated'],
-            "user_info": oauth_status.get('user_info'),
-            "has_refresh_token": oauth_status['has_refresh_token'],
-            "oauth_configured": oauth_status['oauth_configured'],
-            "config_error": oauth_status.get('config_error')
-        },
         "sed_service": {
             "configured": status['sed_service']
         },
@@ -233,10 +223,6 @@ async def configure_credentials(request: CredentialsRequest):
     credentials_manager = get_credentials_manager()
     
     try:
-        # Update Google Sheets URL if provided
-        if request.google_sheets_url:
-            credentials_manager.set_google_sheets_url(request.google_sheets_url)
-        
         # Update SED credentials if provided
         if request.sed_url and request.sed_username and request.sed_password:
             credentials_manager.set_sed_credentials(
@@ -263,174 +249,97 @@ async def configure_credentials(request: CredentialsRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error updating credentials: {str(e)}")
 
-@app.get("/oauth/google/authorize")
-async def get_google_auth_url():
-    """Get Google OAuth authorization URL"""
-    oauth_manager = get_oauth_manager()
+# === CSV Training Data Upload Endpoints ===
+
+@app.post("/training_data/upload")
+async def upload_training_data_csv(file: UploadFile = File(...)):
+    """Upload CSV file for training data"""
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="File must be a CSV file")
     
     try:
-        auth_url = oauth_manager.get_authorization_url()
-        return {"authorization_url": auth_url}
+        # Create uploads directory if it doesn't exist
+        uploads_dir = os.path.join(Config.get_data_folder(), "uploads")
+        os.makedirs(uploads_dir, exist_ok=True)
+        
+        # Save uploaded file
+        file_path = os.path.join(uploads_dir, f"training_data_{int(time.time())}.csv")
+        
+        with open(file_path, "wb") as buffer:
+            content = await file.read()
+            buffer.write(content)
+        
+        # Validate CSV format
+        from csv_training_data import CSVTrainingDataLoader
+        try:
+            loader = CSVTrainingDataLoader(file_path)
+            # Test loading raw data to validate format
+            df = loader.load_raw_data()
+            
+            return {
+                "success": True,
+                "message": f"CSV uploaded successfully. Found {len(df)} rows.",
+                "file_path": file_path,
+                "filename": file.filename
+            }
+        except Exception as e:
+            # Remove invalid file
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            raise HTTPException(status_code=400, detail=f"Invalid CSV format: {str(e)}")
+            
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating authorization URL: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error uploading file: {str(e)}")
 
-@app.get("/oauth/google/callback")
-async def google_oauth_callback(request: Request):
-    """Handle Google OAuth callback"""
-    oauth_manager = get_oauth_manager()
-    
-    # Get authorization code from query parameters
-    query_params = dict(request.query_params)
-    code = query_params.get('code')
-    error = query_params.get('error')
-    
-    if error:
-        raise HTTPException(status_code=400, detail=f"OAuth error: {error}")
-    
-    if not code:
-        raise HTTPException(status_code=400, detail="Authorization code not provided")
-    
+@app.get("/training_data/files")
+async def list_training_data_files():
+    """List uploaded training data CSV files"""
     try:
-        # Exchange code for tokens
-        token_data = oauth_manager.exchange_code_for_tokens(code)
+        uploads_dir = os.path.join(Config.get_data_folder(), "uploads")
         
-        # Get user info
-        user_info = oauth_manager.get_user_info()
+        if not os.path.exists(uploads_dir):
+            return {"files": []}
         
-        # Return a simple success page or redirect to frontend
-        return RedirectResponse(
-            url=f"/?oauth_success=true&user_email={user_info.get('email', '') if user_info else ''}",
-            status_code=302
-        )
-    
+        files = []
+        for filename in os.listdir(uploads_dir):
+            if filename.endswith('.csv') and filename.startswith('training_data_'):
+                file_path = os.path.join(uploads_dir, filename)
+                stat = os.stat(file_path)
+                files.append({
+                    "filename": filename,
+                    "upload_time": stat.st_mtime,
+                    "size_bytes": stat.st_size
+                })
+        
+        # Sort by upload time, newest first
+        files.sort(key=lambda x: x['upload_time'], reverse=True)
+        
+        return {"files": files}
+        
     except Exception as e:
-        return RedirectResponse(
-            url=f"/?oauth_error={str(e)}",
-            status_code=302
-        )
+        raise HTTPException(status_code=500, detail=f"Error listing files: {str(e)}")
 
-@app.post("/oauth/google/revoke")
-async def revoke_google_auth():
-    """Revoke Google OAuth authentication"""
-    oauth_manager = get_oauth_manager()
-    
+@app.delete("/training_data/files/{filename}")
+async def delete_training_data_file(filename: str):
+    """Delete an uploaded training data CSV file"""
     try:
-        success = oauth_manager.revoke_authentication()
-        return {"success": success, "message": "Authentication revoked successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error revoking authentication: {str(e)}")
-
-@app.get("/oauth/google/status")
-async def get_google_oauth_status():
-    """Get current Google OAuth status"""
-    oauth_manager = get_oauth_manager()
-    return oauth_manager.get_oauth_status()
-
-@app.post("/oauth/google/configure")
-async def configure_google_oauth_client(request: Dict[str, str]):
-    """Configure Google OAuth client credentials"""
-    credentials_manager = get_credentials_manager()
-    
-    try:
-        client_id = request.get('client_id', '').strip()
-        client_secret = request.get('client_secret', '').strip()
+        uploads_dir = os.path.join(Config.get_data_folder(), "uploads")
+        file_path = os.path.join(uploads_dir, filename)
         
-        if not client_id or not client_secret:
-            raise HTTPException(status_code=400, detail="Both client_id and client_secret are required")
+        if not os.path.exists(file_path):
+            raise HTTPException(status_code=404, detail="File not found")
         
-        # Basic validation
-        if not client_id.endswith('.apps.googleusercontent.com'):
-            raise HTTPException(status_code=400, detail="Invalid client ID format. Should end with '.apps.googleusercontent.com'")
+        if not filename.endswith('.csv') or not filename.startswith('training_data_'):
+            raise HTTPException(status_code=400, detail="Invalid filename")
         
-        if len(client_secret) < 10:
-            raise HTTPException(status_code=400, detail="Client secret appears to be too short")
+        os.remove(file_path)
         
-        # Store credentials
-        credentials_manager.set_google_oauth_client_credentials(client_id, client_secret)
+        return {"success": True, "message": f"File {filename} deleted successfully"}
         
-        # Reload OAuth manager configuration to use new credentials
-        oauth_manager = get_oauth_manager()
-        oauth_manager.reload_config()
-        
-        return {"success": True, "message": "OAuth client credentials configured successfully"}
-    
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error configuring OAuth credentials: {str(e)}")
-
-@app.delete("/oauth/google/configure")
-async def clear_google_oauth_client():
-    """Clear Google OAuth client credentials"""
-    credentials_manager = get_credentials_manager()
-    
-    try:
-        credentials_manager.clear_google_oauth_client_credentials()
-        
-        # Also clear any existing authentication
-        credentials_manager.clear_google_credentials()
-        
-        # Reload OAuth manager configuration
-        oauth_manager = get_oauth_manager()
-        oauth_manager.reload_config()
-        
-        return {"success": True, "message": "OAuth client credentials cleared successfully"}
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error clearing OAuth credentials: {str(e)}")
-
-@app.get("/oauth/google/setup-guide")
-async def get_oauth_setup_guide():
-    """Get instructions for setting up Google OAuth"""
-    return {
-        "steps": [
-            {
-                "step": 1,
-                "title": "Go to Google Cloud Console",
-                "description": "Visit https://console.cloud.google.com/ and sign in with your Google account"
-            },
-            {
-                "step": 2,
-                "title": "Create or Select a Project",
-                "description": "Either create a new project or select an existing one from the project dropdown"
-            },
-            {
-                "step": 3,
-                "title": "Enable APIs",
-                "description": "Go to 'APIs & Services' > 'Library' and enable 'Google Sheets API' and 'Google Drive API'"
-            },
-            {
-                "step": 4,
-                "title": "Create OAuth Credentials",
-                "description": "Go to 'APIs & Services' > 'Credentials' > 'Create Credentials' > 'OAuth client ID'"
-            },
-            {
-                "step": 5,
-                "title": "Configure OAuth Consent",
-                "description": "If prompted, configure the OAuth consent screen. For personal use, select 'External' and fill in required fields"
-            },
-            {
-                "step": 6,
-                "title": "Set Application Type",
-                "description": "Choose 'Web application' as the application type"
-            },
-            {
-                "step": 7,
-                "title": "Add Redirect URI",
-                "description": "Add 'http://localhost:8000/oauth/google/callback' to the Authorized redirect URIs"
-            },
-            {
-                "step": 8,
-                "title": "Copy Credentials",
-                "description": "After creating, copy the Client ID and Client Secret and paste them into the form below"
-            }
-        ],
-        "redirect_uri": "http://localhost:8000/oauth/google/callback",
-        "required_scopes": [
-            "https://www.googleapis.com/auth/spreadsheets.readonly",
-            "https://www.googleapis.com/auth/userinfo.email"
-        ]
-    }
+        raise HTTPException(status_code=500, detail=f"Error deleting file: {str(e)}")
 
 @app.get("/data_folder/browse")
 async def browse_data_folders(path: str = None):
@@ -901,11 +810,12 @@ async def get_model_status() -> Dict[str, Any]:
 
 
 @app.post("/train_model")
-async def train_model_from_sheets(request: ModelTrainingRequest) -> ModelTrainingResult:
+async def train_model_from_csv(request: ModelTrainingRequest) -> ModelTrainingResult:
     """
-    Train the CNN model using data from Google Sheets with enhanced 5-period strategy.
+    Train the CNN model using data from uploaded CSV file with enhanced 5-period strategy.
     
     Parameters:
+    - csv_filename: Name of the uploaded CSV file to use for training
     - stars_to_extract: Optional list of star numbers to include in training. 
                        If None, all available stars will be used.
     - force_retrain: If True, trains a new model even if one already exists.
@@ -917,21 +827,21 @@ async def train_model_from_sheets(request: ModelTrainingRequest) -> ModelTrainin
     - 2 random periods (low confidence)
     """
     try:
-        credentials_manager = get_credentials_manager()
-        oauth_manager = get_oauth_manager()
-        
-        # Check authentication
-        if not oauth_manager.is_authenticated():
-            raise HTTPException(
-                status_code=401, 
-                detail="Google Sheets authentication required. Please authenticate in app settings."
-            )
-        
-        # Check if Google Sheets URL is configured
-        if not credentials_manager.get_google_sheets_url():
+        # Check if CSV filename is provided
+        if not request.csv_filename:
             raise HTTPException(
                 status_code=400, 
-                detail="Google Sheets URL not configured. Please configure in app settings."
+                detail="CSV filename is required. Please upload a training data CSV first."
+            )
+        
+        # Verify CSV file exists
+        uploads_dir = os.path.join(Config.get_data_folder(), "uploads")
+        csv_path = os.path.join(uploads_dir, request.csv_filename)
+        
+        if not os.path.exists(csv_path):
+            raise HTTPException(
+                status_code=404, 
+                detail=f"CSV file '{request.csv_filename}' not found. Please upload the file first."
             )
         
         from model_training import model_exists, get_model_info
@@ -949,7 +859,7 @@ async def train_model_from_sheets(request: ModelTrainingRequest) -> ModelTrainin
                 )
         
         trainer = ModelTrainer()
-        result = trainer.train_from_google_sheets(request.stars_to_extract)
+        result = trainer.train_from_csv(csv_path, request.stars_to_extract)
         
         if not result.success:
             raise HTTPException(status_code=500, detail="Model training failed")
@@ -964,12 +874,13 @@ async def train_model_from_sheets(request: ModelTrainingRequest) -> ModelTrainin
 @app.post("/export_training_csv")
 async def export_training_data_to_csv(request: ModelTrainingRequest) -> Dict[str, Any]:
     """
-    Export training data from Google Sheets to CSV format for external analysis.
+    Export training data from uploaded CSV to processed CSV format for external analysis.
     
     Creates CSV files containing phase-folded light curves with corresponding
     category and confidence information suitable for machine learning training.
     
     Parameters:
+    - csv_filename: Name of the uploaded CSV file to process
     - stars_to_extract: Optional list of star numbers to include in export. 
                        If None, all available stars will be used.
     
@@ -977,38 +888,37 @@ async def export_training_data_to_csv(request: ModelTrainingRequest) -> Dict[str
     - Dictionary with export summary information
     """
     try:
-        credentials_manager = get_credentials_manager()
-        oauth_manager = get_oauth_manager()
-        
-        # Check authentication
-        if not oauth_manager.is_authenticated():
-            raise HTTPException(
-                status_code=401, 
-                detail="Google Sheets authentication required. Please authenticate in app settings."
-            )
-        
-        # Check if Google Sheets URL is configured
-        if not credentials_manager.get_google_sheets_url():
+        # Check if CSV filename is provided
+        if not request.csv_filename:
             raise HTTPException(
                 status_code=400, 
-                detail="Google Sheets URL not configured. Please configure in app settings."
+                detail="CSV filename is required. Please upload a training data CSV first."
             )
         
-        from google_sheets import GoogleSheetsLoader
+        # Verify CSV file exists
+        uploads_dir = os.path.join(Config.get_data_folder(), "uploads")
+        csv_path = os.path.join(uploads_dir, request.csv_filename)
         
-        loader = GoogleSheetsLoader()
-        csv_path = loader.export_training_data_to_csv(
+        if not os.path.exists(csv_path):
+            raise HTTPException(
+                status_code=404, 
+                detail=f"CSV file '{request.csv_filename}' not found. Please upload the file first."
+            )
+        
+        from csv_training_data import CSVTrainingDataLoader
+        
+        loader = CSVTrainingDataLoader(csv_path)
+        output_csv_path = loader.export_training_data_to_csv(
             output_dir="ml-dataset",
             stars_to_extract=request.stars_to_extract
         )
         
         # Get file info
-        import os
-        if os.path.exists(csv_path):
-            file_size = os.path.getsize(csv_path)
+        if os.path.exists(output_csv_path):
+            file_size = os.path.getsize(output_csv_path)
             
             # Count rows in CSV
-            with open(csv_path, 'r') as f:
+            with open(output_csv_path, 'r') as f:
                 row_count = sum(1 for _ in f) - 1  # Subtract header
         else:
             file_size = 0
@@ -1016,12 +926,12 @@ async def export_training_data_to_csv(request: ModelTrainingRequest) -> Dict[str
         
         return {
             "success": True,
-            "csv_path": csv_path,
+            "csv_path": output_csv_path,
             "file_size_bytes": file_size,
             "total_rows": row_count,
             "output_directory": "ml-dataset",
             "stars_requested": request.stars_to_extract,
-            "message": f"Successfully exported training data to {csv_path}"
+            "message": f"Successfully exported training data to {output_csv_path}"
         }
         
     except HTTPException:

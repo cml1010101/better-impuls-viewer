@@ -14,11 +14,6 @@ from pathlib import Path
 @dataclass
 class AppCredentials:
     """Application credentials data structure."""
-    google_sheets_url: Optional[str] = None
-    google_oauth_token: Optional[str] = None
-    google_refresh_token: Optional[str] = None
-    google_oauth_client_id: Optional[str] = None
-    google_oauth_client_secret: Optional[str] = None
     sed_url: Optional[str] = None
     sed_username: Optional[str] = None
     sed_password: Optional[str] = None
@@ -76,11 +71,6 @@ class CredentialsManager:
         """Save credentials to secure storage."""
         try:
             creds_dict = {
-                'google_sheets_url': self._credentials.google_sheets_url,
-                'google_oauth_token': self._credentials.google_oauth_token,
-                'google_refresh_token': self._credentials.google_refresh_token,
-                'google_oauth_client_id': self._credentials.google_oauth_client_id,
-                'google_oauth_client_secret': self._credentials.google_oauth_client_secret,
                 'sed_url': self._credentials.sed_url,
                 'sed_username': self._credentials.sed_username,
                 'sed_password': self._credentials.sed_password,
@@ -112,48 +102,6 @@ class CredentialsManager:
         except Exception as e:
             print(f"Error saving credentials: {e}")
     
-    def get_google_sheets_url(self) -> Optional[str]:
-        """Get Google Sheets URL."""
-        return self._credentials.google_sheets_url
-    
-    def set_google_sheets_url(self, url: str) -> None:
-        """Set Google Sheets URL."""
-        self._credentials.google_sheets_url = url
-        self._save_credentials()
-    
-    def get_google_oauth_token(self) -> Optional[str]:
-        """Get Google OAuth access token."""
-        return self._credentials.google_oauth_token
-    
-    def set_google_oauth_tokens(self, access_token: str, refresh_token: Optional[str] = None) -> None:
-        """Set Google OAuth tokens."""
-        self._credentials.google_oauth_token = access_token
-        if refresh_token:
-            self._credentials.google_refresh_token = refresh_token
-        self._save_credentials()
-    
-    def get_google_refresh_token(self) -> Optional[str]:
-        """Get Google OAuth refresh token."""
-        return self._credentials.google_refresh_token
-    
-    def get_google_oauth_client_credentials(self) -> Dict[str, Optional[str]]:
-        """Get Google OAuth client credentials."""
-        return {
-            'client_id': self._credentials.google_oauth_client_id,
-            'client_secret': self._credentials.google_oauth_client_secret
-        }
-    
-    def set_google_oauth_client_credentials(self, client_id: str, client_secret: str) -> None:
-        """Set Google OAuth client credentials."""
-        self._credentials.google_oauth_client_id = client_id
-        self._credentials.google_oauth_client_secret = client_secret
-        self._save_credentials()
-    
-    def has_google_oauth_client_credentials(self) -> bool:
-        """Check if Google OAuth client credentials are configured."""
-        return (self._credentials.google_oauth_client_id is not None and 
-                self._credentials.google_oauth_client_secret is not None)
-    
     def get_sed_credentials(self) -> Dict[str, Optional[str]]:
         """Get SED service credentials."""
         return {
@@ -169,28 +117,11 @@ class CredentialsManager:
         self._credentials.sed_password = password
         self._save_credentials()
     
-    def clear_google_credentials(self) -> None:
-        """Clear Google authentication credentials."""
-        self._credentials.google_oauth_token = None
-        self._credentials.google_refresh_token = None
-        self._save_credentials()
-    
-    def clear_google_oauth_client_credentials(self) -> None:
-        """Clear Google OAuth client credentials."""
-        self._credentials.google_oauth_client_id = None
-        self._credentials.google_oauth_client_secret = None
-        self._save_credentials()
-    
     def clear_all_credentials(self) -> None:
         """Clear all stored credentials."""
         self._credentials = AppCredentials()
         if self.credentials_file.exists():
             self.credentials_file.unlink()
-    
-    def has_google_auth(self) -> bool:
-        """Check if Google authentication is configured."""
-        return (self._credentials.google_oauth_token is not None and 
-                self._credentials.google_sheets_url is not None)
     
     def has_sed_credentials(self) -> bool:
         """Check if SED credentials are configured."""
@@ -201,11 +132,8 @@ class CredentialsManager:
     def get_credentials_status(self) -> Dict[str, bool]:
         """Get status of all credential types."""
         return {
-            'google_sheets': self.has_google_auth(),
             'sed_service': self.has_sed_credentials(),
-            'google_sheets_url_set': self._credentials.google_sheets_url is not None,
-            'data_folder_configured': self._credentials.data_folder_path is not None,
-            'google_oauth_client_configured': self.has_google_oauth_client_credentials()
+            'data_folder_configured': self._credentials.data_folder_path is not None
         }
     
     def get_data_folder_path(self) -> Optional[str]:

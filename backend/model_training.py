@@ -49,6 +49,19 @@ class ModelTrainer:
         print(f"Loaded {len(training_data)} training examples")
         return training_data
     
+    def load_training_data_from_csv(self, csv_file_path: str, stars_to_extract: Union[str, List[int], None] = None) -> List[TrainingDataPoint]:
+        """Load training data from CSV file."""
+        from csv_training_data import CSVTrainingDataLoader
+        
+        loader = CSVTrainingDataLoader(csv_file_path)
+        training_data = loader.extract_training_data(stars_to_extract)
+        
+        if len(training_data) == 0:
+            raise ValueError("No training data loaded from CSV file")
+        
+        print(f"Loaded {len(training_data)} training examples from CSV")
+        return training_data
+    
     def preprocess_training_data(self, training_data: List[TrainingDataPoint]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, List[str]]:
         """
         Preprocess training data into tensors suitable for CNN training.
@@ -321,6 +334,63 @@ class ModelTrainer:
         
         print(f"Model saved to: {self.model_save_path}")
         return self.model_save_path
+    
+    def train_from_csv(self, csv_file_path: str, stars_to_extract: Union[str, List[int], None] = None) -> ModelTrainingResult:
+        """Complete training pipeline using CSV data."""
+        try:
+            # Load and preprocess data from CSV
+            print(f"Loading training data from CSV: {csv_file_path}")
+            training_data = self.load_training_data_from_csv(csv_file_path, stars_to_extract)
+            
+            print("Preprocessing training data...")
+            folded_curves, confidence_labels, class_labels, class_names = self.preprocess_training_data(training_data)
+            
+            print("Creating data loaders...")
+            train_loader, val_loader = self.create_data_loaders(folded_curves, confidence_labels, class_labels)
+            
+            print("Training model...")
+            model = self.train_model(train_loader, val_loader, len(class_names))
+            
+            # Calculate final validation loss
+            model.eval()
+            total_loss = 0.0
+            total_batches = 0
+            
+            with torch.no_grad():
+                for batch_curves, batch_conf, batch_classes in val_loader:
+                    batch_curves = batch_curves.to(self.device)
+                    batch_conf = batch_conf.to(self.device)
+                    batch_classes = batch_classes.to(self.device)
+                    
+                    pred_confidence, pred_classes = model(batch_curves)
+                    
+                    conf_loss = nn.MSELoss()(pred_confidence, batch_conf)
+                    class_loss = nn.CrossEntropyLoss()(pred_classes, batch_classes)
+                    total_loss += (conf_loss + class_loss).item()
+                    total_batches += 1
+            
+            final_loss = total_loss / total_batches if total_batches > 0 else 0.0
+            
+            # Save model
+            model_path = self.save_model(model, class_names, final_loss, self.n_epochs, len(folded_curves))
+            
+            return ModelTrainingResult(
+                success=True,
+                epochs_trained=self.n_epochs,
+                final_loss=final_loss,
+                model_path=model_path,
+                training_samples=len(folded_curves)
+            )
+            
+        except Exception as e:
+            print(f"Training failed: {e}")
+            return ModelTrainingResult(
+                success=False,
+                epochs_trained=0,
+                final_loss=float('inf'),
+                model_path="",
+                training_samples=0
+            )
     
     def train_from_google_sheets(self, stars_to_extract: Union[str, List[int], None] = None) -> ModelTrainingResult:
         """Complete training pipeline using Google Sheets data."""

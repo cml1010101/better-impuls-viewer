@@ -3,17 +3,6 @@ import { API_BASE } from './api';
 import './Settings.css';
 
 interface CredentialsStatus {
-  google_sheets: {
-    url_configured: boolean;
-    authenticated: boolean;
-    user_info?: {
-      email: string;
-      name: string;
-    };
-    has_refresh_token: boolean;
-    oauth_configured: boolean;
-    config_error?: string;
-  };
   sed_service: {
     configured: boolean;
   };
@@ -29,10 +18,6 @@ interface SettingsProps {
 
 const Settings: React.FC<SettingsProps> = ({ onClose }) => {
   const [credentialsStatus, setCredentialsStatus] = useState<CredentialsStatus | null>(null);
-  const [googleSheetsUrl, setGoogleSheetsUrl] = useState('');
-  const [googleClientId, setGoogleClientId] = useState('');
-  const [googleClientSecret, setGoogleClientSecret] = useState('');
-  const [showOAuthSetup, setShowOAuthSetup] = useState(false);
   const [sedUrl, setSedUrl] = useState('');
   const [sedUsername, setSedUsername] = useState('');
   const [sedPassword, setSedPassword] = useState('');
@@ -75,7 +60,6 @@ const Settings: React.FC<SettingsProps> = ({ onClose }) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          google_sheets_url: googleSheetsUrl || undefined,
           sed_url: sedUrl || undefined,
           sed_username: sedUsername || undefined,
           sed_password: sedPassword || undefined,
@@ -87,7 +71,6 @@ const Settings: React.FC<SettingsProps> = ({ onClose }) => {
         showMessage('Configuration saved successfully!', 'success');
         await loadCredentialsStatus();
         // Clear form
-        setGoogleSheetsUrl('');
         setSedUrl('');
         setSedUsername('');
         setSedPassword('');
@@ -98,119 +81,6 @@ const Settings: React.FC<SettingsProps> = ({ onClose }) => {
       }
     } catch (error) {
       showMessage(`Error saving configuration: ${error}`, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGoogleAuth = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(`${API_BASE}/oauth/google/authorize`);
-      if (response.ok) {
-        const data = await response.json();
-        // Open OAuth URL in a new window
-        window.open(data.authorization_url, '_blank', 'width=500,height=600');
-        showMessage('Please complete authentication in the new window', 'success');
-        
-        // Poll for authentication status
-        const pollAuth = setInterval(async () => {
-          await loadCredentialsStatus();
-          if (credentialsStatus?.google_sheets.authenticated) {
-            clearInterval(pollAuth);
-            showMessage('Google authentication successful!', 'success');
-          }
-        }, 2000);
-        
-        // Clear polling after 2 minutes
-        setTimeout(() => clearInterval(pollAuth), 120000);
-      } else {
-        const error = await response.json();
-        showMessage(`Error starting authentication: ${error.detail}`, 'error');
-      }
-    } catch (error) {
-      showMessage(`Error starting authentication: ${error}`, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleRevokeGoogleAuth = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(`${API_BASE}/oauth/google/revoke`, {
-        method: 'POST',
-      });
-
-      if (response.ok) {
-        showMessage('Google authentication revoked successfully!', 'success');
-        await loadCredentialsStatus();
-      } else {
-        const error = await response.json();
-        showMessage(`Error revoking authentication: ${error.detail}`, 'error');
-      }
-    } catch (error) {
-      showMessage(`Error revoking authentication: ${error}`, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleConfigureOAuth = async () => {
-    if (!googleClientId.trim() || !googleClientSecret.trim()) {
-      showMessage('Both Client ID and Client Secret are required', 'error');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const response = await fetch(`${API_BASE}/oauth/google/configure`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          client_id: googleClientId.trim(),
-          client_secret: googleClientSecret.trim(),
-        }),
-      });
-
-      if (response.ok) {
-        showMessage('OAuth credentials configured successfully!', 'success');
-        setGoogleClientId('');
-        setGoogleClientSecret('');
-        setShowOAuthSetup(false);
-        // Force immediate reload of credentials status
-        setTimeout(async () => {
-          await loadCredentialsStatus();
-        }, 500);
-      } else {
-        const error = await response.json();
-        showMessage(`Error configuring OAuth: ${error.detail}`, 'error');
-      }
-    } catch (error) {
-      showMessage(`Error configuring OAuth: ${error}`, 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleClearOAuthConfig = async () => {
-    setLoading(true);
-    try {
-      const response = await fetch(`${API_BASE}/oauth/google/configure`, {
-        method: 'DELETE',
-      });
-
-      if (response.ok) {
-        showMessage('OAuth configuration cleared successfully!', 'success');
-        await loadCredentialsStatus();
-      } else {
-        const error = await response.json();
-        showMessage(`Error clearing OAuth config: ${error.detail}`, 'error');
-      }
-    } catch (error) {
-      showMessage(`Error clearing OAuth config: ${error}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -265,244 +135,124 @@ const Settings: React.FC<SettingsProps> = ({ onClose }) => {
       <div className="settings-modal">
         <div className="settings-header">
           <h2>Application Settings</h2>
-          <button className="close-button" onClick={onClose}>×</button>
+          <button onClick={onClose} className="close-btn">×</button>
         </div>
-
+        
         <div className="settings-content">
           {message && (
             <div className={`message ${messageType}`}>
               {message}
             </div>
           )}
-
-          {/* Google Sheets Configuration */}
-          <div className="settings-section">
-            <h3>Google Sheets Configuration</h3>
-            
-            <div className="status-indicator">
-              <span className={`status-dot ${credentialsStatus?.google_sheets.url_configured ? 'green' : 'red'}`}></span>
-              <span>URL Configured: {credentialsStatus?.google_sheets.url_configured ? 'Yes' : 'No'}</span>
-            </div>
-            
-            <div className="status-indicator">
-              <span className={`status-dot ${credentialsStatus?.google_sheets.oauth_configured ? 'green' : 'red'}`}></span>
-              <span>OAuth Configured: {credentialsStatus?.google_sheets.oauth_configured ? 'Yes' : 'No'}</span>
-              {credentialsStatus?.google_sheets.config_error && (
-                <div className="config-error">{credentialsStatus.google_sheets.config_error}</div>
-              )}
-            </div>
-            
-            <div className="status-indicator">
-              <span className={`status-dot ${credentialsStatus?.google_sheets.authenticated ? 'green' : 'red'}`}></span>
-              <span>Authenticated: {credentialsStatus?.google_sheets.authenticated ? 'Yes' : 'No'}</span>
-              {credentialsStatus?.google_sheets.user_info && (
-                <span className="user-info"> ({credentialsStatus.google_sheets.user_info.email})</span>
-              )}
-            </div>
-
-            {!credentialsStatus?.google_sheets.oauth_configured && (
-              <div className="oauth-setup-section">
-                <div className="oauth-setup-header">
-                  <h4>OAuth Setup Required</h4>
-                  <p>You need to set up Google OAuth credentials to authenticate with Google Sheets.</p>
-                  <button 
-                    onClick={() => setShowOAuthSetup(!showOAuthSetup)}
-                    className="setup-toggle-button"
-                  >
-                    {showOAuthSetup ? 'Hide Setup Instructions' : 'Show Setup Instructions'}
-                  </button>
-                </div>
-
-                {showOAuthSetup && (
-                  <div className="oauth-setup-content">
-                    <div className="setup-instructions">
-                      <h5>Setup Instructions:</h5>
-                      <ol>
-                        <li>Go to <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer">Google Cloud Console</a></li>
-                        <li>Create a new project or select an existing one</li>
-                        <li>Enable the Google Sheets API and Google Drive API</li>
-                        <li>Go to "APIs & Services" → "Credentials" → "Create Credentials" → "OAuth client ID"</li>
-                        <li>Choose "Web application" as the application type</li>
-                        <li>Add this redirect URI: <code>http://localhost:8000/oauth/google/callback</code></li>
-                        <li>Copy the Client ID and Client Secret and paste them below</li>
-                      </ol>
-                    </div>
-
-                    <div className="oauth-form">
-                      <div className="form-group">
-                        <label htmlFor="googleClientId">Google OAuth Client ID:</label>
-                        <input
-                          type="text"
-                          id="googleClientId"
-                          value={googleClientId}
-                          onChange={(e) => setGoogleClientId(e.target.value)}
-                          placeholder="your-client-id.apps.googleusercontent.com"
-                        />
-                      </div>
-
-                      <div className="form-group">
-                        <label htmlFor="googleClientSecret">Google OAuth Client Secret:</label>
-                        <input
-                          type="password"
-                          id="googleClientSecret"
-                          value={googleClientSecret}
-                          onChange={(e) => setGoogleClientSecret(e.target.value)}
-                          placeholder="Your client secret"
-                        />
-                      </div>
-
-                      <button 
-                        onClick={handleConfigureOAuth}
-                        disabled={loading || !googleClientId.trim() || !googleClientSecret.trim()}
-                        className="auth-button configure-oauth"
-                      >
-                        {loading ? 'Configuring...' : 'Configure OAuth'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {credentialsStatus?.google_sheets.oauth_configured && (
-              <div className="oauth-configured">
-                <div className="oauth-status">
-                  ✅ OAuth credentials configured successfully
-                </div>
-                <button 
-                  onClick={handleClearOAuthConfig}
-                  disabled={loading}
-                  className="auth-button clear-oauth"
-                >
-                  {loading ? 'Clearing...' : 'Clear OAuth Configuration'}
-                </button>
-              </div>
-            )}
-
-            <div className="form-group">
-              <label htmlFor="googleSheetsUrl">Google Sheets URL:</label>
-              <input
-                type="url"
-                id="googleSheetsUrl"
-                value={googleSheetsUrl}
-                onChange={(e) => setGoogleSheetsUrl(e.target.value)}
-                placeholder="https://docs.google.com/spreadsheets/d/..."
-              />
-            </div>
-
-            <div className="auth-buttons">
-              {credentialsStatus?.google_sheets.oauth_configured && (
-                <>
-                  {!credentialsStatus?.google_sheets.authenticated ? (
-                    <button 
-                      onClick={handleGoogleAuth} 
-                      disabled={loading || !credentialsStatus?.google_sheets.url_configured}
-                      className="auth-button google-auth"
-                    >
-                      {loading ? 'Authenticating...' : 'Authenticate with Google'}
-                    </button>
-                  ) : (
-                    <button 
-                      onClick={handleRevokeGoogleAuth} 
-                      disabled={loading}
-                      className="auth-button revoke-auth"
-                    >
-                      {loading ? 'Revoking...' : 'Revoke Authentication'}
-                    </button>
-                  )}
-                </>
-              )}
-              {!credentialsStatus?.google_sheets.oauth_configured && (
-                <div className="oauth-required-message">
-                  Please configure OAuth credentials above to enable Google Sheets authentication.
-                </div>
-              )}
-            </div>
-          </div>
-
+          
           {/* SED Service Configuration */}
-          <div className="settings-section">
+          <section className="credentials-section">
             <h3>SED Service Configuration</h3>
-            
-            <div className="status-indicator">
-              <span className={`status-dot ${credentialsStatus?.sed_service.configured ? 'green' : 'red'}`}></span>
-              <span>Configured: {credentialsStatus?.sed_service.configured ? 'Yes' : 'No'}</span>
+            <div className="status-info">
+              <span className={`status-indicator ${credentialsStatus?.sed_service.configured ? 'configured' : 'not-configured'}`}>
+                {credentialsStatus?.sed_service.configured ? '✓' : '✗'}
+              </span>
+              <span>SED Service: {credentialsStatus?.sed_service.configured ? 'Configured' : 'Not Configured'}</span>
             </div>
-
-            <div className="form-group">
-              <label htmlFor="sedUrl">SED Service URL:</label>
+            
+            <div className="input-group">
+              <label htmlFor="sed-url">SED Service URL:</label>
               <input
-                type="text"
-                id="sedUrl"
+                id="sed-url"
+                type="url"
                 value={sedUrl}
                 onChange={(e) => setSedUrl(e.target.value)}
-                placeholder="example.com:8080"
+                placeholder="https://sed.example.com/api"
               />
             </div>
-
-            <div className="form-group">
-              <label htmlFor="sedUsername">Username:</label>
+            
+            <div className="input-group">
+              <label htmlFor="sed-username">Username:</label>
               <input
+                id="sed-username"
                 type="text"
-                id="sedUsername"
                 value={sedUsername}
                 onChange={(e) => setSedUsername(e.target.value)}
-                placeholder="Username"
+                placeholder="your-username"
               />
             </div>
-
-            <div className="form-group">
-              <label htmlFor="sedPassword">Password:</label>
+            
+            <div className="input-group">
+              <label htmlFor="sed-password">Password:</label>
               <input
+                id="sed-password"
                 type="password"
-                id="sedPassword"
                 value={sedPassword}
                 onChange={(e) => setSedPassword(e.target.value)}
-                placeholder="Password"
+                placeholder="your-password"
               />
             </div>
-          </div>
+          </section>
 
           {/* Data Folder Configuration */}
-          <div className="settings-section">
+          <section className="credentials-section">
             <h3>Data Folder Configuration</h3>
-            
-            <div className="status-indicator">
-              <span className={`status-dot ${credentialsStatus?.data_folder.configured ? 'green' : 'yellow'}`}></span>
-              <span>Current Path: {credentialsStatus?.data_folder.current_path || 'Using default'}</span>
+            <div className="status-info">
+              <span className={`status-indicator ${credentialsStatus?.data_folder.configured ? 'configured' : 'not-configured'}`}>
+                {credentialsStatus?.data_folder.configured ? '✓' : '✗'}
+              </span>
+              <span>Data Folder: {credentialsStatus?.data_folder.configured ? 'Configured' : 'Not Configured'}</span>
+              {credentialsStatus?.data_folder.current_path && (
+                <div className="current-path">
+                  Current path: {credentialsStatus.data_folder.current_path}
+                </div>
+              )}
             </div>
-
-            <div className="form-group">
-              <label htmlFor="dataFolderPath">Data Folder Path:</label>
+            
+            <div className="input-group">
+              <label htmlFor="data-folder">Data Folder Path:</label>
               <div className="folder-input-group">
                 <input
+                  id="data-folder"
                   type="text"
-                  id="dataFolderPath"
                   value={dataFolderPath}
                   onChange={(e) => setDataFolderPath(e.target.value)}
-                  placeholder="Select folder containing .tbl files"
+                  placeholder="/path/to/your/data/folder"
                 />
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={handleBrowseDataFolder}
-                  className="browse-button"
-                  title="Browse for folder"
+                  className="browse-btn"
                 >
-                  📁
+                  Browse
                 </button>
               </div>
-              <small className="form-help">
-                Select the folder containing your star data files (.tbl format). 
-                Files should be named like "001-telescope.tbl".
-              </small>
+              <small>Specify the folder containing your light curve data files.</small>
             </div>
-          </div>
+          </section>
 
-          <div className="settings-actions">
-            <button 
-              onClick={handleSaveCredentials} 
+          {/* CSV Upload Information */}
+          <section className="credentials-section">
+            <h3>Training Data</h3>
+            <div className="info-box">
+              <h4>Using CSV Files for Training</h4>
+              <p>
+                This application now uses CSV files for training data instead of Google Sheets.
+                To train models, you'll need to upload a CSV file containing period data for your stars.
+              </p>
+              <p><strong>Required CSV columns:</strong></p>
+              <ul>
+                <li><code>Star</code> - Star number/identifier</li>
+                <li><code>LC_Category</code> - Light curve category</li>
+                <li><code>{'{Sensor}_period_1'}</code> and <code>{'{Sensor}_period_2'}</code> - Period data for each sensor</li>
+              </ul>
+              <p><strong>Supported sensors:</strong> CDIPS, ELEANOR, QLP, SPOC, TESS16, TASOC, TGLC, EVEREST, K2SC, K2SFF, K2VARCAT, ZTF_R, ZTF_G, W1, W2</p>
+              <p>
+                Upload your CSV file in the Training page to begin model training.
+              </p>
+            </div>
+          </section>
+
+          <div className="form-actions">
+            <button
+              onClick={handleSaveCredentials}
               disabled={loading}
-              className="save-button"
+              className="save-btn"
             >
               {loading ? 'Saving...' : 'Save Configuration'}
             </button>
