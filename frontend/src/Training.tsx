@@ -232,25 +232,6 @@ const Training: React.FC = () => {
     }
   };
 
-      if (response.ok) {
-        const result: TrainingResult = await response.json();
-        showMessage(
-          `Training completed! Epochs: ${result.epochs_trained}, Final Loss: ${result.final_loss.toFixed(4)}, Samples: ${result.training_samples}`,
-          'success'
-        );
-        await loadModelStatus();
-      } else {
-        const error = await response.json();
-        showMessage(`Training failed: ${error.detail}`, 'error');
-      }
-    } catch (error) {
-      showMessage(`Training error: ${error}`, 'error');
-    } finally {
-      setIsTraining(false);
-      setTrainingProgress('');
-    }
-  };
-
   const handleExportCSV = async () => {
     if (!selectedFile) {
       showMessage('Please select a CSV file first', 'error');
@@ -285,16 +266,6 @@ const Training: React.FC = () => {
       }
     } catch (error) {
       showMessage(`Export failed: ${error}`, 'error');
-    } finally {
-      setIsExporting(false);
-    }
-  };
-      } else {
-        const error = await response.json();
-        showMessage(`Export failed: ${error.detail}`, 'error');
-      }
-    } catch (error) {
-      showMessage(`Export error: ${error}`, 'error');
     } finally {
       setIsExporting(false);
     }
