@@ -506,14 +506,25 @@ from fastapi.responses import Response
 import requests
 
 @app.post("/train_model")
-async def train_model_from_sheets() -> ModelTrainingResult:
-    """Train the CNN model using data from Google Sheets"""
+async def train_model_from_sheets(stars_to_extract: Optional[List[int]] = None) -> ModelTrainingResult:
+    """
+    Train the CNN model using data from Google Sheets with enhanced 5-period strategy.
+    
+    Parameters:
+    - stars_to_extract: Optional list of star numbers to include in training. 
+                       If None, all available stars will be used.
+    
+    The enhanced system generates 5 training samples per light curve:
+    - 1-2 correct periods (high confidence)
+    - 2 periodogram peaks that are not correct (medium confidence) 
+    - 2 random periods (low confidence)
+    """
     try:
         if not Config.GOOGLE_SHEET_URL:
             raise HTTPException(status_code=400, detail="GOOGLE_SHEET_URL not configured in environment variables")
         
         trainer = ModelTrainer()
-        result = trainer.train_from_google_sheets()
+        result = trainer.train_from_google_sheets(stars_to_extract)
         
         if not result.success:
             raise HTTPException(status_code=500, detail="Model training failed")

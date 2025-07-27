@@ -12,7 +12,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 import pickle
 
-from config import Config
+from config import Config, CLASS_NAMES
 from models import TrainingDataPoint, ModelTrainingResult
 from google_sheets import GoogleSheetsLoader
 from period_detection import PeriodValidationCNN, phase_fold_data
@@ -33,13 +33,13 @@ class ModelTrainer:
         self.learning_rate = 0.001
         self.validation_split = 0.2
         
-    def load_training_data(self) -> List[TrainingDataPoint]:
+    def load_training_data(self, stars_to_extract: List[int] = None) -> List[TrainingDataPoint]:
         """Load training data from Google Sheets."""
         if not Config.GOOGLE_SHEET_URL:
             raise ValueError("GOOGLE_SHEET_URL not configured")
         
         loader = GoogleSheetsLoader()
-        training_data = loader.extract_training_data()
+        training_data = loader.extract_training_data(stars_to_extract)
         
         if len(training_data) == 0:
             raise ValueError("No training data loaded from Google Sheets")
@@ -51,6 +51,9 @@ class ModelTrainer:
         """
         Preprocess training data into tensors suitable for CNN training.
         
+        Now handles the 5-period approach where each light curve generates 5 training samples
+        with different period types and confidence levels.
+        
         Returns:
             Tuple of (folded_curves, confidence_labels, class_labels, class_names)
         """
@@ -59,18 +62,14 @@ class ModelTrainer:
         class_labels = []
         
         # Map classification categories to standard labels
-        category_mapping = {
-            'dipper': 'dipper',
-            'distant_peaks': 'distant_peaks', 
-            'close_peak': 'close_peak',
-            'sinusoidal': 'sinusoidal',
-            'other': 'other'
-        }
+        category_mapping = {}
+        for class_name in CLASS_NAMES:
+            category_mapping[class_name] = class_name
         
-        print("Processing training examples...")
+        print("Processing training examples with 5-period strategy...")
         processed_count = 0
         
-        # Process each training example
+        # Process each training example (now each has a single period with metadata)
         for data_point in training_data:
             time_series = np.array(data_point.time_series)
             flux_series = np.array(data_point.flux_series)
@@ -79,39 +78,40 @@ class ModelTrainer:
             data_array = np.column_stack([time_series, flux_series])
             
             # Map the category to standard form
-            mapped_category = category_mapping.get(data_point.lc_category, 'other')
+            mapped_category = category_mapping.get(data_point.lc_category, data_point.lc_category)
             
-            # Process each valid period for this star
-            periods_to_process = []
-            if data_point.period_1 is not None and data_point.period_1 > 0:
-                periods_to_process.append(data_point.period_1)
-            if data_point.period_2 is not None and data_point.period_2 > 0:
-                periods_to_process.append(data_point.period_2)
+            # Use the single period from the training data point
+            period = data_point.period_1
+            if period is None or period <= 0:
+                continue
             
-            for period in periods_to_process:
-                try:
-                    # Phase-fold the data at this period
-                    folded_curve = phase_fold_data(data_array, period, n_bins=100)
-                    
-                    # Skip if folding failed or resulted in all zeros
-                    if np.all(folded_curve == 0) or np.all(np.isnan(folded_curve)):
-                        continue
-                    
-                    # Generate confidence label based on period quality and category
-                    confidence = self._calculate_period_confidence(data_array, period, mapped_category)
-                    
-                    # Store the results
-                    folded_curves.append(folded_curve)
-                    confidence_labels.append(confidence)
-                    class_labels.append(mapped_category)
-                    processed_count += 1
-                    
-                    if processed_count % 50 == 0:
-                        print(f"Processed {processed_count} training samples...")
-                    
-                except Exception as e:
-                    print(f"Error processing period {period} for star {data_point.star_number}: {e}")
+            try:
+                # Phase-fold the data at this period
+                folded_curve = phase_fold_data(data_array, period, n_bins=100)
+                
+                # Skip if folding failed or resulted in all zeros
+                if np.all(folded_curve == 0) or np.all(np.isnan(folded_curve)):
                     continue
+                
+                # Use the confidence from the training data point if available
+                if data_point.period_confidence is not None:
+                    confidence = data_point.period_confidence
+                else:
+                    # Fallback to calculating confidence if not provided
+                    confidence = self._calculate_period_confidence(data_array, period, mapped_category)
+                
+                # Store the results
+                folded_curves.append(folded_curve)
+                confidence_labels.append(confidence)
+                class_labels.append(mapped_category)
+                processed_count += 1
+                
+                if processed_count % 100 == 0:
+                    print(f"Processed {processed_count} training samples...")
+                
+            except Exception as e:
+                print(f"Error processing period {period} for star {data_point.star_number}: {e}")
+                continue
         
         if len(folded_curves) == 0:
             raise ValueError("No valid folded curves generated from training data")
@@ -120,7 +120,7 @@ class ModelTrainer:
         encoded_classes = self.label_encoder.fit_transform(class_labels)
         class_names = list(self.label_encoder.classes_)
         
-        print(f"Generated {len(folded_curves)} training samples")
+        print(f"Generated {len(folded_curves)} training samples using 5-period strategy")
         print(f"Class distribution: {dict(zip(*np.unique(class_labels, return_counts=True)))}")
         print(f"Model classes: {class_names}")
         
@@ -129,6 +129,7 @@ class ModelTrainer:
         confidence_tensor = torch.tensor(confidence_labels, dtype=torch.float32)
         class_tensor = torch.tensor(encoded_classes, dtype=torch.long)
         
+        return folded_curves_tensor, confidence_tensor, class_tensor, class_names
         return folded_curves_tensor, confidence_tensor, class_tensor, class_names
     
     def _calculate_period_confidence(self, data: np.ndarray, period: float, category: str = 'other') -> float:
@@ -319,12 +320,12 @@ class ModelTrainer:
         print(f"Model saved to: {self.model_save_path}")
         return self.model_save_path
     
-    def train_from_google_sheets(self) -> ModelTrainingResult:
+    def train_from_google_sheets(self, stars_to_extract: List[int] = None) -> ModelTrainingResult:
         """Complete training pipeline using Google Sheets data."""
         try:
             # Load and preprocess data
             print("Loading training data from Google Sheets...")
-            training_data = self.load_training_data()
+            training_data = self.load_training_data(stars_to_extract)
             
             print("Preprocessing training data...")
             folded_curves, confidence_labels, class_labels, class_names = self.preprocess_training_data(training_data)

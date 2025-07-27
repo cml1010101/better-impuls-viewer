@@ -58,6 +58,10 @@ class TrainingDataPoint(BaseModel):
     lc_category: str
     time_series: List[float]
     flux_series: List[float]
+    # Additional metadata for enhanced training
+    sensor: Optional[str] = None
+    period_type: Optional[str] = None  # 'correct', 'periodogram_peak', or 'random'
+    period_confidence: Optional[float] = None
 
 
 class ModelTrainingResult(BaseModel):

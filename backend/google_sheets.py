@@ -110,9 +110,14 @@ class GoogleSheetsLoader:
             print(f"Error loading Google Sheets data via API: {e}")
             raise
     
-    def extract_training_data(self, stars_to_extract: list[int]) -> List[TrainingDataPoint]: # type: ignore
+    def extract_training_data(self, stars_to_extract: list[int] = None) -> List[TrainingDataPoint]: # type: ignore
         """
         Extract training data from Google Sheets.
+        
+        For each light curve, generates 5 training samples:
+        - 1-2 correct periods (from Google Sheets data)
+        - 2 peaks from periodogram that are not correct
+        - 2 random periods
         
         Expected columns:
         - A: Star number
@@ -149,10 +154,12 @@ class GoogleSheetsLoader:
         - AN: LC category
         
         Returns:
-            List of TrainingDataPoint objects with valid periods
+            List of TrainingDataPoint objects with 5 periods per light curve
         """
         df = self.load_raw_data()
         training_data = []
+        
+        # Group sensors by data source
         sensors = {
             'cdips': (df.columns[5], df.columns[6]),
             'eleanor': (df.columns[7], df.columns[8]),
@@ -171,59 +178,219 @@ class GoogleSheetsLoader:
             'w2': (df.columns[33], df.columns[34]),
         }
 
-        CATEGORY_COL_NAME = df.columns[35]  # Assuming LC category is in column AL (index 35)
+        CATEGORY_COL_NAME = 'AN' if 'AN' in df.columns else df.columns[min(39, len(df.columns)-1)]  # Column AN for LC category, with safety check
         
         print(f"Processing {len(df)} rows from Google Sheets...")
-        print(f"Expected columns: A (star), AK (period1), AL (period2), AN (category)")
+        print(f"Generating 5 periods per light curve (correct + periodogram peaks + random)")
         
         for index, row in df.iterrows():
             if index == 0:
                 # Skip header row
                 continue
+            
             star_number = index - 1
             if stars_to_extract is not None and star_number not in stars_to_extract:
                 continue
+                
+            # Normalize LC category first
+            try:
+                lc_category = self._normalize_lc_category(row[CATEGORY_COL_NAME])
+            except:
+                print(f"Warning: Could not normalize category for star {star_number}, defaulting to 'stochastic'")
+                lc_category = 'stochastic'
+            
+            # Load time series data for this star
+            time_series, flux_series = self._load_star_data(star_number)
+            
+            # Skip if no valid time series data
+            if len(time_series) == 0 or len(flux_series) == 0:
+                continue
+            
+            # Process each sensor's data to extract training samples
             for sensor, (period1_col, period2_col) in sensors.items():
                 try:
-                    period1 = row[period1_col]
-                    period2 = row[period2_col]
+                    # Get correct periods from Google Sheets
+                    correct_periods = self._extract_correct_periods(row, period1_col, period2_col)
                     
-                    # Skip if both periods are NaN or empty
-                    if pd.isna(period1) and pd.isna(period2):
-                        continue
-                    # If period1 is "no", skip this sensor
-                    if isinstance(period1, str) and period1.lower() == "no":
-                        continue
-
-                    # Load period values, converting to float if necessary
-                    period1 = float(period1) if not pd.isna(period1) else None
-                    period2 = float(period2) if not pd.isna(period2) else None
+                    if len(correct_periods) == 0:
+                        continue  # Skip this sensor if no valid periods
                     
-                    # Normalize LC category
-                    lc_category = self._normalize_lc_category(row[CATEGORY_COL_NAME])
+                    # Generate 5 periods for training per light curve
+                    training_periods = self._generate_training_periods(
+                        time_series, flux_series, correct_periods
+                    )
                     
-                    # Load time series data for this star
-                    time_series, flux_series = self._load_star_data(star_number)
-                    
-                    # Skip if no valid time series data
-                    if len(time_series) == 0 or len(flux_series) == 0:
-                        continue
-                    
-                    # Create TrainingDataPoint object
-                    training_data.append(TrainingDataPoint(
-                        star_number=star_number,
-                        period_1=period1,
-                        period_2=period2,
-                        lc_category=lc_category,
-                        time_series=time_series,
-                        flux_series=flux_series
-                    ))
+                    # Create training data points for each period
+                    for period_info in training_periods:
+                        period_value = period_info['period']
+                        period_type = period_info['type']  # 'correct', 'periodogram_peak', or 'random'
+                        confidence = period_info['confidence']
+                        
+                        training_data.append(TrainingDataPoint(
+                            star_number=star_number,
+                            period_1=period_value,
+                            period_2=None,  # Store as single period for training
+                            lc_category=lc_category,
+                            time_series=time_series.tolist(),
+                            flux_series=flux_series.tolist(),
+                            # Add metadata for training
+                            sensor=sensor,
+                            period_type=period_type,
+                            period_confidence=confidence
+                        ))
+                        
                 except Exception as e:
-                    print(f"Error processing row {index}: {e}")
+                    print(f"Error processing sensor {sensor} for star {star_number}: {e}")
                     continue
         
-        print(f"Extracted {len(training_data)} valid training examples")
+        print(f"Extracted {len(training_data)} training examples with 5-period strategy")
         return training_data
+    
+    def _extract_correct_periods(self, row: pd.Series, period1_col: str, period2_col: str) -> List[float]:
+        """Extract valid correct periods from a Google Sheets row."""
+        correct_periods = []
+        
+        # Extract period 1
+        try:
+            period1 = row[period1_col]
+            if not pd.isna(period1) and period1 != -9 and period1 != "-9" and period1 != "no":
+                period1_float = float(period1)
+                if period1_float > 0:
+                    correct_periods.append(period1_float)
+        except (ValueError, TypeError):
+            pass
+        
+        # Extract period 2
+        try:
+            period2 = row[period2_col]
+            if not pd.isna(period2) and period2 != -9 and period2 != "-9" and period2 != "no":
+                period2_float = float(period2)
+                if period2_float > 0:
+                    correct_periods.append(period2_float)
+        except (ValueError, TypeError):
+            pass
+        
+        return correct_periods
+    
+    def _generate_training_periods(self, time_series: np.ndarray, flux_series: np.ndarray, 
+                                 correct_periods: List[float]) -> List[Dict]:
+        """
+        Generate 5 training periods per light curve:
+        - 1-2 correct periods (high confidence)
+        - 2 periodogram peaks that are not correct (medium confidence)
+        - 2 random periods (low confidence)
+        """
+        training_periods = []
+        
+        # 1. Add correct periods (1-2 samples)
+        for i, period in enumerate(correct_periods[:2]):  # Max 2 correct periods
+            training_periods.append({
+                'period': period,
+                'type': 'correct',
+                'confidence': np.random.uniform(0.85, 0.95)  # High confidence for correct periods
+            })
+        
+        # 2. Generate periodogram peaks that are not correct
+        periodogram_peaks = self._find_incorrect_periodogram_peaks(
+            time_series, flux_series, correct_periods, n_peaks=2
+        )
+        
+        for period in periodogram_peaks:
+            training_periods.append({
+                'period': period,
+                'type': 'periodogram_peak',
+                'confidence': np.random.uniform(0.3, 0.6)  # Medium confidence for periodogram peaks
+            })
+        
+        # 3. Generate random periods
+        random_periods = self._generate_random_periods(time_series, n_periods=2)
+        
+        for period in random_periods:
+            training_periods.append({
+                'period': period,
+                'type': 'random',
+                'confidence': np.random.uniform(0.05, 0.25)  # Low confidence for random periods
+            })
+        
+        # Ensure we have exactly 5 periods by padding if necessary
+        while len(training_periods) < 5:
+            # Add more random periods if we don't have enough
+            extra_random = self._generate_random_periods(time_series, n_periods=1)[0]
+            training_periods.append({
+                'period': extra_random,
+                'type': 'random',
+                'confidence': np.random.uniform(0.05, 0.25)
+            })
+        
+        # Limit to exactly 5 periods
+        return training_periods[:5]
+    
+    def _find_incorrect_periodogram_peaks(self, time_series: np.ndarray, flux_series: np.ndarray, 
+                                        correct_periods: List[float], n_peaks: int = 2) -> List[float]:
+        """Find periodogram peaks that are not the correct periods."""
+        try:
+            # Import period detection functions
+            from period_detection import find_periodogram_periods
+            
+            # Create data array for periodogram analysis
+            data_array = np.column_stack([time_series, flux_series])
+            
+            # Find top periodogram peaks
+            period_power_pairs = find_periodogram_periods(data_array, top_n=20)
+            
+            if len(period_power_pairs) == 0:
+                # Fallback to random periods if periodogram fails
+                return self._generate_random_periods(time_series, n_peaks)
+            
+            incorrect_peaks = []
+            tolerance = 0.1  # 10% tolerance for considering periods "close"
+            
+            for period, power in period_power_pairs:
+                # Check if this period is too close to any correct period
+                is_close_to_correct = False
+                for correct_period in correct_periods:
+                    if abs(period - correct_period) / correct_period < tolerance:
+                        is_close_to_correct = True
+                        break
+                
+                # Add to incorrect peaks if not close to correct periods
+                if not is_close_to_correct:
+                    incorrect_peaks.append(period)
+                    if len(incorrect_peaks) >= n_peaks:
+                        break
+            
+            # If we don't have enough incorrect peaks, fill with random
+            while len(incorrect_peaks) < n_peaks:
+                random_period = self._generate_random_periods(time_series, n_periods=1)[0]
+                incorrect_peaks.append(random_period)
+            
+            return incorrect_peaks[:n_peaks]
+            
+        except Exception as e:
+            print(f"Error finding periodogram peaks: {e}, using random periods instead")
+            return self._generate_random_periods(time_series, n_peaks)
+    
+    def _generate_random_periods(self, time_series: np.ndarray, n_periods: int = 2) -> List[float]:
+        """Generate random periods within reasonable astronomical ranges."""
+        time_span = np.max(time_series) - np.min(time_series)
+        
+        # Generate random periods between 0.1 days and min(time_span/3, 50 days)
+        min_period = 0.1
+        max_period = min(time_span / 3.0, 50.0)
+        
+        if max_period <= min_period:
+            max_period = min_period + 1.0
+        
+        random_periods = []
+        for _ in range(n_periods):
+            # Use log-uniform distribution to better sample period space
+            log_min = np.log10(min_period)
+            log_max = np.log10(max_period)
+            log_period = np.random.uniform(log_min, log_max)
+            period = 10 ** log_period
+            random_periods.append(period)
+        
+        return random_periods
     
     def _normalize_lc_category(self, category: str) -> str:
         """
