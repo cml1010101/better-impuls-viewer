@@ -13,11 +13,6 @@ load_dotenv()
 class Config:
     """Application configuration settings."""
     
-    # Google Sheets configuration - now managed through credentials system
-    # Legacy environment variable support for development
-    GOOGLE_SHEET_URL = os.getenv("GOOGLE_SHEET_URL")
-    GOOGLE_SERVICE_ACCOUNT_KEY_PATH = os.getenv("GOOGLE_SERVICE_ACCOUNT_KEY_PATH", "google_sheets_service_account.json")
-    
     # API configuration
     CORS_ORIGINS = ["http://localhost:5173", "http://localhost:3000", "file://"]
     
@@ -88,17 +83,16 @@ class Config:
     @classmethod
     def validate(cls):
         """Validate that required configuration is present."""
-        # Note: Validation is now handled by credentials manager
-        # This method is kept for backward compatibility
-        from credentials_manager import get_credentials_manager
+        # Basic validation for essential configuration
         try:
-            credentials_manager = get_credentials_manager()
-            if not credentials_manager.get_google_sheets_url():
-                print("Warning: Google Sheets URL not configured in credentials manager")
+            # Check if data directory is configured
+            data_dir = cls.get_data_dir()
+            if not data_dir or not os.path.exists(data_dir):
+                print("Warning: Data directory not configured or not found")
                 return False
             return True
         except Exception:
-            print("Warning: Could not validate credentials")
+            print("Warning: Could not validate configuration")
             return False
 
 # Initialize DATA_DIR as a module-level variable but allow dynamic updates

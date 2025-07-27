@@ -517,7 +517,7 @@ const Training: React.FC = () => {
           <h4>Training Strategy</h4>
           <p>The system uses an enhanced 5-period strategy for each light curve:</p>
           <ul>
-            <li><strong>1-2 correct periods</strong> (high confidence) - from Google Sheets data</li>
+            <li><strong>1-2 correct periods</strong> (high confidence) - from CSV training data</li>
             <li><strong>2 periodogram peaks</strong> (medium confidence) - that are not correct periods</li>
             <li><strong>2 random periods</strong> (low confidence) - for comparison</li>
           </ul>
@@ -531,14 +531,15 @@ const Training: React.FC = () => {
             <li>ZTF (R & G bands), WISE (W1 & W2)</li>
           </ul>
 
-          <h4>Authentication Requirements</h4>
+          <h4>CSV File Requirements</h4>
           <p>
-            Training requires Google Sheets authentication. Make sure to:
+            Upload a CSV file with your training data. The file should contain:
           </p>
           <ul>
-            <li>Configure Google Sheets URL in Settings</li>
-            <li>Complete OAuth authentication</li>
-            <li>Ensure access to the training data spreadsheet</li>
+            <li>Star column with star identifiers</li>
+            <li>LC_Category column with light curve classifications</li>
+            <li>Period columns for each sensor (e.g., CDIPS_period_1, CDIPS_period_2)</li>
+            <li>Any additional period data from available telescopes/sensors</li>
           </ul>
         </div>
       </div>

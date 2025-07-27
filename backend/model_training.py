@@ -1,5 +1,5 @@
 """
-Model training pipeline for CNN period validation using Google Sheets data.
+Model training pipeline for CNN period validation using CSV data.
 """
 
 import torch
@@ -16,12 +16,12 @@ import pickle
 
 from config import Config, CLASS_NAMES
 from models import TrainingDataPoint, ModelTrainingResult
-from google_sheets import GoogleSheetsLoader, parse_star_range
+from csv_training_data import CSVTrainingDataLoader
 from period_detection import PeriodValidationCNN, phase_fold_data
 
 
 class ModelTrainer:
-    """Handles training of the CNN model using Google Sheets data."""
+    """Handles training of the CNN model using CSV training data."""
     
     def __init__(self, model_save_path: str = None):
         """Initialize the model trainer."""
@@ -35,18 +35,18 @@ class ModelTrainer:
         self.learning_rate = 0.001
         self.validation_split = 0.2
         
-    def load_training_data(self, stars_to_extract: Union[str, List[int], None] = None) -> List[TrainingDataPoint]:
-        """Load training data from Google Sheets."""
-        if not Config.GOOGLE_SHEET_URL:
-            raise ValueError("GOOGLE_SHEET_URL not configured")
+    def load_training_data(self, csv_file_path: str, stars_to_extract: Union[str, List[int], None] = None) -> List[TrainingDataPoint]:
+        """Load training data from CSV file."""
+        if not csv_file_path or not os.path.exists(csv_file_path):
+            raise ValueError("Valid CSV file path required")
         
-        loader = GoogleSheetsLoader()
+        loader = CSVTrainingDataLoader(csv_file_path)
         training_data = loader.extract_training_data(stars_to_extract)
         
         if len(training_data) == 0:
-            raise ValueError("No training data loaded from Google Sheets")
+            raise ValueError("No training data loaded from CSV file")
         
-        print(f"Loaded {len(training_data)} training examples")
+        print(f"Loaded {len(training_data)} training examples from {csv_file_path}")
         return training_data
     
     def load_training_data_from_csv(self, csv_file_path: str, stars_to_extract: Union[str, List[int], None] = None) -> List[TrainingDataPoint]:
@@ -392,12 +392,12 @@ class ModelTrainer:
                 training_samples=0
             )
     
-    def train_from_google_sheets(self, stars_to_extract: Union[str, List[int], None] = None) -> ModelTrainingResult:
-        """Complete training pipeline using Google Sheets data."""
+    def train_from_csv(self, csv_file_path: str, stars_to_extract: Union[str, List[int], None] = None) -> ModelTrainingResult:
+        """Complete training pipeline using CSV data."""
         try:
             # Load and preprocess data
-            print("Loading training data from Google Sheets...")
-            training_data = self.load_training_data(stars_to_extract)
+            print(f"Loading training data from CSV file: {csv_file_path}...")
+            training_data = self.load_training_data(csv_file_path, stars_to_extract)
             
             print("Preprocessing training data...")
             folded_curves, confidence_labels, class_labels, class_names = self.preprocess_training_data(training_data)
@@ -532,7 +532,8 @@ def get_model_info(model_path: str = None) -> Dict[str, Any]:
 # Example usage and training script
 if __name__ == "__main__":
     # Set up command line argument parsing
-    parser = argparse.ArgumentParser(description="Train CNN model for period validation using Google Sheets data")
+    parser = argparse.ArgumentParser(description="Train CNN model for period validation using CSV data")
+    parser.add_argument('--csv-file', type=str, required=True, help='Path to CSV training data file')
     parser.add_argument('--stars', type=str, help='Star range to train on (e.g., "30:50", "42", or comma-separated list "1,5,10")')
     parser.add_argument('--force-retrain', action='store_true', help='Force retraining even if model exists')
     parser.add_argument('--model-path', type=str, help='Path to save/load the trained model')
@@ -555,9 +556,9 @@ if __name__ == "__main__":
         
         print(f"Training on stars: {stars_to_extract}")
     
-    # Check if Google Sheets URL is configured
-    if not Config.validate():
-        print("Configuration invalid. Please set GOOGLE_SHEET_URL in .env file")
+    # Validate CSV file exists
+    if not os.path.exists(args.csv_file):
+        print(f"CSV file not found: {args.csv_file}")
         sys.exit(1)
     
     # Initialize trainer
@@ -579,8 +580,8 @@ if __name__ == "__main__":
         sys.exit(0)
     
     # Train model
-    print("Starting model training from Google Sheets data...")
-    result = trainer.train_from_google_sheets(stars_to_extract=stars_to_extract)
+    print(f"Starting model training from CSV data: {args.csv_file}...")
+    result = trainer.train_from_csv(args.csv_file, stars_to_extract=stars_to_extract)
     
     if result.success:
         print(f"Training completed successfully!")
