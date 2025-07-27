@@ -5,12 +5,14 @@ Handles authentication and data extraction from Google Sheets.
 
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Union
 import requests
 from urllib.parse import urlparse
 import re
 import csv
 import os
+import argparse
+import sys
 from config import Config, CLASS_NAMES
 from models import TrainingDataPoint
 
@@ -21,6 +23,58 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import os
 # --- End New Imports ---
+
+
+def parse_star_range(star_range: Union[str, List[int], None]) -> Optional[List[int]]:
+    """
+    Parse star range specification into a list of star numbers.
+    
+    Args:
+        star_range: Can be:
+            - None: Return None (extract all stars)
+            - List[int]: Return as-is
+            - String: Parse range like "30:50" to [30, 31, 32, ..., 50]
+            
+    Returns:
+        List of star numbers or None
+        
+    Examples:
+        parse_star_range("30:50") -> [30, 31, 32, ..., 50]
+        parse_star_range("5:8") -> [5, 6, 7, 8]
+        parse_star_range("42") -> [42]
+        parse_star_range([1, 5, 10]) -> [1, 5, 10]
+        parse_star_range(None) -> None
+    """
+    if star_range is None:
+        return None
+    
+    if isinstance(star_range, list):
+        return star_range
+    
+    if isinstance(star_range, str):
+        star_range = star_range.strip()
+        
+        # Check if it's a range (contains colon)
+        if ':' in star_range:
+            try:
+                start_str, end_str = star_range.split(':', 1)
+                start = int(start_str.strip())
+                end = int(end_str.strip())
+                
+                if start > end:
+                    raise ValueError(f"Invalid range: start ({start}) must be <= end ({end})")
+                
+                return list(range(start, end + 1))
+            except ValueError as e:
+                raise ValueError(f"Invalid star range format '{star_range}': {e}")
+        else:
+            # Single star number
+            try:
+                return [int(star_range)]
+            except ValueError:
+                raise ValueError(f"Invalid star number '{star_range}'")
+    
+    raise ValueError(f"Invalid star range type: {type(star_range)}. Expected str, list, or None")
 
 
 class GoogleSheetsLoader:
@@ -112,7 +166,7 @@ class GoogleSheetsLoader:
             print(f"Error loading Google Sheets data via API: {e}")
             raise
     
-    def extract_training_data(self, stars_to_extract: list[int] = None) -> List[TrainingDataPoint]: # type: ignore
+    def extract_training_data(self, stars_to_extract: Union[str, List[int], None] = None) -> List[TrainingDataPoint]: # type: ignore
         """
         Extract training data from Google Sheets.
         
@@ -120,6 +174,12 @@ class GoogleSheetsLoader:
         - 1-2 correct periods (from Google Sheets data)
         - 2 peaks from periodogram that are not correct
         - 2 random periods
+        
+        Args:
+            stars_to_extract: Can be:
+                - None: Extract all available stars
+                - List[int]: Specific star numbers to extract
+                - String: Range like "30:50" or single number like "42"
         
         Expected columns:
         - A: Star number
@@ -161,6 +221,13 @@ class GoogleSheetsLoader:
         df = self.load_raw_data()
         training_data = []
         
+        # Parse star range specification
+        parsed_stars = parse_star_range(stars_to_extract)
+        if parsed_stars is not None:
+            print(f"Extracting data for stars: {parsed_stars[:10]}{'...' if len(parsed_stars) > 10 else ''} ({len(parsed_stars)} total)")
+        else:
+            print("Extracting data for all available stars")
+        
         # Group sensors by data source
         sensors = {
             'cdips': (df.columns[5], df.columns[6]),
@@ -191,7 +258,7 @@ class GoogleSheetsLoader:
                 continue
             
             star_number = index - 1
-            if stars_to_extract is not None and star_number not in stars_to_extract:
+            if parsed_stars is not None and star_number not in parsed_stars:
                 continue
                 
             # Normalize LC category first
@@ -534,7 +601,7 @@ class GoogleSheetsLoader:
         return categories
     
     def export_training_data_to_csv(self, output_dir: str = "ml-dataset", 
-                                   stars_to_extract: List[int] = None) -> str:
+                                   stars_to_extract: Union[str, List[int], None] = None) -> str:
         """
         Export training data to CSV format for external analysis and training.
         
@@ -543,7 +610,10 @@ class GoogleSheetsLoader:
         
         Args:
             output_dir: Directory to save CSV files
-            stars_to_extract: Optional list of specific stars to extract
+            stars_to_extract: Can be:
+                - None: Export all available stars
+                - List[int]: Specific star numbers to export
+                - String: Range like "30:50" or single number like "42"
             
         Returns:
             Path to the exported CSV file
@@ -672,95 +742,154 @@ class GoogleSheetsLoader:
 
 # Example usage and testing
 if __name__ == "__main__":
-    # Ensure you have a config.py with GOOGLE_SHEET_URL and optionally GOOGLE_SERVICE_ACCOUNT_KEY_PATH
-    # And your google_sheets_service_account.json file in the specified path
-
-    # Create dummy config and models for testing purposes if they don't exist
-    class MockConfig:
-        GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1BTMH782_sIq03m4x-v_mP2zT4o6kQ6JtE-Vp3Yg0pP0/edit#gid=0" # Replace with your actual test sheet URL
-        GOOGLE_SERVICE_ACCOUNT_KEY_PATH = "google_sheets_service_account.json"
-        DATA_DIR = "sample_data" # Ensure this directory exists with some .tbl files
-
-    class MockTrainingDataPoint:
-        def __init__(self, star_number, period_1, period_2, lc_category, time_series, flux_series):
-            self.star_number = star_number
-            self.period_1 = period_1
-            self.period_2 = period_2
-            self.lc_category = lc_category
-            self.time_series = time_series
-            self.flux_series = flux_series
-
-    class MockDataProcessing:
-        # Simple mock functions to avoid circular dependencies for testing
-        @staticmethod
-        def find_longest_x_campaign(data_array, threshold):
-            return data_array
-        @staticmethod
-        def sort_data(data_array):
-            return data_array
-        @staticmethod
-        def remove_y_outliers(data_array):
-            return data_array
-
-    # Monkey patch Config and TrainingDataPoint if running this file directly for testing
-    # In a real application, you'd ensure these are properly imported and available.
-    try:
-        from config import Config
-        from models import TrainingDataPoint
-        from data_processing import find_longest_x_campaign, sort_data, remove_y_outliers
-    except ImportError:
-        print("Running with mock Config, TrainingDataPoint, and data_processing for testing. Ensure actual files exist for production.")
-        Config = MockConfig
-        TrainingDataPoint = MockTrainingDataPoint
-        import sys
-        # Temporarily add mock data_processing to a module for _load_star_data to find it
-        sys.modules['data_processing'] = MockDataProcessing
+    # Set up command line argument parsing
+    parser = argparse.ArgumentParser(description="Extract training data from Google Sheets")
+    parser.add_argument('--stars', type=str, help='Star range to extract (e.g., "30:50", "42", or comma-separated list "1,5,10")')
+    parser.add_argument('--export-csv', action='store_true', help='Export training data to CSV format')
+    parser.add_argument('--output-dir', type=str, default='ml-dataset', help='Output directory for CSV export')
+    parser.add_argument('--test', action='store_true', help='Run test with mock data')
+    
+    args = parser.parse_args()
+    
+    # Parse stars argument
+    stars_to_extract = None
+    if args.stars:
+        # Handle comma-separated lists
+        if ',' in args.stars:
+            try:
+                stars_to_extract = [int(s.strip()) for s in args.stars.split(',')]
+            except ValueError as e:
+                print(f"Error parsing star list '{args.stars}': {e}")
+                sys.exit(1)
+        else:
+            # Handle range or single star
+            stars_to_extract = args.stars
+    
+    if args.test:
+        # Run with test/mock data
+        print("Running test mode with mock data...")
         
-    # Create a dummy sample_data directory and a dummy .tbl file for testing _load_star_data
-    if not os.path.exists(Config.DATA_DIR):
-        os.makedirs(Config.DATA_DIR)
-    dummy_star_number = 12345
-    dummy_tbl_file = os.path.join(Config.DATA_DIR, f"{dummy_star_number}-somefile.tbl")
-    if not os.path.exists(dummy_tbl_file):
-        with open(dummy_tbl_file, 'w') as f:
-            f.write("# Header line 1\n")
-            f.write("# Header line 2\n")
-            f.write("# Header line 3\n")
-            for i in range(10):
-                f.write(f"{i*0.1}\t{np.sin(i*0.1)}\t{i}\n")
-        print(f"Created dummy .tbl file: {dummy_tbl_file}")
+        # Ensure you have a config.py with GOOGLE_SHEET_URL and optionally GOOGLE_SERVICE_ACCOUNT_KEY_PATH
+        # And your google_sheets_service_account.json file in the specified path
 
+        # Create dummy config and models for testing purposes if they don't exist
+        class MockConfig:
+            GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1BTMH782_sIq03m4x-v_mP2zT4o6kQ6JtE-Vp3Yg0pP0/edit#gid=0" # Replace with your actual test sheet URL
+            GOOGLE_SERVICE_ACCOUNT_KEY_PATH = "google_sheets_service_account.json"
+            DATA_DIR = "sample_data" # Ensure this directory exists with some .tbl files
 
+        class MockTrainingDataPoint:
+            def __init__(self, star_number, period_1, period_2, lc_category, time_series, flux_series, **kwargs):
+                self.star_number = star_number
+                self.period_1 = period_1
+                self.period_2 = period_2
+                self.lc_category = lc_category
+                self.time_series = time_series
+                self.flux_series = flux_series
+                for key, value in kwargs.items():
+                    setattr(self, key, value)
+
+        class MockDataProcessing:
+            # Simple mock functions to avoid circular dependencies for testing
+            @staticmethod
+            def find_longest_x_campaign(data_array, threshold):
+                return data_array
+            @staticmethod
+            def sort_data(data_array):
+                return data_array
+            @staticmethod
+            def remove_y_outliers(data_array):
+                return data_array
+
+        # Monkey patch Config and TrainingDataPoint if running this file directly for testing
+        # In a real application, you'd ensure these are properly imported and available.
+        try:
+            from config import Config
+            from models import TrainingDataPoint
+            from data_processing import find_longest_x_campaign, sort_data, remove_y_outliers
+        except ImportError:
+            print("Running with mock Config, TrainingDataPoint, and data_processing for testing. Ensure actual files exist for production.")
+            Config = MockConfig
+            TrainingDataPoint = MockTrainingDataPoint
+            import sys
+            # Temporarily add mock data_processing to a module for _load_star_data to find it
+            sys.modules['data_processing'] = MockDataProcessing
+            
+        # Create a dummy sample_data directory and a dummy .tbl file for testing _load_star_data
+        if not os.path.exists(Config.DATA_DIR):
+            os.makedirs(Config.DATA_DIR)
+        dummy_star_number = 12345
+        dummy_tbl_file = os.path.join(Config.DATA_DIR, f"{dummy_star_number}-somefile.tbl")
+        if not os.path.exists(dummy_tbl_file):
+            with open(dummy_tbl_file, 'w') as f:
+                f.write("# Header line 1\n")
+                f.write("# Header line 2\n")
+                f.write("# Header line 3\n")
+                for i in range(10):
+                    f.write(f"{i*0.1}\t{np.sin(i*0.1)}\t{i}\n")
+            print(f"Created dummy .tbl file: {dummy_tbl_file}")
+        
+        # Test star range parsing
+        print("\nTesting star range parsing:")
+        test_ranges = ["30:35", "42", "1,5,10", None]
+        for test_range in test_ranges:
+            try:
+                parsed = parse_star_range(test_range)
+                print(f"  '{test_range}' -> {parsed}")
+            except ValueError as e:
+                print(f"  '{test_range}' -> ERROR: {e}")
+        
+        if not Config.GOOGLE_SHEET_URL:
+            print("GOOGLE_SHEET_URL not set, skipping Google Sheets tests")
+            sys.exit(0)
+    
     if Config.GOOGLE_SHEET_URL:
         try:
             loader = GoogleSheetsLoader()
-            training_data = loader.extract_training_data()
-            print(f"Successfully loaded {len(training_data)} training examples")
             
-            # Show category distribution
-            categories = loader.get_category_distribution()
-            print("Category distribution:", categories)
-            
-            # Print a sample training point
-            if training_data:
-                print("\nSample TrainingDataPoint:")
-                sample_point = training_data[0]
-                print(f"  Star Number: {sample_point.star_number}")
-                print(f"  Period 1: {sample_point.period_1}")
-                print(f"  Period 2: {sample_point.period_2}")
-                print(f"  LC Category: {sample_point.lc_category}")
-                print(f"  Time Series Length: {len(sample_point.time_series)}")
-                print(f"  Flux Series Length: {len(sample_point.flux_series)}")
+            if args.export_csv:
+                print(f"Exporting training data to CSV...")
+                if stars_to_extract:
+                    print(f"Stars to extract: {stars_to_extract}")
+                csv_path = loader.export_training_data_to_csv(
+                    output_dir=args.output_dir,
+                    stars_to_extract=stars_to_extract
+                )
+                print(f"CSV export completed: {csv_path}")
+            else:
+                # Just extract and show summary
+                print(f"Extracting training data...")
+                if stars_to_extract:
+                    print(f"Stars to extract: {stars_to_extract}")
+                training_data = loader.extract_training_data(stars_to_extract)
+                print(f"Successfully loaded {len(training_data)} training examples")
                 
-            # Test CSV export with a small subset
-            print("\nTesting CSV export...")
-            csv_path = loader.export_training_data_to_csv(
-                output_dir="test_ml_dataset", 
-                stars_to_extract=list(range(5))  # Export first 5 stars as test
-            )
-            print(f"CSV export test completed: {csv_path}")
+                # Show category distribution
+                categories = {}
+                for point in training_data:
+                    cat = point.lc_category
+                    categories[cat] = categories.get(cat, 0) + 1
+                
+                print("Category distribution:", categories)
+                
+                # Print a sample training point
+                if training_data:
+                    print("\nSample TrainingDataPoint:")
+                    sample_point = training_data[0]
+                    print(f"  Star Number: {sample_point.star_number}")
+                    print(f"  Period 1: {sample_point.period_1}")
+                    print(f"  Period 2: {sample_point.period_2}")
+                    print(f"  LC Category: {sample_point.lc_category}")
+                    print(f"  Time Series Length: {len(sample_point.time_series)}")
+                    print(f"  Flux Series Length: {len(sample_point.flux_series)}")
+                    print(f"  Sensor: {getattr(sample_point, 'sensor', 'N/A')}")
+                    print(f"  Period Type: {getattr(sample_point, 'period_type', 'N/A')}")
                 
         except Exception as e:
-            print(f"Error testing Google Sheets loader: {e}")
+            print(f"Error: {e}")
+            if args.test:
+                print("This was expected in test mode if Google Sheets authentication is not set up.")
+            else:
+                sys.exit(1)
     else:
-        print("GOOGLE_SHEET_URL not set in Config.")
+        print("GOOGLE_SHEET_URL not set in Config. Please configure it in your .env file.")

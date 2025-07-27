@@ -6,15 +6,17 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import numpy as np
-from typing import List, Tuple, Dict, Any
+from typing import List, Tuple, Dict, Any, Union
 import os
+import argparse
+import sys
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 import pickle
 
 from config import Config, CLASS_NAMES
 from models import TrainingDataPoint, ModelTrainingResult
-from google_sheets import GoogleSheetsLoader
+from google_sheets import GoogleSheetsLoader, parse_star_range
 from period_detection import PeriodValidationCNN, phase_fold_data
 
 
@@ -33,7 +35,7 @@ class ModelTrainer:
         self.learning_rate = 0.001
         self.validation_split = 0.2
         
-    def load_training_data(self, stars_to_extract: List[int] = None) -> List[TrainingDataPoint]:
+    def load_training_data(self, stars_to_extract: Union[str, List[int], None] = None) -> List[TrainingDataPoint]:
         """Load training data from Google Sheets."""
         if not Config.GOOGLE_SHEET_URL:
             raise ValueError("GOOGLE_SHEET_URL not configured")
@@ -320,7 +322,7 @@ class ModelTrainer:
         print(f"Model saved to: {self.model_save_path}")
         return self.model_save_path
     
-    def train_from_google_sheets(self, stars_to_extract: List[int] = None) -> ModelTrainingResult:
+    def train_from_google_sheets(self, stars_to_extract: Union[str, List[int], None] = None) -> ModelTrainingResult:
         """Complete training pipeline using Google Sheets data."""
         try:
             # Load and preprocess data
@@ -459,17 +461,56 @@ def get_model_info(model_path: str = None) -> Dict[str, Any]:
 
 # Example usage and training script
 if __name__ == "__main__":
+    # Set up command line argument parsing
+    parser = argparse.ArgumentParser(description="Train CNN model for period validation using Google Sheets data")
+    parser.add_argument('--stars', type=str, help='Star range to train on (e.g., "30:50", "42", or comma-separated list "1,5,10")')
+    parser.add_argument('--force-retrain', action='store_true', help='Force retraining even if model exists')
+    parser.add_argument('--model-path', type=str, help='Path to save/load the trained model')
+    
+    args = parser.parse_args()
+    
+    # Parse stars argument
+    stars_to_extract = None
+    if args.stars:
+        # Handle comma-separated lists
+        if ',' in args.stars:
+            try:
+                stars_to_extract = [int(s.strip()) for s in args.stars.split(',')]
+            except ValueError as e:
+                print(f"Error parsing star list '{args.stars}': {e}")
+                sys.exit(1)
+        else:
+            # Handle range or single star
+            stars_to_extract = args.stars
+        
+        print(f"Training on stars: {stars_to_extract}")
+    
     # Check if Google Sheets URL is configured
     if not Config.validate():
         print("Configuration invalid. Please set GOOGLE_SHEET_URL in .env file")
-        exit(1)
+        sys.exit(1)
     
     # Initialize trainer
-    trainer = ModelTrainer()
+    trainer = ModelTrainer(model_save_path=args.model_path)
+    
+    # Check if model already exists and force_retrain is not set
+    if not args.force_retrain and os.path.exists(trainer.model_save_path):
+        print(f"Model already exists at {trainer.model_save_path}")
+        print("Use --force-retrain to retrain the model")
+        
+        # Show model info
+        model_info = get_model_info(trainer.model_save_path)
+        if model_info:
+            print(f"Model info:")
+            print(f"  File size: {model_info['file_size_mb']:.2f} MB")
+            print(f"  Classes: {len(model_info['class_names'])}")
+            print(f"  Training samples: {model_info['training_metadata'].get('training_samples', 'Unknown')}")
+            print(f"  Final loss: {model_info['training_metadata'].get('final_loss', 'Unknown')}")
+        sys.exit(0)
     
     # Train model
     print("Starting model training from Google Sheets data...")
-    result = trainer.train_from_google_sheets()
+    result = trainer.train_from_google_sheets(stars_to_extract=stars_to_extract)
     
     if result.success:
         print(f"Training completed successfully!")
