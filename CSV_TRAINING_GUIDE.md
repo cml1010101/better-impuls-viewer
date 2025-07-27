@@ -4,7 +4,23 @@
 
 The Better Impuls Viewer now supports loading training data from CSV files in addition to Google Sheets. This provides a simpler alternative for users who want to provide their own training data without setting up Google Sheets API authentication.
 
-## Configuration
+## Installation
+
+### Full Installation (Google Sheets + CSV)
+
+```bash
+pip install -r requirements.txt
+```
+
+### CSV-Only Installation (Minimal Dependencies)
+
+If you only plan to use CSV input and don't need Google Sheets integration:
+
+```bash
+pip install -r requirements-csv-only.txt
+```
+
+This excludes the Google API dependencies (`gspread`, `google-auth`, `google-api-python-client`).
 
 ### Environment Variables
 

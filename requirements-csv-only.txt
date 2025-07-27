@@ -1,0 +1,11 @@
+# Minimal requirements for CSV-only training (without Google Sheets dependencies)
+pandas
+matplotlib
+astropy
+torch
+scipy
+python-dotenv
+requests
+fastapi
+uvicorn
+scikit-learn
