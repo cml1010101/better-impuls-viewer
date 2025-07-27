@@ -272,6 +272,15 @@ The configuration supports building for:
 - macOS (`.dmg` or `.app`)
 - Additional Linux formats (`.deb`, `.rpm`)
 
+### Automated Release Distribution
+
+The repository includes a GitHub Actions workflow that automatically builds and distributes the application when a new release is created. See [RELEASE_WORKFLOW.md](RELEASE_WORKFLOW.md) for details on:
+
+- Creating releases that trigger automatic builds
+- Downloading pre-built AppImage files
+- Verifying download integrity with checksums
+- Manual workflow testing
+
 ## File Size Management
 
 To keep the distribution size reasonable:

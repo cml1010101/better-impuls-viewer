@@ -1,0 +1,105 @@
+name: Build and Release Distribution
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Tag name for manual builds'
+        required: false
+        default: 'manual-build'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        cache: 'npm'
+        
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libnss3-dev libatk-bridge2.0-dev libdrm2 libxrandr2 libxcomposite1 libxcursor1 libxdamage1 libxi6 libxtst6 libnss3 libcups2 libxss1 libgconf-2-4 libasound2 libpangocairo-1.0-0 libatk1.0-0 libcairo-gobject2 libgtk-3-0 libgdk-pixbuf2.0-0
+        
+    - name: Make build script executable
+      run: chmod +x scripts/build.sh
+      
+    - name: Build Electron application
+      run: ./scripts/build.sh
+      
+    - name: List build artifacts
+      run: |
+        echo "Build artifacts:"
+        ls -la electron-dist/
+        
+    - name: Find AppImage file
+      id: find_appimage
+      run: |
+        APPIMAGE_FILE=$(find electron-dist/ -name "*.AppImage" | head -1)
+        if [ -z "$APPIMAGE_FILE" ]; then
+          echo "No AppImage file found!"
+          exit 1
+        fi
+        echo "Found AppImage: $APPIMAGE_FILE"
+        echo "appimage_path=$APPIMAGE_FILE" >> $GITHUB_OUTPUT
+        echo "appimage_name=$(basename "$APPIMAGE_FILE")" >> $GITHUB_OUTPUT
+        
+    - name: Set tag name
+      id: set_tag
+      run: |
+        if [ "${{ github.event_name }}" = "release" ]; then
+          echo "tag_name=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+        else
+          echo "tag_name=${{ github.event.inputs.tag_name }}" >> $GITHUB_OUTPUT
+        fi
+        
+    - name: Generate checksums
+      run: |
+        cd electron-dist
+        sha256sum "$(basename "${{ steps.find_appimage.outputs.appimage_path }}")" > better-impuls-viewer-${{ steps.set_tag.outputs.tag_name }}.sha256
+        echo "Generated checksum file:"
+        cat better-impuls-viewer-${{ steps.set_tag.outputs.tag_name }}.sha256
+        
+    - name: Upload AppImage to release
+      if: github.event_name == 'release'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: ${{ steps.find_appimage.outputs.appimage_path }}
+        asset_name: better-impuls-viewer-${{ steps.set_tag.outputs.tag_name }}.AppImage
+        asset_content_type: application/octet-stream
+        
+    - name: Upload checksum file to release
+      if: github.event_name == 'release'
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ github.event.release.upload_url }}
+        asset_path: ./electron-dist/better-impuls-viewer-${{ steps.set_tag.outputs.tag_name }}.sha256
+        asset_name: better-impuls-viewer-${{ steps.set_tag.outputs.tag_name }}.sha256
+        asset_content_type: text/plain
+        
+    - name: Upload build artifacts (manual runs)
+      if: github.event_name == 'workflow_dispatch'
+      uses: actions/upload-artifact@v3
+      with:
+        name: better-impuls-viewer-${{ steps.set_tag.outputs.tag_name }}
+        path: |
+          ${{ steps.find_appimage.outputs.appimage_path }}
+          ./electron-dist/better-impuls-viewer-${{ steps.set_tag.outputs.tag_name }}.sha256
