@@ -180,7 +180,10 @@ const Settings: React.FC<SettingsProps> = ({ onClose }) => {
         setGoogleClientId('');
         setGoogleClientSecret('');
         setShowOAuthSetup(false);
-        await loadCredentialsStatus();
+        // Force immediate reload of credentials status
+        setTimeout(async () => {
+          await loadCredentialsStatus();
+        }, 500);
       } else {
         const error = await response.json();
         showMessage(`Error configuring OAuth: ${error.detail}`, 'error');

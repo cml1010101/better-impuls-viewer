@@ -348,9 +348,9 @@ async def configure_google_oauth_client(request: Dict[str, str]):
         # Store credentials
         credentials_manager.set_google_oauth_client_credentials(client_id, client_secret)
         
-        # Recreate OAuth manager to use new credentials
-        global _oauth_manager
-        _oauth_manager = None
+        # Reload OAuth manager configuration to use new credentials
+        oauth_manager = get_oauth_manager()
+        oauth_manager.reload_config()
         
         return {"success": True, "message": "OAuth client credentials configured successfully"}
     
@@ -370,9 +370,9 @@ async def clear_google_oauth_client():
         # Also clear any existing authentication
         credentials_manager.clear_google_credentials()
         
-        # Recreate OAuth manager
-        global _oauth_manager
-        _oauth_manager = None
+        # Reload OAuth manager configuration
+        oauth_manager = get_oauth_manager()
+        oauth_manager.reload_config()
         
         return {"success": True, "message": "OAuth client credentials cleared successfully"}
     

@@ -44,6 +44,10 @@ class GoogleOAuthManager:
     
     def _setup_oauth_config(self):
         """Setup OAuth configuration from environment or user credentials."""
+        # Reset to defaults first
+        self.config.client_id = "your-client-id.apps.googleusercontent.com"
+        self.config.client_secret = "your-client-secret"
+        
         # Try to get OAuth config from user credentials first
         client_creds = self.credentials_manager.get_google_oauth_client_credentials()
         
@@ -63,6 +67,10 @@ class GoogleOAuthManager:
         env_redirect_uri = os.getenv('GOOGLE_OAUTH_REDIRECT_URI')
         if env_redirect_uri:
             self.config.redirect_uri = env_redirect_uri
+    
+    def reload_config(self):
+        """Reload OAuth configuration from credentials manager."""
+        self._setup_oauth_config()
     
     def get_authorization_url(self, state: Optional[str] = None) -> str:
         """
@@ -103,10 +111,13 @@ class GoogleOAuthManager:
         Returns:
             True if client ID and secret are set and valid, False otherwise
         """
+        # First check if credentials exist and are not empty
+        if not self.config.client_id or not self.config.client_secret:
+            return False
+        
+        # Then check if they're not the placeholder values and have valid format
         return (self.config.client_id != "your-client-id.apps.googleusercontent.com" and
                 self.config.client_secret != "your-client-secret" and
-                self.config.client_id and 
-                self.config.client_secret and
                 '.apps.googleusercontent.com' in self.config.client_id)
     
     def exchange_code_for_tokens(self, authorization_code: str) -> Dict[str, Any]:
