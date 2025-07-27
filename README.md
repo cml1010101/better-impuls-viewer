@@ -110,7 +110,17 @@ Better Impuls Viewer is also available as a cross-platform desktop application b
 
 #### Development Workflow
 
-**Option 1: Full Development Mode (Recommended)**
+**Option 1: One-Command Development (Recommended)**
+```bash
+# Install dependencies once
+./scripts/dev-setup.sh
+
+# Start everything with one command
+npm run dev
+```
+*This automatically starts the frontend dev server, waits for it to be ready, then launches Electron (which starts the backend).*
+
+**Option 2: Manual Multi-Terminal Setup**
 ```bash
 # Terminal 1: Start backend
 cd backend && python3 server.py
@@ -119,26 +129,23 @@ cd backend && python3 server.py
 cd frontend && npm run dev
 
 # Terminal 3: Start Electron in development mode
-npm run electron-dev
+npm run dev-simple
 ```
 
-**Option 2: Quick Development Start**
+**Option 3: Simple Electron Start**
 ```bash
-# Install dependencies
-npm install
-cd frontend && npm install && cd ..
-
-# Start Electron development mode (auto-starts backend)
-npm run electron-dev
+# If frontend is already running on port 5173
+npm run dev-simple
 ```
 
 #### Development Scripts
 
 ```bash
-npm run electron-dev      # Start Electron in development mode with hot reload
+npm run dev               # 🚀 One-command development (starts everything)
+npm run dev-simple        # Start Electron only (expects frontend running)
 npm run start-backend     # Start backend server only
 npm run start-frontend    # Start frontend dev server only
-npm run dev              # Alias for electron-dev
+node scripts/electron-dev.js --help  # See detailed help
 ```
 
 **Development mode features:**

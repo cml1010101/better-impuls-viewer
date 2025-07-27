@@ -6,7 +6,8 @@
   "scripts": {
     "electron": "electron .",
     "electron-dev": "ELECTRON_IS_DEV=1 electron .",
-    "dev": "npm run electron-dev",
+    "dev": "node scripts/electron-dev.js",
+    "dev-simple": "npm run electron-dev",
     "start-backend": "cd backend && python3 server.py",
     "start-frontend": "cd frontend && npm run dev",
     "build-frontend": "cd frontend && npm run build",

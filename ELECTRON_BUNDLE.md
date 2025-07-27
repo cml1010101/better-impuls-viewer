@@ -169,9 +169,26 @@ By default, the application looks for data in:
 
 ### Running in Development Mode
 
-#### Option 1: Full Development Mode (Recommended)
+#### Option 1: One-Command Development (Recommended)
 
-Start all components with hot reloading:
+Start everything automatically with the integrated development script:
+
+```bash
+# Start all services in development mode with one command
+npm run dev
+```
+
+This automatically:
+- ✅ **Checks if frontend dev server is running**, starts it if needed
+- ✅ **Waits for frontend to be ready** before launching Electron
+- ✅ **Starts Electron** which automatically starts the Python backend
+- ✅ **Provides hot reloading** for React frontend changes
+- ✅ **Opens Chrome DevTools** for debugging
+- ✅ **Manages all processes** and cleanup on exit
+
+#### Option 2: Manual Multi-Terminal Setup
+
+For advanced debugging, start components separately:
 
 ```bash
 # Terminal 1: Start the backend server
@@ -183,29 +200,22 @@ cd frontend
 npm run dev
 
 # Terminal 3: Start Electron in development mode
-npm run electron-dev
+npm run dev-simple
 ```
 
 This setup provides:
-- **Hot reloading** for React frontend changes
-- **Live debugging** with Chrome DevTools automatically opened
-- **Backend debugging** with direct Python access
-- **Fast iteration** without rebuilds
+- **Separate process control** for each component
+- **Direct backend debugging** with Python debugger access
+- **Independent process management**
 
-#### Option 2: Quick Development Start
+#### Option 3: Simple Electron Only
 
-Use the development script that starts everything:
+If frontend dev server is already running:
 
 ```bash
-# Start all services in development mode
-npm run electron-dev
+# Start Electron only (expects frontend on port 5173)
+npm run dev-simple
 ```
-
-This automatically:
-- Starts the Python backend with system Python
-- Loads frontend from Vite dev server (http://localhost:5173)
-- Opens Electron window with DevTools enabled
-- Enables context isolation and security features
 
 ### Development Features
 
@@ -227,12 +237,21 @@ const isDev = process.env.ELECTRON_IS_DEV === '1';
 
 ```bash
 # Available npm scripts for development:
-npm run electron-dev          # Start Electron in development mode
-npm run build-frontend        # Build frontend only
-npm run build-backend         # Set up Python virtual environment
-npm run build                 # Build both frontend and backend
-npm run clean                 # Clean all build artifacts
+npm run dev                    # 🚀 One-command development (starts everything)
+npm run dev-simple             # Start Electron only (expects frontend running)
+npm run electron-dev           # Raw Electron dev mode (same as dev-simple)
+npm run start-frontend         # Start frontend dev server only
+npm run start-backend          # Start backend server only
+npm run build-frontend         # Build frontend only
+npm run build-backend          # Set up Python virtual environment
+npm run build                  # Build both frontend and backend
+npm run clean                  # Clean all build artifacts
 ```
+
+**Recommended workflow:**
+1. **First time setup**: `./scripts/dev-setup.sh`
+2. **Daily development**: `npm run dev`
+3. **Building for production**: `./scripts/build.sh`
 
 ### Debugging
 
