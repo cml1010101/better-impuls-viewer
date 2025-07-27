@@ -1,0 +1,76 @@
+/* Periodogram Chart styles */
+.chartSection {
+  background: white;
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.chartSection h3 {
+  margin: 0 0 0.5rem 0;
+  color: #333;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.chartDescription {
+  text-align: center;
+  margin: 0 0 1rem 0;
+  color: #666;
+  font-size: 0.85rem;
+}
+
+.periodInputSection {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+
+.periodLabel {
+  font-weight: 600;
+  color: #333;
+  font-size: 0.9rem;
+}
+
+.periodInput {
+  padding: 0.4rem;
+  border: 2px solid #e1e8ed;
+  border-radius: 4px;
+  width: 100px;
+  font-size: 0.9rem;
+}
+
+.periodButton {
+  padding: 0.4rem 0.8rem;
+  background: #667eea;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: background-color 0.2s;
+}
+
+.periodButton:hover {
+  background: #5a6fd8;
+}
+
+.selectedPeriod {
+  text-align: center;
+  margin: 0.5rem 0 0 0;
+  color: #667eea;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .periodInputSection {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}

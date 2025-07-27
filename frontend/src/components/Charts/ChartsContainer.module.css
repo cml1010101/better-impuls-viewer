@@ -1,0 +1,26 @@
+/* Charts container styles */
+.chartsContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.bottomCharts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+/* Responsive layout */
+@media (min-width: 1200px) {
+  .bottomCharts {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .bottomCharts {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+}

@@ -1,0 +1,55 @@
+/* Control Panel component styles */
+.controlPanel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.controlGroup {
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+}
+
+.controlGroup label {
+  color: white;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.controlGroup select {
+  padding: 0.5rem;
+  border: none;
+  border-radius: 4px;
+  background: white;
+  font-size: 0.9rem;
+}
+
+.controlGroup select:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.3);
+}
+
+.controlGroup select:disabled {
+  background: #f5f5f5;
+  color: #999;
+  cursor: not-allowed;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .controlPanel {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .controlGroup {
+    min-width: unset;
+  }
+}

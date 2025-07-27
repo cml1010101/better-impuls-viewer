@@ -1,0 +1,251 @@
+/* Auto periods section styles */
+.autoPeriodsSection {
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.autoPeriodsSection h3 {
+  margin: 0 0 1rem 0;
+  color: #2d3748;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.autoPeriodsContent {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+.classificationInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.classificationBadge {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.classificationType {
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.classificationRegular { background: #10b981; color: white; }
+.classificationBinary { background: #f59e0b; color: white; }
+.classificationComplex { background: #8b5cf6; color: white; }
+.classificationRegularVariable { background: #10b981; color: white; }
+.classificationEclipsingBinary { background: #ea580c; color: white; }
+.classificationDipper { background: #dc2626; color: white; }
+.classificationBurster { background: #f59e0b; color: white; }
+.classificationComplexVariable { background: #2563eb; color: white; }
+.classificationBeatingVariable { background: #7c2d12; color: white; }
+.classificationBeatingSystem { background: #92400e; color: white; }
+.classificationShapeChanging { background: #059669; color: white; }
+.classificationSpottedStar { background: #0891b2; color: white; }
+.classificationLongTermVariable { background: #7c3aed; color: white; }
+.classificationIrregularVariable { background: #6b7280; color: white; }
+.classificationComplexMultiperiod { background: #7c3aed; color: white; }
+.classificationMultiperiod { background: #9333ea; color: white; }
+.classificationIrregular { background: #6b7280; color: white; }
+.classificationUncertain { background: #94a3b8; color: white; }
+.classificationOther { background: #64748b; color: white; }
+
+.classificationConfidence {
+  padding: 0.25rem 0.75rem;
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  font-weight: 600;
+  color: #4a5568;
+  font-size: 0.85rem;
+}
+
+.classificationDescription {
+  color: #4a5568;
+  font-style: italic;
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.periodsInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.periodResult {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.periodLabel {
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.periodValue {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.periodValue strong {
+  color: #1a202c;
+  font-size: 1.1rem;
+}
+
+.usePeriodBtn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.primaryBtn {
+  background: #3182ce;
+  color: white;
+}
+
+.primaryBtn:hover {
+  background: #2c5aa0;
+  transform: translateY(-1px);
+}
+
+.secondaryBtn {
+  background: #805ad5;
+  color: white;
+}
+
+.secondaryBtn:hover {
+  background: #6b46c1;
+  transform: translateY(-1px);
+}
+
+.methodsInfo {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.methodsHeader {
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 0.75rem;
+}
+
+.methodsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.methodResult {
+  padding: 0.75rem;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.methodResult.success {
+  background: #f0fff4;
+  border-color: #9ae6b4;
+}
+
+.methodResult.failed {
+  background: #fed7d7;
+  border-color: #fc8181;
+}
+
+.methodName {
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+}
+
+.methodStatus {
+  font-size: 1.2rem;
+  margin-bottom: 0.5rem;
+}
+
+.methodPeriods {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.methodPeriod {
+  background: #edf2f7;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #4a5568;
+}
+
+.autoPeriodsError {
+  background: #fed7d7;
+  border: 2px solid #fc8181;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.autoPeriodsError h3 {
+  margin: 0 0 0.5rem 0;
+  color: #c53030;
+  font-size: 1.1rem;
+}
+
+.autoPeriodsError p {
+  margin: 0.25rem 0;
+  color: #742a2a;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .autoPeriodsSection {
+    padding: 1rem;
+  }
+
+  .classificationBadge {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .periodResult {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .periodValue {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .methodsGrid {
+    grid-template-columns: 1fr;
+  }
+}
