@@ -110,14 +110,42 @@ class GoogleSheetsLoader:
             print(f"Error loading Google Sheets data via API: {e}")
             raise
     
-    def extract_training_data(self) -> List[TrainingDataPoint]: # type: ignore
+    def extract_training_data(self, stars_to_extract: list[int]) -> List[TrainingDataPoint]: # type: ignore
         """
         Extract training data from Google Sheets.
         
         Expected columns:
         - A: Star number
-        - AK: Period 1 
-        - AL: Period 2
+        - F: CDIPS period 1
+        - G: CDIPS period 2
+        - H: ELEANOR period 1
+        - I: ELEANOR period 2
+        - J: QLP period 1
+        - K: QLP period 2
+        - L: SPOC period 1
+        - M: SPOC period 2
+        - N: TESS 16 period 1
+        - O: TESS 16 period 2
+        - P: TASOC period 1
+        - Q: TASOC period 2
+        - R: TGLC period 1
+        - S: TGLC period 2
+        - T: EVEREST period 1
+        - U: EVEREST period 2
+        - V: K2SC period 1
+        - W: K2SC period 2
+        - X: K2SFF period 1
+        - Y: K2SFF period 2
+        - Z: K2VARCAT period 1
+        - AA: K2VARCAT period 2
+        - AB: ZTF_R period 1
+        - AC: ZTF_R period 2
+        - AD: ZTF_G period 1
+        - AE: ZTF_G period 2
+        - AF: W1 period 1
+        - AG: W1 period 2
+        - AH: W2 period 1
+        - AI: W2 period 2
         - AN: LC category
         
         Returns:
@@ -153,60 +181,46 @@ class GoogleSheetsLoader:
                 # Skip header row
                 continue
             star_number = index - 1
-            try:
-                # Extract basic data
-                star_number = int(row.iloc[star_col]) if pd.notna(row.iloc[star_col]) else None
-                if star_number is None:
-                    continue
-                
-                # Extract periods
-                period_1 = row.iloc[period1_col] if pd.notna(row.iloc[period1_col]) else None
-                period_2 = row.iloc[period2_col] if pd.notna(row.iloc[period2_col]) else None
-                
-                # Filter out invalid periods (-9 means no valid period)
-                if period_1 == -9 or period_1 == "-9":
-                    period_1 = None
-                if period_2 == -9 or period_2 == "-9":
-                    period_2 = None
-                
-                # Convert to float if valid
-                try:
-                    if period_1 is not None:
-                        period_1 = float(period_1)
-                    if period_2 is not None:
-                        period_2 = float(period_2)
-                except (ValueError, TypeError):
-                    print(f"Warning: Invalid period values for star {star_number}")
-                    continue
-                
-                # Skip if no valid periods
-                if period_1 is None and period_2 is None:
-                    continue
-                
-                # Extract and normalize category
-                lc_category = str(row.iloc[category_col]) if pd.notna(row.iloc[category_col]) else "unknown"
-                lc_category = self._normalize_lc_category(lc_category)
-                
-                # Load actual time series data for this star
-                time_series, flux_series = self._load_star_data(star_number)
-                
-                if len(time_series) > 0:
-                    training_point = TrainingDataPoint(
-                        star_number=star_number,
-                        period_1=period_1,
-                        period_2=period_2,
-                        lc_category=lc_category,
-                        time_series=time_series.tolist(),
-                        flux_series=flux_series.tolist()
-                    )
-                    training_data.append(training_point)
-                    
-                    if len(training_data) % 10 == 0:
-                        print(f"Processed {len(training_data)} valid training examples...")
-                    
-            except Exception as e:
-                print(f"Error processing row {index}: {e}")
+            if stars_to_extract is not None and star_number not in stars_to_extract:
                 continue
+            for sensor, (period1_col, period2_col) in sensors.items():
+                try:
+                    period1 = row[period1_col]
+                    period2 = row[period2_col]
+                    
+                    # Skip if both periods are NaN or empty
+                    if pd.isna(period1) and pd.isna(period2):
+                        continue
+                    # If period1 is "no", skip this sensor
+                    if isinstance(period1, str) and period1.lower() == "no":
+                        continue
+
+                    # Load period values, converting to float if necessary
+                    period1 = float(period1) if not pd.isna(period1) else None
+                    period2 = float(period2) if not pd.isna(period2) else None
+                    
+                    # Normalize LC category
+                    lc_category = self._normalize_lc_category(row[CATEGORY_COL_NAME])
+                    
+                    # Load time series data for this star
+                    time_series, flux_series = self._load_star_data(star_number)
+                    
+                    # Skip if no valid time series data
+                    if len(time_series) == 0 or len(flux_series) == 0:
+                        continue
+                    
+                    # Create TrainingDataPoint object
+                    training_data.append(TrainingDataPoint(
+                        star_number=star_number,
+                        period_1=period1,
+                        period_2=period2,
+                        lc_category=lc_category,
+                        time_series=time_series,
+                        flux_series=flux_series
+                    ))
+                except Exception as e:
+                    print(f"Error processing row {index}: {e}")
+                    continue
         
         print(f"Extracted {len(training_data)} valid training examples")
         return training_data
