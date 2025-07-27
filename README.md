@@ -12,18 +12,30 @@ A modern web application for astronomical data analysis, providing interactive v
 - **Interactive Light Curves**: Scatter plot visualization of time-series photometry
 - **Lomb-Scargle Periodogram**: Frequency analysis with logarithmic period display
 - **Phase Folding**: Manual period input with real-time phase-folded light curve generation
-- **🆕 Enhanced Automatic Period Detection**: CNN-powered period validation with periodogram analysis
-- **🆕 Advanced Variability Classification**: Classifies objects into 8+ types:
-  - Regular Variables (sinusoidal patterns)
-  - Eclipsing Objects (transit dips)
-  - Eclipsing Binaries (multiple periods)
-  - Double-Peaked Variables (distant peaks)
-  - Close Binaries (close peaks)
-  - Complex Multi-period Systems
-  - Irregular Variables
-  - Uncertain Classifications
-- **🆕 Google Sheets Integration**: Train models using real astronomical data from Google Sheets
-- **🆕 Machine Learning Pipeline**: Complete CNN training workflow with real data
+- **🆕 Enhanced Automatic Period Detection**: Dual-method approach combining traditional periodogram analysis with CNN validation
+- **🆕 Advanced Variability Classification**: Intelligent classification into 14 astronomical categories:
+  - Sinusoidal (regular variables)
+  - Double dip (eclipsing systems)
+  - Shape changer (morphology evolution)
+  - Beater (beat frequency patterns)
+  - Beater/complex peak (multi-frequency)
+  - Resolved close peaks (close binary systems)
+  - Resolved distant peaks (separated double systems)
+  - Eclipsing binaries (transit systems)
+  - Pulsator (multi-harmonic pulsations)
+  - Burster (episodic outbursts)
+  - Dipper (YSO-like dipping)
+  - Co-rotating optically thin material (spotted stars)
+  - Long term trend (secular evolution)
+  - Stochastic (irregular/noise-dominated)
+- **🆕 Enhanced Google Sheets Integration**: Complete data pipeline supporting 15+ sensor types (CDIPS, ELEANOR, QLP, SPOC, TESS, TASOC, TGLC, EVEREST, K2SC, K2SFF, K2VARCAT, ZTF, WISE)
+- **🆕 5-Period Training Strategy**: Advanced ML training approach that generates:
+  - 1-2 correct periods from catalog data (high confidence)
+  - 2 incorrect periodogram peaks (medium confidence) 
+  - 2 random periods (low confidence)
+- **🆕 Robust CNN Architecture**: Multi-layer convolutional network for period validation and classification
+- **🆕 Model Persistence**: Automatic model storage and loading - no need to retrain unnecessarily
+- **🆕 CSV Export**: Export training data to CSV format for external analysis and development
 - **Modern UI**: Responsive design with color-coded classification badges and intuitive controls
 
 ## 🛠 Technology Stack
@@ -145,7 +157,9 @@ The repository includes simulated astronomical data with:
 - `GET /periodogram/{star_number}/{telescope}/{campaign_id}` - Get Lomb-Scargle periodogram
 - `GET /phase_fold/{star_number}/{telescope}/{campaign_id}?period={period}` - Get phase-folded data
 - `GET /auto_periods/{star_number}/{telescope}/{campaign_id}` - **Enhanced**: CNN-powered period detection and classification
-- `POST /train_model` - **NEW**: Train CNN model using Google Sheets data
+- `GET /model_status` - **NEW**: Check trained model status and information
+- `POST /train_model` - **NEW**: Train CNN model using Google Sheets data with model persistence
+- `POST /export_training_csv` - **NEW**: Export Google Sheets training data to CSV format
 
 ## 🔬 Machine Learning Features
 
@@ -174,9 +188,81 @@ Train the CNN model using real astronomical data:
 # Set up your Google Sheets URL in .env
 GOOGLE_SHEET_URL=https://docs.google.com/spreadsheets/d/your-sheet-id/edit
 
-# Train the model
+# Check model status before training
+curl http://localhost:8000/model_status
+
+# Train the model with all available stars (skips training if model exists)
 curl -X POST http://localhost:8000/train_model
+
+# Force retrain even if model exists
+curl -X POST http://localhost:8000/train_model \
+  -H "Content-Type: application/json" \
+  -d '{"force_retrain": true}'
+
+# Train with specific stars only
+curl -X POST http://localhost:8000/train_model \
+  -H "Content-Type: application/json" \
+  -d '{"stars_to_extract": [1, 2, 3, 4, 5]}'
 ```
+
+### Model Persistence Features
+- **Automatic Model Storage**: Trained models are saved locally as `trained_cnn_model.pth`
+- **Smart Loading**: System automatically uses existing trained models instead of retraining
+- **Model Information**: Check model status, training metadata, and class information
+- **Force Retrain**: Option to retrain models when needed for updates
+
+### CSV Export for External Analysis
+Export training data to CSV format for external analysis and model development:
+
+```bash
+# Export all training data to CSV
+curl -X POST http://localhost:8000/export_training_csv
+
+# Export specific stars to custom directory
+curl -X POST http://localhost:8000/export_training_csv \
+  -H "Content-Type: application/json" \
+  -d '{"stars_to_extract": [1, 2, 3], "output_dir": "custom_dataset"}'
+```
+
+**CSV Output Features:**
+- **Phase-Folded Data**: Each row contains phase and flux values for machine learning
+- **Rich Metadata**: Includes star number, period, category, sensor, period type, and confidence
+- **Complete Training Set**: Exports all 5 periods per light curve with realistic confidence scores
+- **Analysis Ready**: CSV format suitable for pandas, R, or other analysis tools
+
+### 🎯 Enhanced 5-Period Training Strategy
+
+The system implements an advanced training methodology that generates **5 periods per light curve** to create a robust and balanced dataset:
+
+#### Period Types Generated:
+1. **Correct Periods (1-2 samples)**: 
+   - Source: Google Sheets catalog data (columns AK, AL for legacy; F-AI for multi-sensor)
+   - Confidence: 0.85-0.95 (high)
+   - Purpose: Teaches the CNN what genuine periods look like
+
+2. **Incorrect Periodogram Peaks (2 samples)**:
+   - Source: Lomb-Scargle periodogram peaks that are NOT close to correct periods  
+   - Confidence: 0.3-0.6 (medium)
+   - Purpose: Teaches the CNN to distinguish real periods from spurious peaks
+
+3. **Random Periods (1-2 samples)**:
+   - Source: Randomly generated within astronomical ranges (0.1-50 days)
+   - Confidence: 0.05-0.25 (low)
+   - Purpose: Provides negative examples for robust validation
+
+#### Benefits:
+- **Balanced Dataset**: Equal representation of good, questionable, and bad periods
+- **Realistic Training**: CNN learns from the same types of false positives it will encounter in real analysis
+- **Confidence Calibration**: Network learns to assign appropriate confidence scores
+- **Robust Validation**: Significantly reduces false positive period detections
+
+#### Multi-Sensor Support:
+The system supports 15+ astronomical survey sensors:
+- **TESS**: CDIPS, ELEANOR, QLP, SPOC, TESS-16, TASOC, TGLC
+- **Kepler/K2**: EVEREST, K2SC, K2SFF, K2VARCAT  
+- **Ground-based**: ZTF (R/G bands), WISE (W1/W2)
+
+Each sensor contributes independent training samples, maximizing dataset diversity and model generalization.
 
 See [TRAINING_GUIDE.md](TRAINING_GUIDE.md) for complete documentation.
 

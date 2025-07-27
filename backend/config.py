@@ -32,7 +32,7 @@ class Config:
     MODEL_SAVE_PATH = "trained_cnn_model.pth"
     DEVICE = "cpu"  # Can be changed to "cuda" if GPU is available
 
-    DATA_DIR = os.path.expanduser('~/Documents/impuls-data') if os.path.exists(os.path.expanduser('~/Documents/impuls-data')) else '../sample_data'
+    DATA_DIR = os.path.expanduser('~/Documents/impuls-data') if os.path.exists(os.path.expanduser('~/Documents/impuls-data')) else 'sample_data'
     
     @classmethod
     def validate(cls):
