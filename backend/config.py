@@ -35,7 +35,12 @@ class Config:
 
     @classmethod
     def get_data_dir(cls):
-        """Get the data directory path, supporting Electron environment."""
+        """Get the data directory path, supporting Electron environment and user configuration."""
+        # First check if user has configured a custom data folder
+        configured_path = cls._get_configured_data_folder()
+        if configured_path and os.path.exists(configured_path):
+            return configured_path
+        
         # Check if we're running in a bundled Electron app
         if os.environ.get('DATA_FOLDER'):
             return os.environ.get('DATA_FOLDER')
@@ -58,6 +63,20 @@ class Config:
         return os.path.abspath('sample_data')
     
     @classmethod
+    def _get_configured_data_folder(cls):
+        """Get configured data folder from credentials manager, avoiding circular imports."""
+        try:
+            # Dynamically import to avoid circular dependency
+            import importlib
+            credentials_module = importlib.import_module('credentials_manager')
+            get_credentials_manager = getattr(credentials_module, 'get_credentials_manager')
+            credentials_manager = get_credentials_manager()
+            return credentials_manager.get_data_folder_path()
+        except Exception:
+            # If credentials manager is not available, return None
+            return None
+    
+    @classmethod
     def validate(cls):
         """Validate that required configuration is present."""
         # Note: Validation is now handled by credentials manager
@@ -73,8 +92,16 @@ class Config:
             print("Warning: Could not validate credentials")
             return False
 
-# Initialize DATA_DIR as a module-level variable
+# Initialize DATA_DIR as a module-level variable but allow dynamic updates
 DATA_DIR = Config.get_data_dir()
+
+def get_data_folder():
+    """Get the current data folder path, checking for updates from credentials manager."""
+    global DATA_DIR
+    # Re-evaluate the data directory in case configuration changed
+    current_dir = Config.get_data_dir()
+    DATA_DIR = current_dir
+    return DATA_DIR
 
 CLASS_NAMES = [
     "sinusoidal",

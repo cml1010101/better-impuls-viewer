@@ -11,7 +11,7 @@ import time
 from pydantic import BaseModel
 
 # Import from our modular structure
-from config import Config, DATA_DIR
+from config import Config, get_data_folder
 from models import (
     CampaignInfo, ProcessedData, PeriodogramData, PhaseFoldedData, 
     AutoPeriodsData, ModelTrainingResult
@@ -42,6 +42,7 @@ class CredentialsRequest(BaseModel):
     sed_url: Optional[str] = None
     sed_username: Optional[str] = None
     sed_password: Optional[str] = None
+    data_folder_path: Optional[str] = None
 
 class ModelTrainingRequest(BaseModel):
     stars_to_extract: Optional[List[int]] = None
@@ -198,6 +199,10 @@ async def get_credentials_status():
         },
         "sed_service": {
             "configured": status['sed_service']
+        },
+        "data_folder": {
+            "configured": status['data_folder_configured'],
+            "current_path": get_data_folder()
         }
     }
 
@@ -218,6 +223,19 @@ async def configure_credentials(request: CredentialsRequest):
                 request.sed_username, 
                 request.sed_password
             )
+        
+        # Update data folder path if provided
+        if request.data_folder_path:
+            try:
+                credentials_manager.set_data_folder_path(request.data_folder_path)
+                # Clear relevant caches since data folder changed
+                global _file_cache, _campaigns_cache, _periodogram_cache, _processed_data_cache
+                _file_cache.clear()
+                _campaigns_cache.clear()
+                _periodogram_cache.clear()
+                _processed_data_cache.clear()
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
         
         return {"success": True, "message": "Credentials updated successfully"}
     
@@ -286,6 +304,100 @@ async def get_google_oauth_status():
     """Get current Google OAuth status"""
     oauth_manager = get_oauth_manager()
     return oauth_manager.get_oauth_status()
+
+@app.get("/data_folder/browse")
+async def browse_data_folders(path: str = None):
+    """Browse available directories for data folder selection"""
+    import platform
+    
+    # Default starting paths based on operating system
+    if path is None:
+        if platform.system() == "Windows":
+            base_paths = [os.path.expanduser("~"), "C:\\"]
+        else:
+            base_paths = [os.path.expanduser("~"), "/"]
+    else:
+        if not os.path.exists(path) or not os.path.isdir(path):
+            raise HTTPException(status_code=400, detail="Invalid directory path")
+        base_paths = [path]
+    
+    try:
+        directories = []
+        for base_path in base_paths:
+            if os.path.exists(base_path) and os.path.isdir(base_path):
+                try:
+                    for item in sorted(os.listdir(base_path)):
+                        item_path = os.path.join(base_path, item)
+                        if os.path.isdir(item_path) and not item.startswith('.'):
+                            # Check if this directory contains .tbl files
+                            tbl_count = 0
+                            try:
+                                files = os.listdir(item_path)
+                                tbl_count = len([f for f in files if f.endswith('.tbl')])
+                            except (PermissionError, OSError):
+                                continue
+                            
+                            directories.append({
+                                "name": item,
+                                "path": item_path,
+                                "tbl_files_count": tbl_count,
+                                "parent": base_path
+                            })
+                except (PermissionError, OSError):
+                    continue
+        
+        return {
+            "current_path": base_paths[0] if base_paths else None,
+            "parent_path": os.path.dirname(base_paths[0]) if base_paths and base_paths[0] != "/" else None,
+            "directories": directories[:50]  # Limit to 50 directories for performance
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error browsing directories: {str(e)}")
+
+@app.post("/data_folder/validate")
+async def validate_data_folder(path: str):
+    """Validate that a directory is suitable as a data folder"""
+    if not path:
+        raise HTTPException(status_code=400, detail="Path cannot be empty")
+    
+    if not os.path.exists(path):
+        raise HTTPException(status_code=400, detail="Directory does not exist")
+    
+    if not os.path.isdir(path):
+        raise HTTPException(status_code=400, detail="Path is not a directory")
+    
+    try:
+        # Check if directory contains .tbl files
+        files = os.listdir(path)
+        tbl_files = [f for f in files if f.endswith('.tbl')]
+        
+        # Check for valid star file naming pattern (e.g., 001-telescopename.tbl)
+        star_files = []
+        for f in tbl_files:
+            try:
+                parts = f.split('-')
+                if len(parts) >= 2:
+                    star_num = int(parts[0])
+                    telescope = parts[1].replace('.tbl', '')
+                    if telescope:
+                        star_files.append({'star': star_num, 'telescope': telescope, 'file': f})
+            except (ValueError, IndexError):
+                continue
+        
+        return {
+            "valid": True,
+            "path": os.path.abspath(path),
+            "total_files": len(files),
+            "tbl_files_count": len(tbl_files),
+            "valid_star_files": len(star_files),
+            "sample_files": tbl_files[:10],  # Show first 10 files as examples
+            "message": f"Found {len(star_files)} valid star data files"
+        }
+    
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied accessing directory")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error validating directory: {str(e)}")
 
 @app.get("/cache/stats")
 async def get_cache_stats():

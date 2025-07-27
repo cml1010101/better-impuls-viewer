@@ -20,6 +20,7 @@ class AppCredentials:
     sed_url: Optional[str] = None
     sed_username: Optional[str] = None
     sed_password: Optional[str] = None
+    data_folder_path: Optional[str] = None
 
 
 class CredentialsManager:
@@ -78,7 +79,8 @@ class CredentialsManager:
                 'google_refresh_token': self._credentials.google_refresh_token,
                 'sed_url': self._credentials.sed_url,
                 'sed_username': self._credentials.sed_username,
-                'sed_password': self._credentials.sed_password
+                'sed_password': self._credentials.sed_password,
+                'data_folder_path': self._credentials.data_folder_path
             }
             
             # Remove None values
@@ -173,8 +175,29 @@ class CredentialsManager:
         return {
             'google_sheets': self.has_google_auth(),
             'sed_service': self.has_sed_credentials(),
-            'google_sheets_url_set': self._credentials.google_sheets_url is not None
+            'google_sheets_url_set': self._credentials.google_sheets_url is not None,
+            'data_folder_configured': self._credentials.data_folder_path is not None
         }
+    
+    def get_data_folder_path(self) -> Optional[str]:
+        """Get configured data folder path."""
+        return self._credentials.data_folder_path
+    
+    def set_data_folder_path(self, path: str) -> None:
+        """Set data folder path."""
+        # Validate the path exists
+        if not os.path.exists(path):
+            raise ValueError(f"Data folder path does not exist: {path}")
+        if not os.path.isdir(path):
+            raise ValueError(f"Data folder path is not a directory: {path}")
+        
+        self._credentials.data_folder_path = os.path.abspath(path)
+        self._save_credentials()
+    
+    def clear_data_folder_path(self) -> None:
+        """Clear configured data folder path."""
+        self._credentials.data_folder_path = None
+        self._save_credentials()
 
 
 # Global credentials manager instance

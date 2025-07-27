@@ -15,6 +15,10 @@ interface CredentialsStatus {
   sed_service: {
     configured: boolean;
   };
+  data_folder: {
+    configured: boolean;
+    current_path: string;
+  };
 }
 
 interface SettingsProps {
@@ -27,6 +31,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose }) => {
   const [sedUrl, setSedUrl] = useState('');
   const [sedUsername, setSedUsername] = useState('');
   const [sedPassword, setSedPassword] = useState('');
+  const [dataFolderPath, setDataFolderPath] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [messageType, setMessageType] = useState<'success' | 'error' | ''>('');
@@ -69,23 +74,25 @@ const Settings: React.FC<SettingsProps> = ({ onClose }) => {
           sed_url: sedUrl || undefined,
           sed_username: sedUsername || undefined,
           sed_password: sedPassword || undefined,
+          data_folder_path: dataFolderPath || undefined,
         }),
       });
 
       if (response.ok) {
-        showMessage('Credentials saved successfully!', 'success');
+        showMessage('Configuration saved successfully!', 'success');
         await loadCredentialsStatus();
         // Clear form
         setGoogleSheetsUrl('');
         setSedUrl('');
         setSedUsername('');
         setSedPassword('');
+        setDataFolderPath('');
       } else {
         const error = await response.json();
-        showMessage(`Error saving credentials: ${error.detail}`, 'error');
+        showMessage(`Error saving configuration: ${error.detail}`, 'error');
       }
     } catch (error) {
-      showMessage(`Error saving credentials: ${error}`, 'error');
+      showMessage(`Error saving configuration: ${error}`, 'error');
     } finally {
       setLoading(false);
     }
@@ -142,6 +149,37 @@ const Settings: React.FC<SettingsProps> = ({ onClose }) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleBrowseDataFolder = () => {
+    // Create a hidden file input element for directory selection
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.webkitdirectory = true; // This enables directory selection
+    input.style.display = 'none';
+    
+    input.onchange = (event: any) => {
+      const files = event.target.files;
+      if (files && files.length > 0) {
+        // Get the directory path from the first file
+        const firstFile = files[0];
+        const fullPath = firstFile.webkitRelativePath;
+        const folderPath = fullPath.substring(0, fullPath.lastIndexOf('/'));
+        
+        // In Electron, we can access the full directory path
+        if (firstFile.path) {
+          const dirPath = firstFile.path.substring(0, firstFile.path.lastIndexOf('/'));
+          setDataFolderPath(dirPath);
+        } else {
+          // Fallback for web browsers
+          setDataFolderPath(folderPath);
+        }
+      }
+    };
+    
+    document.body.appendChild(input);
+    input.click();
+    document.body.removeChild(input);
   };
 
   return (
@@ -248,6 +286,41 @@ const Settings: React.FC<SettingsProps> = ({ onClose }) => {
                 onChange={(e) => setSedPassword(e.target.value)}
                 placeholder="Password"
               />
+            </div>
+          </div>
+
+          {/* Data Folder Configuration */}
+          <div className="settings-section">
+            <h3>Data Folder Configuration</h3>
+            
+            <div className="status-indicator">
+              <span className={`status-dot ${credentialsStatus?.data_folder.configured ? 'green' : 'yellow'}`}></span>
+              <span>Current Path: {credentialsStatus?.data_folder.current_path || 'Using default'}</span>
+            </div>
+
+            <div className="form-group">
+              <label htmlFor="dataFolderPath">Data Folder Path:</label>
+              <div className="folder-input-group">
+                <input
+                  type="text"
+                  id="dataFolderPath"
+                  value={dataFolderPath}
+                  onChange={(e) => setDataFolderPath(e.target.value)}
+                  placeholder="Select folder containing .tbl files"
+                />
+                <button 
+                  type="button" 
+                  onClick={handleBrowseDataFolder}
+                  className="browse-button"
+                  title="Browse for folder"
+                >
+                  📁
+                </button>
+              </div>
+              <small className="form-help">
+                Select the folder containing your star data files (.tbl format). 
+                Files should be named like "001-telescope.tbl".
+              </small>
             </div>
           </div>
 
