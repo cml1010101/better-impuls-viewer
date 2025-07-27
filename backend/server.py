@@ -1,5 +1,6 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from typing import List, Dict, Any, Optional
 import os
 import pandas as pd
@@ -7,9 +8,10 @@ import numpy as np
 from functools import lru_cache
 import hashlib
 import time
+from pydantic import BaseModel
 
 # Import from our modular structure
-from config import Config
+from config import Config, DATA_DIR
 from models import (
     CampaignInfo, ProcessedData, PeriodogramData, PhaseFoldedData, 
     AutoPeriodsData, ModelTrainingResult
@@ -20,17 +22,30 @@ from data_processing import (
 )
 from period_detection import calculate_lomb_scargle, determine_automatic_periods
 from model_training import ModelTrainer
+from credentials_manager import get_credentials_manager
+from google_oauth import get_oauth_manager
 
 app = FastAPI(title="Better Impuls Viewer API", version="1.0.0")
 
 # Add CORS middleware to allow frontend to communicate with backend
 app.add_middleware(
     CORSMiddleware,
-
+    allow_origins=Config.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Pydantic models for API requests
+class CredentialsRequest(BaseModel):
+    google_sheets_url: Optional[str] = None
+    sed_url: Optional[str] = None
+    sed_username: Optional[str] = None
+    sed_password: Optional[str] = None
+
+class ModelTrainingRequest(BaseModel):
+    stars_to_extract: Optional[List[int]] = None
+    force_retrain: bool = False
 
 # Cache for processed data to improve performance
 _file_cache = {}
@@ -50,7 +65,7 @@ def get_file_hash(filepath: str) -> str:
 
 def get_data_folder():
     """Get the data folder path"""
-    return Config.DATA_DIR
+    return DATA_DIR
 
 def load_data_file(filepath: str) -> np.ndarray:
     """Load data from a .tbl file with caching"""
@@ -162,6 +177,115 @@ def get_campaigns_for_star_telescope(star_number: int, telescope: str) -> List[C
 async def root():
     """Root endpoint"""
     return {"message": "Better Impuls Viewer API"}
+
+# === Credentials Management Endpoints ===
+
+@app.get("/credentials/status")
+async def get_credentials_status():
+    """Get status of all credential types"""
+    credentials_manager = get_credentials_manager()
+    oauth_manager = get_oauth_manager()
+    
+    status = credentials_manager.get_credentials_status()
+    oauth_status = oauth_manager.get_oauth_status()
+    
+    return {
+        "google_sheets": {
+            "url_configured": status['google_sheets_url_set'],
+            "authenticated": oauth_status['authenticated'],
+            "user_info": oauth_status.get('user_info'),
+            "has_refresh_token": oauth_status['has_refresh_token']
+        },
+        "sed_service": {
+            "configured": status['sed_service']
+        }
+    }
+
+@app.post("/credentials/configure")
+async def configure_credentials(request: CredentialsRequest):
+    """Configure application credentials"""
+    credentials_manager = get_credentials_manager()
+    
+    try:
+        # Update Google Sheets URL if provided
+        if request.google_sheets_url:
+            credentials_manager.set_google_sheets_url(request.google_sheets_url)
+        
+        # Update SED credentials if provided
+        if request.sed_url and request.sed_username and request.sed_password:
+            credentials_manager.set_sed_credentials(
+                request.sed_url, 
+                request.sed_username, 
+                request.sed_password
+            )
+        
+        return {"success": True, "message": "Credentials updated successfully"}
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error updating credentials: {str(e)}")
+
+@app.get("/oauth/google/authorize")
+async def get_google_auth_url():
+    """Get Google OAuth authorization URL"""
+    oauth_manager = get_oauth_manager()
+    
+    try:
+        auth_url = oauth_manager.get_authorization_url()
+        return {"authorization_url": auth_url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating authorization URL: {str(e)}")
+
+@app.get("/oauth/google/callback")
+async def google_oauth_callback(request: Request):
+    """Handle Google OAuth callback"""
+    oauth_manager = get_oauth_manager()
+    
+    # Get authorization code from query parameters
+    query_params = dict(request.query_params)
+    code = query_params.get('code')
+    error = query_params.get('error')
+    
+    if error:
+        raise HTTPException(status_code=400, detail=f"OAuth error: {error}")
+    
+    if not code:
+        raise HTTPException(status_code=400, detail="Authorization code not provided")
+    
+    try:
+        # Exchange code for tokens
+        token_data = oauth_manager.exchange_code_for_tokens(code)
+        
+        # Get user info
+        user_info = oauth_manager.get_user_info()
+        
+        # Return a simple success page or redirect to frontend
+        return RedirectResponse(
+            url=f"/?oauth_success=true&user_email={user_info.get('email', '') if user_info else ''}",
+            status_code=302
+        )
+    
+    except Exception as e:
+        return RedirectResponse(
+            url=f"/?oauth_error={str(e)}",
+            status_code=302
+        )
+
+@app.post("/oauth/google/revoke")
+async def revoke_google_auth():
+    """Revoke Google OAuth authentication"""
+    oauth_manager = get_oauth_manager()
+    
+    try:
+        success = oauth_manager.revoke_authentication()
+        return {"success": success, "message": "Authentication revoked successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error revoking authentication: {str(e)}")
+
+@app.get("/oauth/google/status")
+async def get_google_oauth_status():
+    """Get current Google OAuth status"""
+    oauth_manager = get_oauth_manager()
+    return oauth_manager.get_oauth_status()
 
 @app.get("/cache/stats")
 async def get_cache_stats():
@@ -534,10 +658,7 @@ async def get_model_status() -> Dict[str, Any]:
 
 
 @app.post("/train_model")
-async def train_model_from_sheets(
-    stars_to_extract: Optional[List[int]] = None,
-    force_retrain: bool = False
-) -> ModelTrainingResult:
+async def train_model_from_sheets(request: ModelTrainingRequest) -> ModelTrainingResult:
     """
     Train the CNN model using data from Google Sheets with enhanced 5-period strategy.
     
@@ -553,13 +674,27 @@ async def train_model_from_sheets(
     - 2 random periods (low confidence)
     """
     try:
-        if not Config.GOOGLE_SHEET_URL:
-            raise HTTPException(status_code=400, detail="GOOGLE_SHEET_URL not configured in environment variables")
+        credentials_manager = get_credentials_manager()
+        oauth_manager = get_oauth_manager()
+        
+        # Check authentication
+        if not oauth_manager.is_authenticated():
+            raise HTTPException(
+                status_code=401, 
+                detail="Google Sheets authentication required. Please authenticate in app settings."
+            )
+        
+        # Check if Google Sheets URL is configured
+        if not credentials_manager.get_google_sheets_url():
+            raise HTTPException(
+                status_code=400, 
+                detail="Google Sheets URL not configured. Please configure in app settings."
+            )
         
         from model_training import model_exists, get_model_info
         
         # Check if model already exists and force_retrain is False
-        if not force_retrain and model_exists():
+        if not request.force_retrain and model_exists():
             model_info = get_model_info()
             if model_info:
                 return ModelTrainingResult(
@@ -571,21 +706,20 @@ async def train_model_from_sheets(
                 )
         
         trainer = ModelTrainer()
-        result = trainer.train_from_google_sheets(stars_to_extract)
+        result = trainer.train_from_google_sheets(request.stars_to_extract)
         
         if not result.success:
             raise HTTPException(status_code=500, detail="Model training failed")
         
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error training model: {str(e)}")
 
 
 @app.post("/export_training_csv")
-async def export_training_data_to_csv(
-    stars_to_extract: Optional[List[int]] = None,
-    output_dir: str = "ml-dataset"
-) -> Dict[str, Any]:
+async def export_training_data_to_csv(request: ModelTrainingRequest) -> Dict[str, Any]:
     """
     Export training data from Google Sheets to CSV format for external analysis.
     
@@ -595,21 +729,34 @@ async def export_training_data_to_csv(
     Parameters:
     - stars_to_extract: Optional list of star numbers to include in export. 
                        If None, all available stars will be used.
-    - output_dir: Directory to save the CSV files (default: "ml-dataset")
     
     Returns:
     - Dictionary with export summary information
     """
     try:
-        if not Config.GOOGLE_SHEET_URL:
-            raise HTTPException(status_code=400, detail="GOOGLE_SHEET_URL not configured in environment variables")
+        credentials_manager = get_credentials_manager()
+        oauth_manager = get_oauth_manager()
+        
+        # Check authentication
+        if not oauth_manager.is_authenticated():
+            raise HTTPException(
+                status_code=401, 
+                detail="Google Sheets authentication required. Please authenticate in app settings."
+            )
+        
+        # Check if Google Sheets URL is configured
+        if not credentials_manager.get_google_sheets_url():
+            raise HTTPException(
+                status_code=400, 
+                detail="Google Sheets URL not configured. Please configure in app settings."
+            )
         
         from google_sheets import GoogleSheetsLoader
         
         loader = GoogleSheetsLoader()
         csv_path = loader.export_training_data_to_csv(
-            output_dir=output_dir,
-            stars_to_extract=stars_to_extract
+            output_dir="ml-dataset",
+            stars_to_extract=request.stars_to_extract
         )
         
         # Get file info
@@ -629,11 +776,13 @@ async def export_training_data_to_csv(
             "csv_path": csv_path,
             "file_size_bytes": file_size,
             "total_rows": row_count,
-            "output_directory": output_dir,
-            "stars_requested": stars_to_extract,
+            "output_directory": "ml-dataset",
+            "stars_requested": request.stars_to_extract,
             "message": f"Successfully exported training data to {csv_path}"
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error exporting training data: {str(e)}")
 
@@ -641,15 +790,17 @@ async def export_training_data_to_csv(
 @app.get("/sed/{star_number}")
 async def get_sed_image(star_number: int) -> Response:
     """Get SED image URL for a specific star"""
-    sed_base_url = os.getenv('SED_URL')
-    username = os.getenv('SED_USERNAME')
-    password = os.getenv('SED_PASSWORD')
+    credentials_manager = get_credentials_manager()
+    sed_creds = credentials_manager.get_sed_credentials()
     
-    if not sed_base_url:
-        raise HTTPException(status_code=500, detail="SED_URL not configured in environment variables")
+    if not sed_creds['url'] or not sed_creds['username'] or not sed_creds['password']:
+        raise HTTPException(
+            status_code=400, 
+            detail="SED service credentials not configured. Please configure in app settings."
+        )
     
     # Construct the SED image URL
-    sed_url = f"http://{username}:{password}@{sed_base_url}/{star_number}_SED.png"
+    sed_url = f"http://{sed_creds['username']}:{sed_creds['password']}@{sed_creds['url']}/{star_number}_SED.png"
 
     response = requests.get(sed_url)
     if response.status_code != 200:

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Plot from 'react-plotly.js';
 import './Dashboard.css';
 import { API_BASE } from './api';

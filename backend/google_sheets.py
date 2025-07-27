@@ -16,13 +16,14 @@ import sys
 from config import Config, CLASS_NAMES
 from models import TrainingDataPoint
 
-# --- New Imports for Google Sheets API Authentication ---
+# --- OAuth Authentication Imports ---
 import gspread
-from google.oauth2.service_account import Credentials
+from google.oauth2.credentials import Credentials as OAuthCredentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-import os
-# --- End New Imports ---
+from credentials_manager import get_credentials_manager
+from google_oauth import get_oauth_manager
+# --- End OAuth Authentication Imports ---
 
 
 def parse_star_range(star_range: Union[str, List[int], None]) -> Optional[List[int]]:
@@ -82,9 +83,13 @@ class GoogleSheetsLoader:
     
     def __init__(self, sheet_url: str = None):
         """Initialize with Google Sheets URL and authenticate."""
-        self.sheet_url = sheet_url or Config.GOOGLE_SHEET_URL
+        self.credentials_manager = get_credentials_manager()
+        self.oauth_manager = get_oauth_manager()
+        
+        # Get sheet URL from parameter or stored credentials
+        self.sheet_url = sheet_url or self.credentials_manager.get_google_sheets_url()
         if not self.sheet_url:
-            raise ValueError("Google Sheets URL not provided")
+            raise ValueError("Google Sheets URL not provided. Please configure it in the app settings.")
         
         # Extract spreadsheet ID from the URL
         pattern = r'/spreadsheets/d/([a-zA-Z0-9-_]+)'
@@ -93,30 +98,40 @@ class GoogleSheetsLoader:
             raise ValueError("Invalid Google Sheets URL format. Could not extract Spreadsheet ID.")
         self.spreadsheet_id = match.group(1)
         
-        # --- Authentication Setup ---
+        # --- OAuth Authentication Setup ---
         self.client = self._authenticate_google_sheets()
-        # --- End Authentication Setup ---
+        # --- End OAuth Authentication Setup ---
 
     def _authenticate_google_sheets(self):
-        """Authenticates with Google Sheets API using a Service Account."""
-        scopes = ['https://www.googleapis.com/auth/spreadsheets.readonly'] # For read-only access
+        """Authenticates with Google Sheets API using OAuth2."""
+        scopes = ['https://www.googleapis.com/auth/spreadsheets.readonly']
         
-        service_account_path = Config.GOOGLE_SERVICE_ACCOUNT_KEY_PATH
-        
-        if not os.path.exists(service_account_path):
-            raise FileNotFoundError(
-                f"Service account key file not found at: {service_account_path}. "
-                "Please ensure it's in the correct location and named 'google_sheets_service_account.json' "
-                "or update Config.GOOGLE_SERVICE_ACCOUNT_KEY_PATH."
+        # Get valid OAuth access token
+        access_token = self.oauth_manager.get_valid_access_token()
+        if not access_token:
+            raise Exception(
+                "Google OAuth authentication required. Please authenticate through the app settings."
             )
 
         try:
-            creds = Credentials.from_service_account_file(service_account_path, scopes=scopes)
+            # Create OAuth2 credentials object
+            creds = OAuthCredentials(token=access_token)
             client = gspread.authorize(creds)
-            print("Successfully authenticated with Google Sheets API.")
+            print("Successfully authenticated with Google Sheets API using OAuth2.")
             return client
         except Exception as e:
-            raise Exception(f"Failed to authenticate with Google Sheets API: {e}")
+            # Try to refresh token and retry once
+            refreshed_token = self.oauth_manager.refresh_access_token()
+            if refreshed_token:
+                try:
+                    creds = OAuthCredentials(token=refreshed_token)
+                    client = gspread.authorize(creds)
+                    print("Successfully authenticated with Google Sheets API using refreshed OAuth2 token.")
+                    return client
+                except Exception as retry_e:
+                    raise Exception(f"Failed to authenticate with Google Sheets API after token refresh: {retry_e}")
+            else:
+                raise Exception(f"Failed to authenticate with Google Sheets API: {e}. Please re-authenticate in app settings.")
 
     # The _convert_to_csv_url method is no longer strictly needed if using gspread
     # but can be kept for consistency or if you ever needed direct CSV export for other reasons.
