@@ -6,11 +6,15 @@
   "scripts": {
     "electron": "electron .",
     "electron-dev": "ELECTRON_IS_DEV=1 electron .",
+    "dev": "npm run electron-dev",
+    "start-backend": "cd backend && python3 server.py",
+    "start-frontend": "cd frontend && npm run dev",
     "build-frontend": "cd frontend && npm run build",
     "build-backend": "python3 -m venv python-env && python-env/bin/pip install -r requirements.txt",
     "build": "npm run build-frontend && npm run build-backend",
     "package": "electron-builder",
     "dist": "npm run build && npm run package",
+    "build-all": "./scripts/build.sh",
     "test-bundle": "./scripts/test-bundle.sh",
     "clean": "rm -rf dist electron-dist build python-env bundled-backend node_modules frontend/node_modules"
   },

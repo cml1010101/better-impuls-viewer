@@ -80,6 +80,122 @@ npm install
 npm run dev
 ```
 
+## 📦 Electron Desktop Application
+
+Better Impuls Viewer is also available as a cross-platform desktop application built with Electron. This provides a single-file, easy-to-install solution that bundles both the React frontend and FastAPI backend.
+
+### Desktop App Features
+
+- **Single File Distribution**: Self-contained AppImage for Linux (Windows/macOS coming soon)
+- **No Setup Required**: All dependencies bundled, just download and run
+- **Automatic Backend**: Python server starts automatically when app launches
+- **Offline Capable**: Works without internet connection using local data
+- **Professional UI**: Native desktop window with proper OS integration
+
+### Quick Start (Desktop App)
+
+1. **Download the latest release** from [GitHub Releases](https://github.com/cml1010101/better-impuls-viewer/releases)
+2. **Make executable and run**:
+   ```bash
+   chmod +x "Better Impuls Viewer-1.0.0.AppImage"
+   ./"Better Impuls Viewer-1.0.0.AppImage"
+   ```
+
+### Electron Development Setup
+
+#### Prerequisites for Electron Development
+- Node.js 18+
+- Python 3.8+
+- All backend dependencies: `pip install fastapi uvicorn pandas numpy astropy torch scipy scikit-learn python-dotenv requests pydantic`
+
+#### Development Workflow
+
+**Option 1: Full Development Mode (Recommended)**
+```bash
+# Terminal 1: Start backend
+cd backend && python3 server.py
+
+# Terminal 2: Start frontend dev server  
+cd frontend && npm run dev
+
+# Terminal 3: Start Electron in development mode
+npm run electron-dev
+```
+
+**Option 2: Quick Development Start**
+```bash
+# Install dependencies
+npm install
+cd frontend && npm install && cd ..
+
+# Start Electron development mode (auto-starts backend)
+npm run electron-dev
+```
+
+#### Development Scripts
+
+```bash
+npm run electron-dev      # Start Electron in development mode with hot reload
+npm run start-backend     # Start backend server only
+npm run start-frontend    # Start frontend dev server only
+npm run dev              # Alias for electron-dev
+```
+
+**Development mode features:**
+- ✅ Hot reloading for React frontend
+- ✅ Chrome DevTools automatically opened
+- ✅ Live Python backend debugging
+- ✅ No build step required
+- ✅ Fast iteration cycle
+
+#### Building and Packaging
+
+**Automated Build (Recommended)**
+```bash
+# Complete build and package in one command
+./scripts/build.sh
+
+# Test the generated package
+./scripts/test-bundle.sh
+```
+
+**Manual Build Steps**
+```bash
+# 1. Build frontend
+npm run build-frontend
+
+# 2. Set up Python virtual environment
+npm run build-backend
+
+# 3. Package with Electron
+npm run package
+
+# 4. Create distributable
+npm run dist
+```
+
+**Available Build Scripts**
+```bash
+npm run build-all        # Run complete build script
+npm run build            # Build frontend and backend
+npm run package          # Create Electron package
+npm run dist            # Build and package everything
+npm run test-bundle      # Test the packaged application
+npm run clean           # Clean all build artifacts
+```
+
+#### Package Testing
+
+```bash
+# Comprehensive testing
+./scripts/test-bundle.sh
+
+# Manual testing
+./electron-dist/Better\ Impuls\ Viewer-1.0.0.AppImage
+```
+
+For complete development and packaging documentation, see [ELECTRON_BUNDLE.md](ELECTRON_BUNDLE.md).
+
 ## 🚦 Usage
 
 1. **Start the Backend**: Run `python server.py` in the `backend` directory (serves on port 8000)

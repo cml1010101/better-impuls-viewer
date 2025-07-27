@@ -136,35 +136,395 @@ By default, the application looks for data in:
 2. `./sample_data` (bundled sample data)
 3. Environment variable `DATA_FOLDER`
 
-## Development vs Production
+## Development Workflow
 
-### Development Mode
+### Setting Up Development Environment
+
+1. **Install Prerequisites:**
+   ```bash
+   # Node.js 18+ and npm
+   node --version  # Should be 18+
+   npm --version
+   
+   # Python 3.8+
+   python3 --version  # Should be 3.8+
+   
+   # Install Python dependencies for backend development
+   pip install fastapi uvicorn pandas numpy astropy torch scipy scikit-learn python-dotenv requests pydantic
+   ```
+
+2. **Clone and Install Dependencies:**
+   ```bash
+   git clone <repository>
+   cd better-impuls-viewer
+   
+   # Install Electron dependencies
+   npm install
+   
+   # Install frontend dependencies
+   cd frontend
+   npm install
+   cd ..
+   ```
+
+### Running in Development Mode
+
+#### Option 1: Full Development Mode (Recommended)
+
+Start all components with hot reloading:
 
 ```bash
-# Start in development mode
+# Terminal 1: Start the backend server
+cd backend
+python3 server.py
+
+# Terminal 2: Start the frontend dev server
+cd frontend
+npm run dev
+
+# Terminal 3: Start Electron in development mode
 npm run electron-dev
 ```
 
-In development:
-- Frontend runs on Vite dev server (http://localhost:5173)
-- Backend runs with system Python
-- Hot reloading for frontend changes
-- Debug tools enabled
+This setup provides:
+- **Hot reloading** for React frontend changes
+- **Live debugging** with Chrome DevTools automatically opened
+- **Backend debugging** with direct Python access
+- **Fast iteration** without rebuilds
 
-### Production Mode
+#### Option 2: Quick Development Start
+
+Use the development script that starts everything:
+
+```bash
+# Start all services in development mode
+npm run electron-dev
+```
+
+This automatically:
+- Starts the Python backend with system Python
+- Loads frontend from Vite dev server (http://localhost:5173)
+- Opens Electron window with DevTools enabled
+- Enables context isolation and security features
+
+### Development Features
+
+**In development mode, the Electron app:**
+- ✅ Uses system Python (no virtual environment needed)
+- ✅ Loads frontend from Vite dev server with hot reload
+- ✅ Automatically opens Chrome DevTools for debugging
+- ✅ Shows detailed console logs for both frontend and backend
+- ✅ Allows real-time code changes without restart
+- ✅ Supports breakpoints and debugging in both React and Python code
+
+**Environment Detection:**
+```javascript
+// The app detects development mode via:
+const isDev = process.env.ELECTRON_IS_DEV === '1';
+```
+
+### Development Scripts
+
+```bash
+# Available npm scripts for development:
+npm run electron-dev          # Start Electron in development mode
+npm run build-frontend        # Build frontend only
+npm run build-backend         # Set up Python virtual environment
+npm run build                 # Build both frontend and backend
+npm run clean                 # Clean all build artifacts
+```
+
+### Debugging
+
+#### Frontend Debugging
+- **DevTools**: Automatically opened in development mode
+- **React DevTools**: Install browser extension for component debugging
+- **Console Logs**: Check browser console for frontend errors
+- **Network Tab**: Monitor API calls to backend
+
+#### Backend Debugging
+- **Python Console**: Direct access to Python debugger (pdb, ipdb)
+- **API Testing**: Use curl or Postman to test endpoints directly
+- **Logs**: Backend logs appear in terminal where you started server.py
+
+```bash
+# Example: Test backend API directly
+curl http://localhost:8000/stars
+curl http://localhost:8000/telescopes/1
+curl http://localhost:8000/data/1/Hubble/1
+```
+
+#### Electron Main Process Debugging
+- **Console Logs**: Check terminal where electron was started
+- **Process Monitoring**: Backend process logs appear in Electron console
+
+### Development vs Production
+
+| Feature | Development Mode | Production Mode |
+|---------|------------------|-----------------|
+| Frontend Source | Vite dev server (http://localhost:5173) | Built files in `frontend/dist/` |
+| Backend Python | System Python | Bundled virtual environment |
+| Hot Reloading | ✅ Enabled | ❌ Disabled |
+| DevTools | ✅ Auto-opened | ❌ Disabled |
+| File Watching | ✅ Enabled | ❌ Disabled |
+| Optimization | ❌ Development builds | ✅ Production optimized |
+| Startup Time | ⚡ Fast (no build) | 🐌 Slower (bundle loading) |
+| File Size | 📦 Minimal | 📦 ~100-300MB bundle |
+
+## Production Packaging
+
+### Quick Packaging
+
+For a complete build and package:
+
+```bash
+# One-command build and package
+./scripts/build.sh
+
+# Test the generated package
+./scripts/test-bundle.sh
+```
+
+### Manual Packaging Steps
+
+#### Step 1: Build Components
+
+```bash
+# 1. Clean previous builds
+npm run clean
+
+# 2. Install dependencies
+npm install
+cd frontend && npm install && cd ..
+
+# 3. Build frontend
+npm run build-frontend
+
+# 4. Set up Python environment
+npm run build-backend
+
+# 5. Create Electron package
+npm run package
+```
+
+#### Step 2: Verify the Build
+
+```bash
+# Check build artifacts
+ls -la electron-dist/
+
+# Test the application
+./scripts/test-bundle.sh
+```
+
+### Packaging Options
+
+#### Available Build Targets
+
+```bash
+# Build for current platform (auto-detected)
+npm run package
+
+# Build distributable package
+npm run dist
+
+# Clean and rebuild everything
+npm run clean && npm run dist
+```
+
+#### Build Configuration
+
+The electron-builder configuration in `package.json`:
+
+```json
+{
+  "build": {
+    "appId": "com.better-impuls-viewer.app",
+    "productName": "Better Impuls Viewer",
+    "directories": {
+      "output": "electron-dist"
+    },
+    "files": [
+      "electron/**/*",
+      "frontend/dist/**/*", 
+      "backend/**/*",
+      "sample_data/**/*",
+      "python-env/**/*"
+    ],
+    "linux": {
+      "target": "AppImage",
+      "category": "Science"
+    }
+  }
+}
+```
+
+#### Cross-Platform Building
+
+```bash
+# Build for specific platforms (requires platform-specific dependencies)
+npx electron-builder --linux
+npx electron-builder --win
+npx electron-builder --mac
+
+# Build for multiple platforms
+npx electron-builder --linux --win --mac
+```
+
+### Generated Package Structure
+
+```
+electron-dist/
+├── Better Impuls Viewer-1.0.0.AppImage  # Linux AppImage (self-contained)
+├── linux-unpacked/                      # Unpacked Linux build
+│   ├── better-impuls-viewer             # Executable
+│   ├── resources/                       # App resources
+│   │   ├── app.asar                    # Packaged application
+│   │   ├── backend/                    # Python backend
+│   │   ├── frontend/dist/              # Built React app
+│   │   ├── python-env/                 # Virtual environment
+│   │   └── sample_data/                # Sample data
+│   └── ...
+└── latest-linux.yml                     # Update metadata
+```
+
+### Package Testing and Validation
+
+#### Automated Testing
+
+```bash
+# Run comprehensive test suite
+./scripts/test-bundle.sh
+```
+
+This tests:
+- ✅ Python environment integrity
+- ✅ Frontend build completeness  
+- ✅ Backend startup functionality
+- ✅ Sample data availability
+- ✅ Executable permissions
+- ✅ File sizes and dependencies
+
+#### Manual Testing
 
 ```bash
 # Run the packaged application
-./electron-dist/better-impuls-viewer
-# or
 ./electron-dist/Better\ Impuls\ Viewer-1.0.0.AppImage
+
+# Or run unpacked version
+./electron-dist/linux-unpacked/better-impuls-viewer
 ```
 
-In production:
-- Frontend served from built files
-- Backend runs with bundled Python environment
-- Optimized for performance
-- Single executable file
+**Test checklist:**
+- [ ] Application starts without errors
+- [ ] Backend server starts automatically  
+- [ ] Frontend loads and displays correctly
+- [ ] All API endpoints respond correctly
+- [ ] Data visualization works
+- [ ] Settings and authentication flows work
+- [ ] Application closes cleanly
+
+### Distribution
+
+#### AppImage Distribution
+
+The generated `.AppImage` file:
+- **Self-contained**: No installation required
+- **Portable**: Run from anywhere  
+- **Cross-distribution**: Works on most Linux distributions
+- **Single file**: Easy to distribute and download
+
+```bash
+# Make executable and run
+chmod +x "Better Impuls Viewer-1.0.0.AppImage"
+./"Better Impuls Viewer-1.0.0.AppImage"
+```
+
+#### Size Optimization
+
+To reduce package size:
+
+```bash
+# Check package contents and sizes
+du -sh electron-dist/
+du -sh python-env/
+du -sh frontend/dist/
+
+# Optimize Python environment
+pip install --no-cache-dir <packages>
+pip uninstall <unused-packages>
+
+# Optimize frontend bundle
+cd frontend && npm run build -- --minify
+```
+
+### Troubleshooting Packaging
+
+#### Common Issues
+
+1. **Large Package Size (>500MB)**
+   ```bash
+   # Check what's taking space
+   du -sh python-env/* | sort -h
+   
+   # Remove unnecessary packages
+   pip uninstall <package-name>
+   ```
+
+2. **Missing Python Dependencies**
+   ```bash
+   # Test Python environment
+   python-env/bin/python -c "import fastapi, pandas, numpy"
+   
+   # Reinstall if needed
+   rm -rf python-env
+   npm run build-backend
+   ```
+
+3. **Frontend Build Failures**
+   ```bash
+   # Clean and rebuild frontend
+   cd frontend
+   rm -rf dist node_modules
+   npm install
+   npm run build
+   ```
+
+4. **Electron Packaging Errors**
+   ```bash
+   # Clean electron cache
+   npx electron-builder install-app-deps
+   npm run clean
+   npm run package
+   ```
+
+#### Debug Mode for Packaging
+
+```bash
+# Enable verbose electron-builder output
+DEBUG=electron-builder npm run package
+
+# Test with development environment
+ELECTRON_IS_DEV=1 ./electron-dist/better-impuls-viewer
+```
+
+### CI/CD and Automated Builds
+
+The repository includes GitHub Actions workflow for automated building:
+
+```yaml
+# .github/workflows/release.yml
+# Automatically builds and publishes on GitHub releases
+```
+
+For local CI-like builds:
+```bash
+# Simulate CI environment
+npm ci  # Clean install
+npm run clean
+npm run dist
+./scripts/test-bundle.sh
+```
 
 ## Packaging Details
 
