@@ -9,7 +9,7 @@ import os
 # Add backend to path
 sys.path.insert(0, 'backend')
 
-from google_sheets import CSVDataLoader, parse_star_range
+from csv_data_loader import CSVDataLoader, parse_star_range
 from model_training import ModelTrainer
 from config import Config
 

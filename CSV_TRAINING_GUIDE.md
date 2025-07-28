@@ -2,25 +2,13 @@
 
 ## Overview
 
-The Better Impuls Viewer now supports loading training data from CSV files in addition to Google Sheets. This provides a simpler alternative for users who want to provide their own training data without setting up Google Sheets API authentication.
+The Better Impuls Viewer supports loading training data from CSV files. This provides a simple way for users to provide their own training data without external dependencies.
 
 ## Installation
-
-### Full Installation (Google Sheets + CSV)
 
 ```bash
 pip install -r requirements.txt
 ```
-
-### CSV-Only Installation (Minimal Dependencies)
-
-If you only plan to use CSV input and don't need Google Sheets integration:
-
-```bash
-pip install -r requirements-csv-only.txt
-```
-
-This excludes the Google API dependencies (`gspread`, `google-auth`, `google-api-python-client`).
 
 ### Environment Variables
 
@@ -28,10 +16,8 @@ Add the CSV file path to your `.env` file:
 
 ```bash
 # CSV Training Data Configuration
-CSV_TRAINING_DATA_PATH=training_data.csv
+CSV_TRAINING_DATA_PATH=sample_training_data.csv
 ```
-
-If both `GOOGLE_SHEET_URL` and `CSV_TRAINING_DATA_PATH` are configured, the system will prefer Google Sheets by default. You can explicitly specify the data source when training models.
 
 ## CSV Format
 
@@ -81,7 +67,7 @@ The following categories are supported (case-insensitive):
 ### Basic CSV Loading
 
 ```python
-from google_sheets import CSVDataLoader
+from csv_data_loader import CSVDataLoader
 
 # Load training data from CSV
 loader = CSVDataLoader("training_data.csv")
@@ -104,7 +90,7 @@ training_data = trainer.load_training_data(
 ### Automatic Data Source Selection
 
 ```python
-# Will use CSV if Google Sheets URL is not configured
+# Will use CSV if  URL is not configured
 trainer = ModelTrainer()
 training_data = trainer.load_training_data(data_source="auto")
 ```
@@ -142,11 +128,11 @@ You can test CSV functionality using the provided test script:
 python test_csv_functionality.py
 ```
 
-## Migration from Google Sheets
+## Migration from 
 
-If you're currently using Google Sheets and want to switch to CSV:
+If you're currently using  and want to switch to CSV:
 
-1. Export your Google Sheets data to CSV format
+1. Export your  data to CSV format
 2. Ensure the CSV has the required columns: `star_number`, `period_1`, `lc_category`
 3. Add optional columns: `period_2`, `sensor` as needed
 4. Set `CSV_TRAINING_DATA_PATH` in your `.env` file
@@ -164,9 +150,9 @@ The CSV loader provides clear error messages for common issues:
 
 ## Performance
 
-CSV loading is significantly faster than Google Sheets API calls and doesn't require internet connectivity or API authentication. It's recommended for:
+CSV loading is significantly faster than  API calls and doesn't require internet connectivity or API authentication. It's recommended for:
 
 - Local development
 - Automated training pipelines
-- Environments without Google API access
-- Large datasets that exceed Google Sheets limits
+- Environments on local systems
+- Large datasets that exceed  limits

@@ -1,5 +1,5 @@
 """
-Model training pipeline for CNN period validation using Google Sheets data.
+Model training pipeline for CNN period validation using CSV data.
 """
 
 import torch
@@ -16,12 +16,12 @@ import pickle
 
 from config import Config, CLASS_NAMES
 from models import TrainingDataPoint, ModelTrainingResult
-from google_sheets import GoogleSheetsLoader, CSVDataLoader, parse_star_range
+from csv_data_loader import CSVDataLoader, parse_star_range
 from period_detection import PeriodValidationCNN, phase_fold_data
 
 
 class ModelTrainer:
-    """Handles training of the CNN model using Google Sheets or CSV data."""
+    """Handles training of the CNN model using CSV data."""
     
     def __init__(self, model_save_path: str = None):
         """Initialize the model trainer."""
@@ -36,443 +36,340 @@ class ModelTrainer:
         self.validation_split = 0.2
         
     def load_training_data(self, stars_to_extract: Union[str, List[int], None] = None, 
-                          data_source: str = "auto", csv_file_path: str = None) -> List[TrainingDataPoint]:
+                          csv_file_path: str = None) -> List[TrainingDataPoint]:
         """
-        Load training data from Google Sheets or CSV file.
+        Load training data from CSV file.
         
         Args:
             stars_to_extract: Star range specification
-            data_source: "auto", "google_sheets", or "csv"
             csv_file_path: Path to CSV file (overrides Config.CSV_TRAINING_DATA_PATH)
             
         Returns:
             List of TrainingDataPoint objects
         """
-        if data_source == "csv" or (data_source == "auto" and not Config.GOOGLE_SHEET_URL):
-            return self._load_training_data_from_csv(stars_to_extract, csv_file_path)
-        elif data_source == "google_sheets" or (data_source == "auto" and Config.GOOGLE_SHEET_URL):
-            return self._load_training_data_from_google_sheets(stars_to_extract)
-        else:
-            raise ValueError("No valid data source configured. Set GOOGLE_SHEET_URL or CSV_TRAINING_DATA_PATH")
-    
-    def _load_training_data_from_csv(self, stars_to_extract: Union[str, List[int], None] = None,
-                                   csv_file_path: str = None) -> List[TrainingDataPoint]:
-        """Load training data from CSV file."""
         csv_path = csv_file_path or Config.CSV_TRAINING_DATA_PATH
         
         if not os.path.exists(csv_path):
-            raise FileNotFoundError(f"CSV training data file not found: {csv_path}")
-        
+            raise ValueError(f"CSV training data file not found: {csv_path}")
+            
+        return self._load_training_data_from_csv(stars_to_extract, csv_path)
+    
+    def _load_training_data_from_csv(self, stars_to_extract: Union[str, List[int], None] = None, 
+                                    csv_file_path: str = None) -> List[TrainingDataPoint]:
+        """Load training data from CSV file."""
+        csv_path = csv_file_path or Config.CSV_TRAINING_DATA_PATH
         loader = CSVDataLoader(csv_path)
-        training_data = loader.extract_training_data(stars_to_extract)
-        
-        if len(training_data) == 0:
-            raise ValueError("No training data loaded from CSV")
-        
-        print(f"Loaded {len(training_data)} training examples from CSV")
-        return training_data
+        return loader.extract_training_data(stars_to_extract)
     
-    def _load_training_data_from_google_sheets(self, stars_to_extract: Union[str, List[int], None] = None) -> List[TrainingDataPoint]:
-        """Load training data from Google Sheets."""
-        if not Config.GOOGLE_SHEET_URL:
-            raise ValueError("GOOGLE_SHEET_URL not configured")
-        
-        loader = GoogleSheetsLoader()
-        training_data = loader.extract_training_data(stars_to_extract)
-        
-        if len(training_data) == 0:
-            raise ValueError("No training data loaded from Google Sheets")
-        
-        print(f"Loaded {len(training_data)} training examples from Google Sheets")
-        return training_data
-    
-    def preprocess_training_data(self, training_data: List[TrainingDataPoint]) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, List[str]]:
+    def prepare_training_samples(self, training_data: List[TrainingDataPoint], 
+                               n_bins: int = 100) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         """
-        Preprocess training data into tensors suitable for CNN training.
+        Prepare training samples by phase-folding the data.
         
-        Now handles the 5-period approach where each light curve generates 5 training samples
-        with different period types and confidence levels.
-        
+        Args:
+            training_data: List of TrainingDataPoint objects
+            n_bins: Number of phase bins for phase-folded curves
+            
         Returns:
-            Tuple of (folded_curves, confidence_labels, class_labels, class_names)
+            Tuple of (X, y, categories) where:
+            - X: Phase-folded light curves (n_samples, n_bins)
+            - y: Encoded category labels
+            - categories: Original category names
         """
-        folded_curves = []
-        confidence_labels = []
-        class_labels = []
+        print(f"Preparing {len(training_data)} training samples with {n_bins} phase bins...")
         
-        # Map classification categories to standard labels
-        category_mapping = {}
-        for class_name in CLASS_NAMES:
-            category_mapping[class_name] = class_name
+        phase_folded_curves = []
+        categories = []
+        valid_samples = 0
         
-        print("Processing training examples with 5-period strategy...")
-        processed_count = 0
-        
-        # Process each training example (now each has a single period with metadata)
-        for data_point in training_data:
-            time_series = np.array(data_point.time_series)
-            flux_series = np.array(data_point.flux_series)
-            
-            # Create data array for phase folding
-            data_array = np.column_stack([time_series, flux_series])
-            
-            # Map the category to standard form
-            mapped_category = category_mapping.get(data_point.lc_category, data_point.lc_category)
-            
-            # Use the single period from the training data point
-            period = data_point.period_1
-            if period is None or period <= 0:
-                continue
-            
+        for i, data_point in enumerate(training_data):
             try:
-                # Phase-fold the data at this period
-                folded_curve = phase_fold_data(data_array, period, n_bins=100)
-                
-                # Skip if folding failed or resulted in all zeros
-                if np.all(folded_curve == 0) or np.all(np.isnan(folded_curve)):
+                # Skip if no valid period
+                if data_point.period_1 is None or data_point.period_1 <= 0:
                     continue
                 
-                # Use the confidence from the training data point if available
-                if data_point.period_confidence is not None:
-                    confidence = data_point.period_confidence
-                else:
-                    # Fallback to calculating confidence if not provided
-                    confidence = self._calculate_period_confidence(data_array, period, mapped_category)
+                # Create data array for phase folding
+                time_series = np.array(data_point.time_series)
+                flux_series = np.array(data_point.flux_series)
                 
-                # Store the results
-                folded_curves.append(folded_curve)
-                confidence_labels.append(confidence)
-                class_labels.append(mapped_category)
-                processed_count += 1
+                if len(time_series) == 0 or len(flux_series) == 0:
+                    continue
                 
-                if processed_count % 100 == 0:
-                    print(f"Processed {processed_count} training samples...")
+                data_array = np.column_stack([time_series, flux_series])
                 
+                # Phase-fold the data
+                folded_curve = phase_fold_data(data_array, data_point.period_1, n_bins=n_bins)
+                
+                # Skip if folding failed or resulted in invalid data
+                if np.all(folded_curve == 0) or np.all(np.isnan(folded_curve)) or len(folded_curve) != n_bins:
+                    continue
+                
+                # Normalize the flux values
+                folded_curve = (folded_curve - np.mean(folded_curve)) / (np.std(folded_curve) + 1e-8)
+                
+                phase_folded_curves.append(folded_curve)
+                categories.append(data_point.lc_category)
+                valid_samples += 1
+                
+                if (i + 1) % 100 == 0:
+                    print(f"Processed {i + 1}/{len(training_data)} samples ({valid_samples} valid)")
+                    
             except Exception as e:
-                print(f"Error processing period {period} for star {data_point.star_number}: {e}")
+                print(f"Error processing sample {i} (star {data_point.star_number}): {e}")
                 continue
         
-        if len(folded_curves) == 0:
-            raise ValueError("No valid folded curves generated from training data")
+        if len(phase_folded_curves) == 0:
+            raise ValueError("No valid training samples generated")
         
-        # Encode class labels
-        encoded_classes = self.label_encoder.fit_transform(class_labels)
-        class_names = list(self.label_encoder.classes_)
+        print(f"Successfully prepared {len(phase_folded_curves)} valid training samples")
         
-        print(f"Generated {len(folded_curves)} training samples using 5-period strategy")
-        print(f"Class distribution: {dict(zip(*np.unique(class_labels, return_counts=True)))}")
-        print(f"Model classes: {class_names}")
+        # Convert to numpy arrays
+        X = np.array(phase_folded_curves)
         
-        # Convert to tensors
-        folded_curves_tensor = torch.tensor(folded_curves, dtype=torch.float32).unsqueeze(1)  # Add channel dimension
-        confidence_tensor = torch.tensor(confidence_labels, dtype=torch.float32)
-        class_tensor = torch.tensor(encoded_classes, dtype=torch.long)
+        # Ensure X is 2D (samples, features)
+        if len(X.shape) == 1:
+            X = X.reshape(-1, 1)
+        elif len(X.shape) > 2:
+            X = X.reshape(len(X), -1)
         
-        return folded_curves_tensor, confidence_tensor, class_tensor, class_names
-        return folded_curves_tensor, confidence_tensor, class_tensor, class_names
+        # Encode categories
+        unique_categories = list(set(categories))
+        print(f"Found {len(unique_categories)} unique categories: {unique_categories}")
+        
+        self.label_encoder.fit(unique_categories)
+        y = self.label_encoder.transform(categories)
+        
+        return X, y, np.array(categories)
     
-    def _calculate_period_confidence(self, data: np.ndarray, period: float, category: str = 'other') -> float:
-        """
-        Calculate a confidence score for a given period based on the folded light curve quality and known category.
-        
-        This incorporates both curve quality metrics and category-specific confidence adjustments.
-        """
-        try:
-            # Calculate some basic metrics for the folded curve
-            folded_curve = phase_fold_data(data, period, n_bins=50)
-            
-            # Measure the "structure" in the folded curve
-            # A good period should show clear patterns vs random noise
-            
-            # 1. Smoothness metric - good periods show smooth variations
-            curve_diff = np.diff(folded_curve)
-            smoothness = 1.0 / (1.0 + np.std(curve_diff))
-            
-            # 2. Amplitude metric - real periods often show significant amplitude
-            amplitude = np.std(folded_curve)
-            amplitude_score = min(amplitude / 0.5, 1.0)  # Normalize
-            
-            # 3. Periodicity check - fold again at 2x period and compare
-            try:
-                folded_2x = phase_fold_data(data, period * 2, n_bins=50)
-                correlation = np.corrcoef(folded_curve, folded_2x)[0, 1]
-                periodicity_score = max(0, correlation)  # Positive correlation is good
-            except:
-                periodicity_score = 0.5
-            
-            # 4. Category-specific adjustments
-            category_confidence = {
-                'dipper': 0.85,      # High confidence for clear dip patterns
-                'sinusoidal': 0.90,  # Very high confidence for smooth patterns
-                'distant_peaks': 0.75, # Good confidence for double peaks
-                'close_peak': 0.70,  # Moderate confidence for close peaks
-                'other': 0.50        # Lower baseline for irregular
-            }
-            
-            base_confidence = category_confidence.get(category, 0.5)
-            
-            # Combine metrics with category bias
-            quality_score = (smoothness + amplitude_score + periodicity_score) / 3
-            confidence = (quality_score * 0.7) + (base_confidence * 0.3)
-            
-            # Add some small randomness to simulate real-world uncertainty
-            confidence += np.random.normal(0, 0.05)
-            confidence = np.clip(confidence, 0.1, 0.95)
-            
-            return float(confidence)
-            
-        except Exception:
-            # Default confidence based on category if calculation fails
-            return {'dipper': 0.7, 'sinusoidal': 0.8, 'distant_peaks': 0.6, 
-                   'close_peak': 0.6, 'other': 0.4}.get(category, 0.5)
-    
-    def create_data_loaders(self, folded_curves: torch.Tensor, confidence_labels: torch.Tensor, 
-                           class_labels: torch.Tensor) -> Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
-        """Create training and validation data loaders."""
+    def create_pytorch_datasets(self, X: np.ndarray, y: np.ndarray) -> Tuple[torch.utils.data.DataLoader, torch.utils.data.DataLoader]:
+        """Create PyTorch DataLoaders for training and validation."""
         # Split data
-        train_curves, val_curves, train_conf, val_conf, train_classes, val_classes = train_test_split(
-            folded_curves, confidence_labels, class_labels, 
-            test_size=self.validation_split, random_state=42, stratify=class_labels
+        X_train, X_val, y_train, y_val = train_test_split(
+            X, y, test_size=self.validation_split, random_state=42, stratify=y
         )
         
+        # Convert to PyTorch tensors
+        X_train_tensor = torch.FloatTensor(X_train).unsqueeze(1)  # Add channel dimension
+        y_train_tensor = torch.LongTensor(y_train)
+        X_val_tensor = torch.FloatTensor(X_val).unsqueeze(1)
+        y_val_tensor = torch.LongTensor(y_val)
+        
         # Create datasets
-        train_dataset = torch.utils.data.TensorDataset(train_curves, train_conf, train_classes)
-        val_dataset = torch.utils.data.TensorDataset(val_curves, val_conf, val_classes)
+        train_dataset = torch.utils.data.TensorDataset(X_train_tensor, y_train_tensor)
+        val_dataset = torch.utils.data.TensorDataset(X_val_tensor, y_val_tensor)
         
         # Create data loaders
-        train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=self.batch_size, shuffle=True)
-        val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=self.batch_size, shuffle=False)
+        train_loader = torch.utils.data.DataLoader(
+            train_dataset, batch_size=self.batch_size, shuffle=True
+        )
+        val_loader = torch.utils.data.DataLoader(
+            val_dataset, batch_size=self.batch_size, shuffle=False
+        )
+        
+        print(f"Training samples: {len(X_train)}, Validation samples: {len(X_val)}")
         
         return train_loader, val_loader
     
     def train_model(self, train_loader: torch.utils.data.DataLoader, 
-                   val_loader: torch.utils.data.DataLoader, num_classes: int) -> PeriodValidationCNN:
+                   val_loader: torch.utils.data.DataLoader,
+                   input_size: int, num_classes: int) -> Tuple[PeriodValidationCNN, List[float], List[float]]:
         """Train the CNN model."""
-        # Initialize model
-        model = PeriodValidationCNN(input_size=100, num_classes=num_classes)
-        model = model.to(self.device)
+        print(f"Training CNN model with input size {input_size} and {num_classes} classes...")
         
-        # Set up optimization
+        # Create model
+        model = PeriodValidationCNN(input_size=input_size, num_classes=num_classes)
+        model.to(self.device)
+        
+        # Loss function and optimizer
+        criterion = nn.CrossEntropyLoss()
         optimizer = optim.Adam(model.parameters(), lr=self.learning_rate)
-        confidence_criterion = nn.MSELoss()
-        classification_criterion = nn.CrossEntropyLoss()
+        
+        # Training history
+        train_losses = []
+        val_losses = []
         
         best_val_loss = float('inf')
-        best_model_state = None
         patience = 10
         patience_counter = 0
         
-        print(f"Training model for {self.n_epochs} epochs...")
+        print(f"Starting training for {self.n_epochs} epochs...")
         
         for epoch in range(self.n_epochs):
             # Training phase
             model.train()
             train_loss = 0.0
-            train_batches = 0
-            
-            for batch_curves, batch_conf, batch_classes in train_loader:
-                batch_curves = batch_curves.to(self.device)
-                batch_conf = batch_conf.to(self.device)
-                batch_classes = batch_classes.to(self.device)
+            for batch_X, batch_y in train_loader:
+                batch_X, batch_y = batch_X.to(self.device), batch_y.to(self.device)
                 
                 optimizer.zero_grad()
-                
-                # Forward pass
-                pred_confidence, pred_classes = model(batch_curves)
-                
-                # Calculate losses
-                conf_loss = confidence_criterion(pred_confidence, batch_conf)
-                class_loss = classification_criterion(pred_classes, batch_classes)
-                
-                # Combined loss
-                total_loss = conf_loss + class_loss
-                train_loss += total_loss.item()
-                train_batches += 1
-                
-                # Backward pass
-                total_loss.backward()
+                outputs = model(batch_X)
+                loss = criterion(outputs, batch_y)
+                loss.backward()
                 optimizer.step()
+                
+                train_loss += loss.item()
             
             # Validation phase
             model.eval()
             val_loss = 0.0
-            val_batches = 0
-            
             with torch.no_grad():
-                for batch_curves, batch_conf, batch_classes in val_loader:
-                    batch_curves = batch_curves.to(self.device)
-                    batch_conf = batch_conf.to(self.device)
-                    batch_classes = batch_classes.to(self.device)
-                    
-                    pred_confidence, pred_classes = model(batch_curves)
-                    
-                    conf_loss = confidence_criterion(pred_confidence, batch_conf)
-                    class_loss = classification_criterion(pred_classes, batch_classes)
-                    total_loss = conf_loss + class_loss
-                    
-                    val_loss += total_loss.item()
-                    val_batches += 1
+                for batch_X, batch_y in val_loader:
+                    batch_X, batch_y = batch_X.to(self.device), batch_y.to(self.device)
+                    outputs = model(batch_X)
+                    loss = criterion(outputs, batch_y)
+                    val_loss += loss.item()
             
-            avg_train_loss = train_loss / train_batches
-            avg_val_loss = val_loss / val_batches
+            # Calculate average losses
+            train_loss /= len(train_loader)
+            val_loss /= len(val_loader)
+            
+            train_losses.append(train_loss)
+            val_losses.append(val_loss)
+            
+            # Print progress
+            if (epoch + 1) % 10 == 0:
+                print(f"Epoch [{epoch+1}/{self.n_epochs}] - Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}")
             
             # Early stopping
-            if avg_val_loss < best_val_loss:
-                best_val_loss = avg_val_loss
-                best_model_state = model.state_dict().copy()
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
                 patience_counter = 0
+                # Save best model
+                torch.save({
+                    'model_state_dict': model.state_dict(),
+                    'input_size': input_size,
+                    'num_classes': num_classes,
+                    'label_encoder': self.label_encoder,
+                    'epoch': epoch,
+                    'train_loss': train_loss,
+                    'val_loss': val_loss
+                }, self.model_save_path)
             else:
                 patience_counter += 1
-            
-            if epoch % 10 == 0 or patience_counter >= patience:
-                print(f"Epoch {epoch}/{self.n_epochs}, Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
-            
+                
             if patience_counter >= patience:
-                print(f"Early stopping at epoch {epoch}")
+                print(f"Early stopping at epoch {epoch+1}")
                 break
         
-        # Load best model state
-        if best_model_state is not None:
-            model.load_state_dict(best_model_state)
-        
-        return model
+        print(f"Training completed. Best validation loss: {best_val_loss:.4f}")
+        return model, train_losses, val_losses
     
-    def save_model(self, model: PeriodValidationCNN, class_names: List[str], final_loss: float, 
-                   epochs_trained: int, training_samples: int) -> str:
-        """Save the trained model and metadata."""
-        # Save model state
-        torch.save({
-            'model_state_dict': model.state_dict(),
-            'model_config': {
-                'input_size': model.input_size,
-                'num_classes': model.num_classes
-            },
-            'class_names': class_names,
-            'label_encoder': self.label_encoder,
-            'training_metadata': {
-                'final_loss': final_loss,
-                'epochs_trained': epochs_trained,
-                'training_samples': training_samples
-            }
-        }, self.model_save_path)
+    def train_from_csv(self, stars_to_extract: Union[str, List[int], None] = None,
+                      csv_file_path: str = None) -> ModelTrainingResult:
+        """
+        Train model using CSV data.
         
-        print(f"Model saved to: {self.model_save_path}")
-        return self.model_save_path
-    
-    def train_from_google_sheets(self, stars_to_extract: Union[str, List[int], None] = None) -> ModelTrainingResult:
-        """Complete training pipeline using Google Sheets data."""
+        Args:
+            stars_to_extract: Star range specification
+            csv_file_path: Path to CSV file (overrides Config.CSV_TRAINING_DATA_PATH)
+            
+        Returns:
+            ModelTrainingResult with training information
+        """
         try:
-            # Load and preprocess data
-            print("Loading training data from Google Sheets...")
-            training_data = self.load_training_data(stars_to_extract)
+            print("Loading training data from CSV...")
+            training_data = self.load_training_data(stars_to_extract, csv_file_path)
             
-            print("Preprocessing training data...")
-            folded_curves, confidence_labels, class_labels, class_names = self.preprocess_training_data(training_data)
+            if len(training_data) == 0:
+                return ModelTrainingResult(
+                    success=False,
+                    error="No training data loaded",
+                    epochs_trained=0,
+                    final_loss=0.0,
+                    model_path="",
+                    training_samples=0
+                )
             
-            print("Creating data loaders...")
-            train_loader, val_loader = self.create_data_loaders(folded_curves, confidence_labels, class_labels)
+            print(f"Loaded {len(training_data)} training examples")
             
-            print("Training model...")
-            model = self.train_model(train_loader, val_loader, len(class_names))
+            # Prepare training samples
+            X, y, categories = self.prepare_training_samples(training_data)
             
-            # Calculate final validation loss
-            model.eval()
-            total_loss = 0.0
-            total_batches = 0
+            # Create PyTorch datasets
+            train_loader, val_loader = self.create_pytorch_datasets(X, y)
             
-            with torch.no_grad():
-                for batch_curves, batch_conf, batch_classes in val_loader:
-                    batch_curves = batch_curves.to(self.device)
-                    batch_conf = batch_conf.to(self.device)
-                    batch_classes = batch_classes.to(self.device)
-                    
-                    pred_confidence, pred_classes = model(batch_curves)
-                    
-                    conf_loss = nn.MSELoss()(pred_confidence, batch_conf)
-                    class_loss = nn.CrossEntropyLoss()(pred_classes, batch_classes)
-                    total_loss += (conf_loss + class_loss).item()
-                    total_batches += 1
+            # Train model
+            input_size = X.shape[1]
+            num_classes = len(self.label_encoder.classes_)
             
-            final_loss = total_loss / total_batches if total_batches > 0 else 0.0
+            model, train_losses, val_losses = self.train_model(
+                train_loader, val_loader, input_size, num_classes
+            )
             
-            # Save model
-            model_path = self.save_model(model, class_names, final_loss, self.n_epochs, len(folded_curves))
+            # Save final model with metadata
+            training_metadata = {
+                'training_samples': len(training_data),
+                'valid_samples': len(X),
+                'num_classes': num_classes,
+                'input_size': input_size,
+                'epochs_trained': len(train_losses),
+                'final_loss': val_losses[-1] if val_losses else 0.0,
+                'class_names': self.label_encoder.classes_.tolist(),
+                'stars_used': stars_to_extract,
+                'csv_file_path': csv_file_path or Config.CSV_TRAINING_DATA_PATH
+            }
+            
+            # Save complete model
+            torch.save({
+                'model_state_dict': model.state_dict(),
+                'input_size': input_size,
+                'num_classes': num_classes,
+                'label_encoder': self.label_encoder,
+                'training_metadata': training_metadata,
+                'train_losses': train_losses,
+                'val_losses': val_losses
+            }, self.model_save_path)
+            
+            print(f"Model saved to: {self.model_save_path}")
             
             return ModelTrainingResult(
                 success=True,
-                epochs_trained=self.n_epochs,
-                final_loss=final_loss,
-                model_path=model_path,
-                training_samples=len(folded_curves)
+                epochs_trained=len(train_losses),
+                final_loss=val_losses[-1] if val_losses else 0.0,
+                model_path=self.model_save_path,
+                training_samples=len(training_data)
             )
             
         except Exception as e:
-            print(f"Training failed: {e}")
+            print(f"Error during training: {e}")
             return ModelTrainingResult(
                 success=False,
+                error=str(e),
                 epochs_trained=0,
-                final_loss=float('inf'),
+                final_loss=0.0,
                 model_path="",
                 training_samples=0
             )
 
 
-def load_trained_model(model_path: str = None) -> Tuple[PeriodValidationCNN, List[str]]:
-    """
-    Load a trained model from disk.
-    
-    Returns:
-        Tuple of (model, class_names)
-    """
+def load_trained_model(model_path: str = None) -> Tuple[PeriodValidationCNN, LabelEncoder, Dict]:
+    """Load a trained model from file."""
     model_path = model_path or Config.MODEL_SAVE_PATH
     
     if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Model file not found: {model_path}")
+        raise FileNotFoundError(f"Trained model not found: {model_path}")
     
-    checkpoint = torch.load(model_path, map_location=Config.DEVICE, weights_only=False)
+    checkpoint = torch.load(model_path, map_location=Config.DEVICE)
     
-    # Reconstruct model
-    model_config = checkpoint['model_config']
+    # Create model
     model = PeriodValidationCNN(
-        input_size=model_config['input_size'],
-        num_classes=model_config['num_classes']
+        input_size=checkpoint['input_size'],
+        num_classes=checkpoint['num_classes']
     )
-    
     model.load_state_dict(checkpoint['model_state_dict'])
     model.eval()
     
-    class_names = checkpoint['class_names']
+    # Load label encoder
+    label_encoder = checkpoint['label_encoder']
     
-    print(f"Loaded trained model from: {model_path}")
-    print(f"Model classes: {class_names}")
+    # Get metadata
+    metadata = checkpoint.get('training_metadata', {})
     
-    return model, class_names
-
-
-def model_exists(model_path: str = None) -> bool:
-    """
-    Check if a trained model exists at the specified path.
-    
-    Args:
-        model_path: Path to model file. If None, uses Config.MODEL_SAVE_PATH
-        
-    Returns:
-        True if model file exists, False otherwise
-    """
-    model_path = model_path or Config.MODEL_SAVE_PATH
-    return os.path.exists(model_path)
+    return model, label_encoder, metadata
 
 
 def get_model_info(model_path: str = None) -> Dict[str, Any]:
-    """
-    Get information about a saved model without loading it.
-    
-    Args:
-        model_path: Path to model file. If None, uses Config.MODEL_SAVE_PATH
-        
-    Returns:
-        Dictionary with model information or None if model doesn't exist
-    """
+    """Get information about a trained model."""
     model_path = model_path or Config.MODEL_SAVE_PATH
     
     if not os.path.exists(model_path):
@@ -481,12 +378,22 @@ def get_model_info(model_path: str = None) -> Dict[str, Any]:
     try:
         checkpoint = torch.load(model_path, map_location='cpu')
         
+        # Get file size
+        file_size = os.path.getsize(model_path)
+        
+        # Get modification time
+        import datetime
+        mod_time = datetime.datetime.fromtimestamp(os.path.getmtime(model_path))
+        
         info = {
             'model_path': model_path,
-            'file_size_mb': os.path.getsize(model_path) / (1024 * 1024),
-            'model_config': checkpoint.get('model_config', {}),
-            'class_names': checkpoint.get('class_names', []),
-            'training_metadata': checkpoint.get('training_metadata', {})
+            'file_size_bytes': file_size,
+            'file_size_mb': file_size / (1024 * 1024),
+            'last_modified': mod_time.isoformat(),
+            'input_size': checkpoint.get('input_size', 'unknown'),
+            'num_classes': checkpoint.get('num_classes', 'unknown'),
+            'training_metadata': checkpoint.get('training_metadata', {}),
+            'has_label_encoder': 'label_encoder' in checkpoint
         }
         
         return info
@@ -496,20 +403,27 @@ def get_model_info(model_path: str = None) -> Dict[str, Any]:
         return None
 
 
-# Example usage and training script
+def model_exists(model_path: str = None) -> bool:
+    """Check if a trained model exists."""
+    model_path = model_path or Config.MODEL_SAVE_PATH
+    return os.path.exists(model_path)
+
+
+# CLI interface
 if __name__ == "__main__":
-    # Set up command line argument parsing
-    parser = argparse.ArgumentParser(description="Train CNN model for period validation using Google Sheets data")
-    parser.add_argument('--stars', type=str, help='Star range to train on (e.g., "30:50", "42", or comma-separated list "1,5,10")')
-    parser.add_argument('--force-retrain', action='store_true', help='Force retraining even if model exists')
-    parser.add_argument('--model-path', type=str, help='Path to save/load the trained model')
+    parser = argparse.ArgumentParser(description="Train CNN model for period validation using CSV data")
+    parser.add_argument('--stars', type=str, help='Star range to use for training (e.g., "30:50", "42", or comma-separated "1,5,10")')
+    parser.add_argument('--csv-file', type=str, help='Path to CSV training data file')
+    parser.add_argument('--model-path', type=str, help='Path to save trained model')
+    parser.add_argument('--epochs', type=int, default=100, help='Number of training epochs')
+    parser.add_argument('--batch-size', type=int, default=32, help='Batch size for training')
+    parser.add_argument('--learning-rate', type=float, default=0.001, help='Learning rate')
     
     args = parser.parse_args()
     
     # Parse stars argument
     stars_to_extract = None
     if args.stars:
-        # Handle comma-separated lists
         if ',' in args.stars:
             try:
                 stars_to_extract = [int(s.strip()) for s in args.stars.split(',')]
@@ -517,50 +431,34 @@ if __name__ == "__main__":
                 print(f"Error parsing star list '{args.stars}': {e}")
                 sys.exit(1)
         else:
-            # Handle range or single star
             stars_to_extract = args.stars
-        
-        print(f"Training on stars: {stars_to_extract}")
     
-    # Check if Google Sheets URL is configured
-    if not Config.validate():
-        print("Configuration invalid. Please set GOOGLE_SHEET_URL in .env file")
+    # Check if CSV file exists
+    csv_file = args.csv_file or Config.CSV_TRAINING_DATA_PATH
+    if not os.path.exists(csv_file):
+        print(f"CSV training data file not found: {csv_file}")
+        print("Please provide a valid CSV file using --csv-file argument or set CSV_TRAINING_DATA_PATH in config")
         sys.exit(1)
     
     # Initialize trainer
     trainer = ModelTrainer(model_save_path=args.model_path)
+    trainer.n_epochs = args.epochs
+    trainer.batch_size = args.batch_size
+    trainer.learning_rate = args.learning_rate
     
-    # Check if model already exists and force_retrain is not set
-    if not args.force_retrain and os.path.exists(trainer.model_save_path):
-        print(f"Model already exists at {trainer.model_save_path}")
-        print("Use --force-retrain to retrain the model")
-        
-        # Show model info
-        model_info = get_model_info(trainer.model_save_path)
-        if model_info:
-            print(f"Model info:")
-            print(f"  File size: {model_info['file_size_mb']:.2f} MB")
-            print(f"  Classes: {len(model_info['class_names'])}")
-            print(f"  Training samples: {model_info['training_metadata'].get('training_samples', 'Unknown')}")
-            print(f"  Final loss: {model_info['training_metadata'].get('final_loss', 'Unknown')}")
-        sys.exit(0)
+    print(f"Training CNN model using CSV data from: {csv_file}")
+    if stars_to_extract:
+        print(f"Using stars: {stars_to_extract}")
     
     # Train model
-    print("Starting model training from Google Sheets data...")
-    result = trainer.train_from_google_sheets(stars_to_extract=stars_to_extract)
+    result = trainer.train_from_csv(stars_to_extract=stars_to_extract, csv_file_path=args.csv_file)
     
     if result.success:
-        print(f"Training completed successfully!")
-        print(f"Epochs trained: {result.epochs_trained}")
-        print(f"Final loss: {result.final_loss:.4f}")
-        print(f"Training samples: {result.training_samples}")
-        print(f"Model saved to: {result.model_path}")
-        
-        # Test loading the model
-        try:
-            model, class_names = load_trained_model(result.model_path)
-            print("Model loading test successful!")
-        except Exception as e:
-            print(f"Model loading test failed: {e}")
+        print(f"\n✓ Training completed successfully!")
+        print(f"  Model saved to: {result.model_path}")
+        print(f"  Training samples: {result.training_samples}")
+        print(f"  Epochs trained: {result.epochs_trained}")
+        print(f"  Final loss: {result.final_loss:.4f}")
     else:
-        print("Training failed. Check the logs for errors.")
+        print(f"\n✗ Training failed: {result.error}")
+        sys.exit(1)

@@ -28,8 +28,8 @@ A modern web application for astronomical data analysis, providing interactive v
   - Co-rotating optically thin material (spotted stars)
   - Long term trend (secular evolution)
   - Stochastic (irregular/noise-dominated)
-- **🆕 Enhanced Google Sheets Integration**: Complete data pipeline supporting 15+ sensor types (CDIPS, ELEANOR, QLP, SPOC, TESS, TASOC, TGLC, EVEREST, K2SC, K2SFF, K2VARCAT, ZTF, WISE)
-- **🆕 CSV Training Data Input**: Simple CSV-based training data input as an alternative to Google Sheets
+- **🆕 Enhanced CSV Integration**: Complete data pipeline supporting 15+ sensor types (CDIPS, ELEANOR, QLP, SPOC, TESS, TASOC, TGLC, EVEREST, K2SC, K2SFF, K2VARCAT, ZTF, WISE)
+- **🆕 
 - **🆕 5-Period Training Strategy**: Advanced ML training approach that generates:
   - 1-2 correct periods from catalog data (high confidence)
   - 2 incorrect periodogram peaks (medium confidence) 
@@ -50,7 +50,7 @@ A modern web application for astronomical data analysis, providing interactive v
 - **scipy**: Scientific computing for peak detection and signal analysis
 - **scikit-learn**: Machine learning utilities for training pipeline
 - **python-dotenv**: Environment variable management
-- **requests**: HTTP client for Google Sheets integration
+- **requests**: HTTP client for CSV integration
 - **CORS Support**: Cross-origin requests for frontend communication
 
 ### Frontend
@@ -159,8 +159,8 @@ The repository includes simulated astronomical data with:
 - `GET /phase_fold/{star_number}/{telescope}/{campaign_id}?period={period}` - Get phase-folded data
 - `GET /auto_periods/{star_number}/{telescope}/{campaign_id}` - **Enhanced**: CNN-powered period detection and classification
 - `GET /model_status` - **NEW**: Check trained model status and information
-- `POST /train_model` - **NEW**: Train CNN model using Google Sheets data with model persistence
-- `POST /export_training_csv` - **NEW**: Export Google Sheets training data to CSV format
+- `POST /train_model` - **NEW**: Train CNN model using CSV data with model persistence
+- `POST /export_training_csv` - **NEW**: Export 
 
 ## 🔬 Machine Learning Features
 
@@ -183,7 +183,7 @@ Objects are automatically classified into detailed categories:
 - **⚪ Uncertain**: Low confidence detections requiring manual review
 
 ### CSV Training Data Input
-Train models using CSV files instead of Google Sheets:
+Train models using CSV files instead of CSV:
 
 ```bash
 # Create CSV training data file
@@ -200,7 +200,7 @@ curl -X POST http://localhost:8000/train_model \
   -d '{"data_source": "csv"}'
 
 # Test CSV loading from command line
-python backend/google_sheets.py --csv-input training_data.csv --stars "1:3"
+python backend/csv_data_loader.py --csv-input training_data.csv --stars "1:3"
 ```
 
 **CSV Format Requirements:**
@@ -212,11 +212,11 @@ python backend/google_sheets.py --csv-input training_data.csv --stars "1:3"
 
 See [CSV_TRAINING_GUIDE.md](CSV_TRAINING_GUIDE.md) for detailed documentation.
 
-### Google Sheets Training Pipeline
+### CSV Training Pipeline
 Train the CNN model using real astronomical data:
 
 ```bash
-# Set up your Google Sheets URL in .env
+# Set up your CSV URL in .env
 GOOGLE_SHEET_URL=https://docs.google.com/spreadsheets/d/your-sheet-id/edit
 
 # Check model status before training
@@ -267,7 +267,7 @@ The system implements an advanced training methodology that generates **5 period
 
 #### Period Types Generated:
 1. **Correct Periods (1-2 samples)**: 
-   - Source: Google Sheets catalog data (columns AK, AL for legacy; F-AI for multi-sensor)
+   - Source: CSV catalog data (columns AK, AL for legacy; F-AI for multi-sensor)
    - Confidence: 0.85-0.95 (high)
    - Purpose: Teaches the CNN what genuine periods look like
 
@@ -307,7 +307,7 @@ better-impuls-viewer/
 │   ├── models.py           # Pydantic data models
 │   ├── data_processing.py  # Data preprocessing utilities
 │   ├── period_detection.py # CNN period validation and periodogram analysis
-│   ├── google_sheets.py    # Google Sheets integration
+│   ├── csv_data_loader.py    # CSV integration
 │   ├── model_training.py   # CNN training pipeline
 │   ├── process.py          # Legacy data processing functions
 │   ├── display.py          # Original matplotlib visualization

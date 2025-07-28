@@ -30,7 +30,7 @@ def test_model_training_csv():
         # Show data source preference
         print("\n=== Testing Data Source Auto-Selection ===")
         
-        # Test auto selection (should prefer CSV since no Google Sheets URL)
+        # Test auto selection (should prefer CSV since no CSV URL)
         auto_data = trainer.load_training_data(
             data_source="auto",
             csv_file_path="sample_training_data.csv"

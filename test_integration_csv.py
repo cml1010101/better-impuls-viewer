@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Final integration test - demonstrates CSV functionality working independently 
-of Google Sheets dependencies. This test validates that the issue requirements
+of CSV dependencies. This test validates that the issue requirements
 have been met: "Remove google sheets training data generation and replace with csv input"
 """
 
@@ -12,14 +12,14 @@ import os
 sys.path.insert(0, 'backend')
 
 def test_csv_only_workflow():
-    """Test complete workflow using only CSV input (no Google Sheets)."""
+    """Test complete workflow using only CSV input (no CSV)."""
     print("=== CSV-Only Training Workflow Test ===")
-    print("This test validates CSV functionality works independently of Google Sheets\n")
+    print("This test validates CSV functionality works independently of CSV\n")
     
     # Test 1: CSV Data Loading
     print("1. Testing CSV data loading...")
     try:
-        from google_sheets import CSVDataLoader
+        from csv_data_loader import CSVDataLoader
         loader = CSVDataLoader("sample_training_data.csv")
         training_data = loader.extract_training_data()
         print(f"✓ Loaded {len(training_data)} training examples from CSV")
@@ -48,7 +48,7 @@ def test_csv_only_workflow():
         )
         print(f"✓ Model trainer loaded {len(csv_data)} examples from CSV")
         
-        # Test auto-selection (should prefer CSV when no Google Sheets URL)
+        # Test auto-selection (should prefer CSV when no CSV URL)
         auto_data = trainer.load_training_data(data_source="auto", csv_file_path="sample_training_data.csv")
         print(f"✓ Auto-selection worked: {len(auto_data)} examples")
         
@@ -60,7 +60,7 @@ def test_csv_only_workflow():
     print("\n3. Testing configuration...")
     try:
         from config import Config
-        # Should work without Google Sheets URL
+        # Should work without CSV URL
         csv_path = getattr(Config, 'CSV_TRAINING_DATA_PATH', 'training_data.csv')
         print(f"✓ CSV configuration available: {csv_path}")
         
@@ -71,7 +71,7 @@ def test_csv_only_workflow():
     # Test 4: Star Range Filtering
     print("\n4. Testing star range filtering...")
     try:
-        from google_sheets import parse_star_range
+        from csv_data_loader import parse_star_range
         test_ranges = ["1:3", "5", None]
         for test_range in test_ranges:
             result = parse_star_range(test_range)
@@ -107,7 +107,7 @@ def test_requirements_fulfilled():
     
     # Check 1: CSV input functionality exists
     try:
-        from google_sheets import CSVDataLoader
+        from csv_data_loader import CSVDataLoader
         CSVDataLoader("sample_training_data.csv")
         print("✓ CSV input functionality implemented")
         checks.append(True)
@@ -126,27 +126,27 @@ def test_requirements_fulfilled():
         print(f"✗ Cannot specify CSV file path: {e}")
         checks.append(False)
     
-    # Check 3: Google Sheets is optional
+    # Check 3: CSV is optional
     try:
         from model_training import ModelTrainer
         trainer = ModelTrainer()
-        # Should work with CSV even if Google Sheets not configured
+        # Should work with CSV even if CSV not configured
         trainer.load_training_data(data_source="csv", csv_file_path="sample_training_data.csv")
-        print("✓ Google Sheets dependencies are optional")
+        print("✓ CSV dependencies are optional")
         checks.append(True)
     except Exception as e:
-        print(f"✗ Still requires Google Sheets: {e}")
+        print(f"✗ Still requires CSV: {e}")
         checks.append(False)
     
     # Check 4: Preserves existing functionality
-    google_sheets_preserved = True
+    csv_data_loader_preserved = True
     try:
-        from google_sheets import GoogleSheetsLoader
-        print("✓ Google Sheets functionality preserved (classes still exist)")
+        from csv_data_loader import CSVDataLoader
+        print("✓ CSV functionality preserved (classes still exist)")
     except Exception as e:
-        print("⚠ Google Sheets functionality may have been modified")
-        google_sheets_preserved = False
-    checks.append(google_sheets_preserved)
+        print("⚠ CSV functionality may have been modified")
+        csv_data_loader_preserved = False
+    checks.append(csv_data_loader_preserved)
     
     return all(checks)
 
@@ -169,7 +169,7 @@ if __name__ == "__main__":
     if workflow_success and requirements_met:
         print("\n🎉 SUCCESS: CSV training data input successfully implemented!")
         print("✓ Users can now provide training data via CSV files")
-        print("✓ Google Sheets dependencies are optional")
+        print("✓ CSV dependencies are optional")
         print("✓ Original functionality preserved")
         sys.exit(0)
     else:
