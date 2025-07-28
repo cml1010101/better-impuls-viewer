@@ -37,8 +37,8 @@ const PhaseFoldedChart: React.FC<PhaseFoldedChartProps> = ({
         ]}
         layout={{
           width: undefined,
-          height: 250,
-          margin: { l: 60, r: 20, t: 20, b: 60 },
+          height: 280,
+          margin: { l: 60, r: 20, t: 30, b: 60 },
           xaxis: {
             title: { text: 'Phase' },
             range: [0, 1],

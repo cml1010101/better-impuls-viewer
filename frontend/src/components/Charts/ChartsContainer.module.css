@@ -2,13 +2,15 @@
 .chartsContainer {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 1.5rem;
+  margin-top: 1rem;
 }
 
 .bottomCharts {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 0.75rem;
+  gap: 1.5rem;
+  margin-top: 1rem;
 }
 
 /* Responsive layout */
@@ -19,8 +21,13 @@
 }
 
 @media (max-width: 768px) {
+  .chartsContainer {
+    gap: 1rem;
+  }
+  
   .bottomCharts {
     grid-template-columns: 1fr;
-    gap: 0.5rem;
+    gap: 1rem;
+    margin-top: 0.5rem;
   }
 }
