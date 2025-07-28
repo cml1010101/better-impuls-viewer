@@ -10,6 +10,10 @@ export default defineConfig({
   resolve: {
     alias: {
       stream: 'stream-browserify',
-    }
+      buffer: 'buffer',
+    },
+  },
+  optimizeDeps: {
+    include: ['buffer']
   }
 })
