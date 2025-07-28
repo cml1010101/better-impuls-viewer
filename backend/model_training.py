@@ -202,8 +202,8 @@ class ModelTrainer:
                 batch_X, batch_y = batch_X.to(self.device), batch_y.to(self.device)
                 
                 optimizer.zero_grad()
-                outputs = model(batch_X)
-                loss = criterion(outputs, batch_y)
+                confidence, classification = model(batch_X)  # Unpack the tuple
+                loss = criterion(classification, batch_y)  # Use only classification for loss
                 loss.backward()
                 optimizer.step()
                 
@@ -215,8 +215,8 @@ class ModelTrainer:
             with torch.no_grad():
                 for batch_X, batch_y in val_loader:
                     batch_X, batch_y = batch_X.to(self.device), batch_y.to(self.device)
-                    outputs = model(batch_X)
-                    loss = criterion(outputs, batch_y)
+                    confidence, classification = model(batch_X)  # Unpack the tuple
+                    loss = criterion(classification, batch_y)  # Use only classification for loss
                     val_loss += loss.item()
             
             # Calculate average losses
@@ -349,7 +349,7 @@ def load_trained_model(model_path: str = None) -> Tuple[PeriodValidationCNN, Lab
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Trained model not found: {model_path}")
     
-    checkpoint = torch.load(model_path, map_location=Config.DEVICE)
+    checkpoint = torch.load(model_path, map_location=Config.DEVICE, weights_only=False)
     
     # Create model
     model = PeriodValidationCNN(
@@ -376,8 +376,8 @@ def get_model_info(model_path: str = None) -> Dict[str, Any]:
         return None
     
     try:
-        checkpoint = torch.load(model_path, map_location='cpu')
-        
+        checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
+
         # Get file size
         file_size = os.path.getsize(model_path)
         

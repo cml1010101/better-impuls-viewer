@@ -8,6 +8,38 @@
   gap: 0.75rem;
 }
 
+/* Tab Navigation */
+.tabNavigation {
+  display: flex;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.tabButton {
+  padding: 0.75rem 1.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border: none;
+  border-radius: 0.5rem 0.5rem 0 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border-bottom: 2px solid transparent;
+}
+
+.tabButton:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.activeTab {
+  background: rgba(103, 126, 234, 0.2) !important;
+  color: #ffffff !important;
+  border-bottom-color: #667eea !important;
+}
+
 .loading {
   text-align: center;
   padding: 1rem;

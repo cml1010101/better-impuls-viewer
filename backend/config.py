@@ -4,10 +4,14 @@ Handles environment variables and application settings.
 """
 
 import os
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+# Try to load environment variables from .env file
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # dotenv is optional - continue without it
+    pass
 
 
 class Config:
