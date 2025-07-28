@@ -79,7 +79,7 @@ class CSVDataLoader:
         """Load raw data from CSV file, ignoring headers and using column indices."""
         try:
             # Load CSV without headers, treating all rows as data
-            df = pd.read_csv(self.csv_file_path, header=None)
+            df = pd.read_csv(self.csv_file_path, header=None, skiprows=[0])
             print(f"Loaded {len(df)} rows from CSV file: {self.csv_file_path}")
             return df
         except Exception as e:

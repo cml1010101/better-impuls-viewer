@@ -8,7 +8,13 @@ interface ModelStatus {
   message: string;
   model_path: string;
   model_info?: {
-    classes: string[];
+    model_path: string;
+    file_size_bytes: number;
+    file_size_mb: number;
+    last_modified: string;
+    input_size: number;
+    num_classes: number;
+    has_label_encoder: boolean;
     training_metadata: {
       epochs_trained: number;
       final_loss: number;
@@ -145,10 +151,17 @@ const TrainingDashboard: React.FC = () => {
             {modelStatus.model_info && (
               <div className={styles.modelDetails}>
                 <h4>Model Information</h4>
-                <p><strong>Classes:</strong> {modelStatus.model_info.classes.join(', ')}</p>
-                <p><strong>Epochs Trained:</strong> {modelStatus.model_info.training_metadata.epochs_trained}</p>
-                <p><strong>Final Loss:</strong> {modelStatus.model_info.training_metadata.final_loss.toFixed(4)}</p>
-                <p><strong>Training Samples:</strong> {modelStatus.model_info.training_metadata.training_samples}</p>
+                <p><strong>File Size:</strong> {modelStatus.model_info.file_size_mb.toFixed(2)} MB</p>
+                <p><strong>Last Modified:</strong> {new Date(modelStatus.model_info.last_modified).toLocaleString()}</p>
+                <p><strong>Input Size:</strong> {modelStatus.model_info.input_size}</p>
+                <p><strong>Number of Classes:</strong> {modelStatus.model_info.num_classes}</p>
+                <p><strong>Has Label Encoder:</strong> {modelStatus.model_info.has_label_encoder ? 'Yes' : 'No'}</p>
+                <p><strong>Training Metadata:</strong></p>
+                <ul>
+                  <li>Epochs Trained: {modelStatus.model_info.training_metadata.epochs_trained}</li>
+                  <li>Final Loss: {modelStatus.model_info.training_metadata.final_loss.toFixed(4)}</li>
+                  <li>Training Samples: {modelStatus.model_info.training_metadata.training_samples}</li>
+                </ul>
               </div>
             )}
           </div>

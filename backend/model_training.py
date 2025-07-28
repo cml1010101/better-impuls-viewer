@@ -349,7 +349,7 @@ def load_trained_model(model_path: str = None) -> Tuple[PeriodValidationCNN, Lab
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Trained model not found: {model_path}")
     
-    checkpoint = torch.load(model_path, map_location=Config.DEVICE)
+    checkpoint = torch.load(model_path, map_location=Config.DEVICE, weights_only=False)
     
     # Create model
     model = PeriodValidationCNN(
@@ -376,8 +376,8 @@ def get_model_info(model_path: str = None) -> Dict[str, Any]:
         return None
     
     try:
-        checkpoint = torch.load(model_path, map_location='cpu')
-        
+        checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
+
         # Get file size
         file_size = os.path.getsize(model_path)
         
