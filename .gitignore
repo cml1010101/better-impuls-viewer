@@ -1,4 +1,5 @@
 .venv
+python-env/
 
 # Python artifacts
 __pycache__/
