@@ -1,6 +1,5 @@
 import React from 'react';
 import Plot from 'react-plotly.js';
-import * as Plotly from 'plotly.js';
 import styles from './PeriodogramChart.module.css';
 
 interface PeriodogramPoint {
