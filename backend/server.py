@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from typing import List, Dict, Any, Optional
 import os
 import pandas as pd
@@ -7,12 +8,13 @@ import numpy as np
 from functools import lru_cache
 import hashlib
 import time
+import requests
 
 # Import from our modular structure
 from config import Config
 from models import (
     CampaignInfo, ProcessedData, PeriodogramData, PhaseFoldedData, 
-    AutoPeriodsData, ModelTrainingResult
+    AutoPeriodsData, ModelTrainingResult, SEDCredentials
 )
 from data_processing import (
     find_all_campaigns, sort_data, remove_y_outliers, 
@@ -502,8 +504,6 @@ async def get_automatic_periods(star_number: int, telescope: str, campaign_id: s
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error determining automatic periods: {str(e)}")
 
-from fastapi.responses import Response
-import requests
 
 @app.get("/model_status")
 async def get_model_status() -> Dict[str, Any]:
@@ -581,7 +581,7 @@ async def train_model_from_csv(
 
 @app.get("/sed/{star_number}")
 async def get_sed_image(star_number: int) -> Response:
-    """Get SED image URL for a specific star"""
+    """Get SED image URL for a specific star using environment variables (fallback)"""
     sed_base_url = os.getenv('SED_URL')
     username = os.getenv('SED_USERNAME')
     password = os.getenv('SED_PASSWORD')
@@ -596,6 +596,38 @@ async def get_sed_image(star_number: int) -> Response:
     if response.status_code != 200:
         raise HTTPException(status_code=response.status_code, detail="Error fetching SED image")
     return Response(content=response.content, media_type="image/png")
+
+
+@app.post("/sed/{star_number}")
+async def get_sed_image_with_credentials(star_number: int, credentials: SEDCredentials) -> Response:
+    """Get SED image URL for a specific star using provided credentials"""
+    if not credentials.sed_url:
+        raise HTTPException(status_code=400, detail="SED URL is required")
+    
+    if not credentials.username or not credentials.password:
+        raise HTTPException(status_code=400, detail="Username and password are required")
+    
+    # Construct the SED image URL
+    sed_url = f"http://{credentials.username}:{credentials.password}@{credentials.sed_url}/{star_number}_SED.png"
+
+    try:
+        response = requests.get(sed_url, timeout=10)
+        if response.status_code != 200:
+            raise HTTPException(status_code=response.status_code, detail=f"Error fetching SED image: HTTP {response.status_code}")
+        return Response(content=response.content, media_type="image/png")
+    except requests.exceptions.RequestException as e:
+        raise HTTPException(status_code=500, detail=f"Error connecting to SED server: {str(e)}")
+
+
+@app.get("/sed/config/default")
+async def get_default_sed_config() -> Dict[str, Any]:
+    """Get default SED configuration from environment variables"""
+    return {
+        "sed_url": os.getenv('SED_URL', ''),
+        "username": os.getenv('SED_USERNAME', ''),
+        # Note: we don't return the password for security reasons
+        "has_password": bool(os.getenv('SED_PASSWORD'))
+    }
 
 if __name__ == "__main__":
     import uvicorn
