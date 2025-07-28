@@ -370,44 +370,52 @@ const Dashboard: React.FC = () => {
   return (
     <div className={styles.dashboard}>
       {/* Control Panel */}
-      <ControlPanel
-        stars={stars}
-        selectedStar={selectedStar}
-        setSelectedStar={setSelectedStar}
-        telescopes={telescopes}
-        selectedTelescope={selectedTelescope}
-        setSelectedTelescope={setSelectedTelescope}
-        campaigns={campaigns}
-        selectedCampaign={selectedCampaign}
-        setSelectedCampaign={setSelectedCampaign}
-      />
+      <div className={styles.fullWidthSection}>
+        <ControlPanel
+          stars={stars}
+          selectedStar={selectedStar}
+          setSelectedStar={setSelectedStar}
+          telescopes={telescopes}
+          selectedTelescope={selectedTelescope}
+          setSelectedTelescope={setSelectedTelescope}
+          campaigns={campaigns}
+          selectedCampaign={selectedCampaign}
+          setSelectedCampaign={setSelectedCampaign}
+        />
+      </div>
 
       {loading && <div className={styles.loading}>Loading...</div>}
 
-      {/* Automatic Period Detection Results */}
-      <AutoPeriodsSection
-        autoPeriodsData={autoPeriodsData}
-        onUsePrimaryPeriod={handleUsePrimaryPeriod}
-        onUseSecondaryPeriod={handleUseSecondaryPeriod}
-      />
+      {/* Compact sections: AI view and SED side by side */}
+      {(autoPeriodsData || (selectedStar && sedImageAvailable)) && (
+        <div className={styles.compactSections}>
+          {/* Automatic Period Detection Results */}
+          {autoPeriodsData && (
+            <AutoPeriodsSection
+              autoPeriodsData={autoPeriodsData}
+              onUsePrimaryPeriod={handleUsePrimaryPeriod}
+              onUseSecondaryPeriod={handleUseSecondaryPeriod}
+            />
+          )}
 
-      {/* SED Image Section - Only show if image is available */}
-      {selectedStar && sedImageAvailable && (
-        <SEDImageSection
-          selectedStar={selectedStar}
-          apiBase={API_BASE}
-          onImageError={handleSedImageError}
-          onImageLoad={handleSedImageLoad}
-        />
+          {/* SED Image Section - Only show if image is available */}
+          {selectedStar && sedImageAvailable && (
+            <SEDImageSection
+              selectedStar={selectedStar}
+              apiBase={API_BASE}
+              onImageError={handleSedImageError}
+              onImageLoad={handleSedImageLoad}
+            />
+          )}
+        </div>
       )}
 
       {/* Algorithm Documentation Section */}
       {autoPeriodsData && (
-        <AlgorithmDocumentation campaignData={campaignData} />
+        <div className={styles.fullWidthSection}>
+          <AlgorithmDocumentation campaignData={campaignData} />
+        </div>
       )}
-
-      {/* Training Dashboard Section */}
-      <TrainingDashboard />
 
       {/* Hidden image to test SED availability */}
       {selectedStar && sedImageLoading && (
@@ -427,16 +435,23 @@ const Dashboard: React.FC = () => {
       )}
 
       {/* Charts */}
-      <ChartsContainer
-        campaignData={campaignData}
-        periodogramData={periodogramData}
-        phaseFoldedData={phaseFoldedData}
-        selectedPeriod={selectedPeriod}
-        periodInputValue={periodInputValue}
-        onPeriodogramClick={handlePeriodogramClick}
-        onPeriodInputChange={handlePeriodInputChange}
-        onPeriodSubmit={handlePeriodSubmit}
-      />
+      <div className={styles.fullWidthSection}>
+        <ChartsContainer
+          campaignData={campaignData}
+          periodogramData={periodogramData}
+          phaseFoldedData={phaseFoldedData}
+          selectedPeriod={selectedPeriod}
+          periodInputValue={periodInputValue}
+          onPeriodogramClick={handlePeriodogramClick}
+          onPeriodInputChange={handlePeriodInputChange}
+          onPeriodSubmit={handlePeriodSubmit}
+        />
+      </div>
+
+      {/* ML Training Dashboard */}
+      <div className={styles.fullWidthSection}>
+        <TrainingDashboard />
+      </div>
     </div>
   );
 };

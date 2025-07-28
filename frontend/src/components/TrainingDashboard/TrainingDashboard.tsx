@@ -30,8 +30,6 @@ const TrainingDashboard: React.FC = () => {
   const [modelStatus, setModelStatus] = useState<ModelStatus | null>(null);
   const [isTraining, setIsTraining] = useState(false);
   const [trainingResult, setTrainingResult] = useState<TrainingResult | null>(null);
-  const [isExporting, setIsExporting] = useState(false);
-  const [exportResult, setExportResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -63,7 +61,8 @@ const TrainingDashboard: React.FC = () => {
         },
         body: JSON.stringify({
           force_retrain: false,
-          stars_to_extract: null
+          stars_to_extract: null,
+          csv_file_path: null
         }),
       });
 
@@ -97,7 +96,8 @@ const TrainingDashboard: React.FC = () => {
         },
         body: JSON.stringify({
           force_retrain: true,
-          stars_to_extract: null
+          stars_to_extract: null,
+          csv_file_path: null
         }),
       });
 
@@ -115,37 +115,6 @@ const TrainingDashboard: React.FC = () => {
       console.error('Error training model:', err);
     } finally {
       setIsTraining(false);
-    }
-  };
-
-  const handleExportData = async () => {
-    try {
-      setError(null);
-      setIsExporting(true);
-      setExportResult(null);
-      
-      const response = await fetch(`${API_BASE}/export_training_csv`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          stars_to_extract: null,
-          output_dir: 'training_data'
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Export failed: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      setExportResult(result.message);
-    } catch (err) {
-      setError(`Export failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-      console.error('Error exporting data:', err);
-    } finally {
-      setIsExporting(false);
     }
   };
 
@@ -206,6 +175,7 @@ const TrainingDashboard: React.FC = () => {
           <div className={styles.trainingInfo}>
             <p>• <strong>Train Model:</strong> Use existing model if available, train new one if not</p>
             <p>• <strong>Force Retrain:</strong> Train a new model even if one exists</p>
+            <p>• <strong>Data Source:</strong> Training uses CSV data file for model training</p>
           </div>
         </div>
 
@@ -230,40 +200,6 @@ const TrainingDashboard: React.FC = () => {
                 <p><strong>Training Samples:</strong> {trainingResult.training_samples}</p>
               </div>
             )}
-          </div>
-        )}
-      </div>
-
-      {/* Data Export Section */}
-      <div className={styles.section}>
-        <h3>Training Data Export</h3>
-        <div className={styles.exportControls}>
-          <button 
-            onClick={handleExportData} 
-            disabled={isExporting}
-            className={styles.exportButton}
-          >
-            {isExporting ? 'Exporting...' : 'Export Training Data to CSV'}
-          </button>
-          
-          <div className={styles.exportInfo}>
-            <p>Export training data from Google Sheets to CSV format for external analysis.</p>
-          </div>
-        </div>
-
-        {isExporting && (
-          <div className={styles.exportProgress}>
-            <div className={styles.spinner}></div>
-            <p>Exporting data...</p>
-          </div>
-        )}
-
-        {exportResult && (
-          <div className={styles.exportResult}>
-            <div className={styles.resultStatus + ' ' + styles.success}>
-              ✓ Export Complete
-            </div>
-            <p>{exportResult}</p>
           </div>
         )}
       </div>
