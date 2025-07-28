@@ -34,8 +34,8 @@ const LightCurveChart: React.FC<LightCurveChartProps> = ({ campaignData }) => {
         ]}
         layout={{
           width: undefined,
-          height: 300,
-          margin: { l: 60, r: 20, t: 30, b: 60 },
+          height: 220,
+          margin: { l: 50, r: 15, t: 20, b: 45 },
           xaxis: {
             title: { text: 'Time (days)' },
             automargin: true,

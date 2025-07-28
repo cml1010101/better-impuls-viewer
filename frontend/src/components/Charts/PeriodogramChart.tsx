@@ -52,8 +52,8 @@ const PeriodogramChart: React.FC<PeriodogramChartProps> = ({
         ]}
         layout={{
           width: undefined,
-          height: 280,
-          margin: { l: 60, r: 20, t: 30, b: 60 },
+          height: 180,
+          margin: { l: 50, r: 15, t: 20, b: 45 },
           xaxis: {
             title: { text: 'Period (days)' },
             type: 'log',
