@@ -71,3 +71,10 @@ class ModelTrainingResult(BaseModel):
     final_loss: float
     model_path: str
     training_samples: int
+
+
+class SEDCredentials(BaseModel):
+    """SED (Spectral Energy Distribution) server credentials."""
+    sed_url: str
+    username: str
+    password: str
