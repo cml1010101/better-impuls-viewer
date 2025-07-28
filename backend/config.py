@@ -17,7 +17,12 @@ class Config:
     CSV_TRAINING_DATA_PATH = os.getenv("CSV_TRAINING_DATA_PATH", "sample_training_data.csv")
     
     # API configuration
-    CORS_ORIGINS = ["http://localhost:5173", "http://localhost:3000"]
+    CORS_ORIGINS = [
+        "http://localhost:5173", 
+        "http://localhost:3000",
+        "file://",  # For Electron file:// protocol
+        "http://localhost:8000"  # Allow backend self-requests
+    ]
     
     # Data processing configuration
     DEFAULT_THRESHOLD = 1.0

@@ -6,13 +6,21 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Frontend dependencies and build artifacts
+# Node.js dependencies
+node_modules/
 frontend/node_modules/
+
+# Frontend build artifacts
 frontend/dist/
 frontend/.env.local
 frontend/.env.development.local
 frontend/.env.test.local
 frontend/.env.production.local
+
+# Electron build artifacts
+dist/
+out/
+*.log
 
 # IDE artifacts
 .vscode/

@@ -1,6 +1,6 @@
 # Better Impuls Viewer
 
-A modern web application for astronomical data analysis, providing interactive visualization of light curves, periodogram analysis, and phase folding capabilities.
+A modern desktop application and web application for astronomical data analysis, providing interactive visualization of light curves, periodogram analysis, and phase folding capabilities. Available as both a standalone Electron desktop app and traditional web application.
 
 ![Dashboard Preview](https://github.com/user-attachments/assets/a95f9e76-4b76-44f8-a31e-b7854e7fad4c)
 
@@ -41,6 +41,11 @@ A modern web application for astronomical data analysis, providing interactive v
 
 ## 🛠 Technology Stack
 
+### Desktop Application
+- **Electron**: Cross-platform desktop app framework
+- **Node.js**: Runtime for desktop app orchestration
+- **Process Management**: Automatic backend spawning and lifecycle management
+
 ### Backend
 - **FastAPI**: High-performance API framework
 - **pandas**: Data manipulation and analysis
@@ -67,14 +72,38 @@ A modern web application for astronomical data analysis, providing interactive v
 - Node.js 16+
 - npm or yarn
 
-### Backend Setup
+### Quick Start (Electron App)
+```bash
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Install Node.js dependencies
+npm install
+
+# Build and run the Electron app
+npm start
+```
+
+### Development Mode (Electron)
+```bash
+# Install dependencies (if not done above)
+pip install -r requirements.txt
+npm install
+
+# Start development mode with hot reloading
+npm run dev
+```
+
+### Traditional Web Development Setup
+
+#### Backend Setup
 ```bash
 cd backend
 pip install fastapi uvicorn pandas numpy astropy torch scipy scikit-learn python-dotenv requests pydantic
 python server.py
 ```
 
-### Frontend Setup
+#### Frontend Setup
 ```bash
 cd frontend
 npm install
@@ -83,9 +112,24 @@ npm run dev
 
 ## 🚦 Usage
 
+### Electron App Usage
+1. **Quick Start**: Run `npm start` to build and launch the desktop application
+2. **Development**: Run `npm run dev` for development mode with frontend hot reloading
+3. **Test Backend**: Run `npm run test:backend` to verify backend integration
+
+### Web Browser Usage (Traditional)
 1. **Start the Backend**: Run `python server.py` in the `backend` directory (serves on port 8000)
-2. **Start the Frontend**: Run `npm run dev` in the `frontend` directory (serves on port 5173)
+2. **Start the Frontend**: Run `npm run dev` in the `frontend` directory (serves on port 5173)  
 3. **Open Browser**: Navigate to `http://localhost:5173`
+
+### Packaging for Distribution
+```bash
+# Create distributable packages for your platform
+npm run dist
+
+# Create unpacked directory for testing
+npm run pack
+```
 
 ### Using the Dashboard
 
@@ -301,6 +345,10 @@ See [TRAINING_GUIDE.md](TRAINING_GUIDE.md) for complete documentation.
 
 ```
 better-impuls-viewer/
+├── main.js                  # Electron main process (app orchestration)
+├── package.json            # Electron app configuration and scripts
+├── dev.js                  # Development environment launcher
+├── test-backend.js         # Backend integration test
 ├── backend/
 │   ├── server.py            # FastAPI application
 │   ├── config.py           # Configuration and environment variables
@@ -317,12 +365,20 @@ better-impuls-viewer/
 │   │   ├── Dashboard.tsx   # Main dashboard component
 │   │   ├── App.tsx        # Root application component
 │   │   └── *.css          # Styling files with classification colors
-│   └── package.json       # Dependencies and scripts
+│   ├── dist/              # Built frontend (for Electron production)
+│   └── package.json       # Frontend dependencies and scripts
 ├── sample_data/           # Enhanced sample datasets (5 star types)
 ├── ml-dataset/           # Machine learning dataset generation
 ├── TRAINING_GUIDE.md     # Comprehensive training documentation
 └── README.md            # This file
 ```
+
+### Electron App Workflow
+1. **main.js** starts and manages the application lifecycle
+2. Python **FastAPI backend** is spawned as a subprocess on port 8000
+3. **React frontend** is served (dev server in development, built files in production)
+4. Electron **BrowserWindow** displays the frontend with backend API integration
+5. Both processes are managed and terminated together
 
 ## 🤝 Contributing
 
