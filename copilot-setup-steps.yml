@@ -1,0 +1,141 @@
+name: Better Impuls Viewer Development Setup
+description: Complete setup instructions for the Better Impuls Viewer astronomical data analysis application
+
+steps:
+  - name: Prerequisites Check
+    description: Verify required tools are installed
+    commands:
+      - python --version  # Requires Python 3.8+
+      - node --version     # Requires Node.js 16+
+      - npm --version      # Package manager for frontend
+      - git --version      # Version control
+
+  - name: Python Backend Setup
+    description: Install Python dependencies for FastAPI backend and ML components
+    commands:
+      - pip install -r requirements.txt
+    dependencies:
+      - pandas           # Data manipulation and analysis
+      - matplotlib       # Data visualization
+      - astropy         # Astronomical calculations (Lomb-Scargle periodogram)
+      - torch           # Deep learning framework for CNN period validation
+      - scipy           # Scientific computing for peak detection
+      - python-dotenv   # Environment variable management
+      - requests        # HTTP client for data integration
+      - fastapi         # High-performance API framework
+      - uvicorn         # ASGI server for FastAPI
+      - scikit-learn    # Machine learning utilities
+
+  - name: Frontend Setup
+    description: Install Node.js dependencies for React frontend
+    working_directory: frontend
+    commands:
+      - npm install
+    dependencies:
+      - react@19.1.0          # Modern UI framework
+      - react-dom@19.1.0      # React DOM rendering
+      - typescript@5.8.3      # Type-safe development
+      - vite@7.0.4            # Fast build tool and dev server
+      - plotly.js@3.0.3       # Interactive data visualization
+      - react-plotly.js@2.6.0 # React wrapper for Plotly.js
+      - eslint@9.30.1         # Code linting and style checking
+
+  - name: Build Frontend
+    description: Compile TypeScript and build production assets
+    working_directory: frontend
+    commands:
+      - npm run build
+
+  - name: Run Linting
+    description: Check code quality and style
+    working_directory: frontend
+    commands:
+      - npm run lint
+
+  - name: Environment Configuration
+    description: Set up environment variables (optional)
+    notes:
+      - Configure CSV_TRAINING_DATA_PATH for ML training data
+      - Set GOOGLE_SHEET_URL for external data sources (optional) 
+      - Default configuration works without .env file
+      - Create .env file in backend/ directory if custom configuration needed
+
+  - name: Start Backend Server
+    description: Launch FastAPI development server
+    working_directory: backend
+    commands:
+      - python server.py
+    ports:
+      - 8000  # FastAPI server with automatic documentation at /docs
+    notes:
+      - Server provides REST API for astronomical data analysis
+      - Automatic interactive documentation available at http://localhost:8000/docs
+      - CORS enabled for frontend communication
+
+  - name: Start Frontend Development Server
+    description: Launch Vite development server with hot reload
+    working_directory: frontend
+    commands:
+      - npm run dev
+    ports:
+      - 5173  # Vite development server
+    notes:
+      - Frontend available at http://localhost:5173
+      - Hot reload enabled for development
+      - Connects to backend API at http://localhost:8000
+
+  - name: Test Application
+    description: Verify the setup works correctly
+    commands:
+      - python test_csv_functionality.py  # Test data loading functionality
+      - curl http://localhost:8000/stars   # Test backend API
+    notes:
+      - Backend should return available star numbers
+      - Frontend should load without errors
+      - Data visualization should display correctly
+
+  - name: Access Application
+    description: Open the application in browser
+    url: http://localhost:5173
+    features:
+      - Multi-star astronomical data selection
+      - Interactive light curve visualization  
+      - Lomb-Scargle periodogram analysis
+      - Phase folding with manual period input
+      - CNN-powered automatic period detection
+      - Advanced variability classification
+
+architecture:
+  backend:
+    framework: FastAPI
+    language: Python 3.8+
+    features:
+      - REST API for astronomical data
+      - PyTorch CNN models for period validation
+      - Lomb-Scargle periodogram analysis
+      - Phase folding calculations
+      - Multi-telescope data support
+  
+  frontend:
+    framework: React 19
+    language: TypeScript
+    build_tool: Vite
+    features:
+      - Interactive data visualization with Plotly.js
+      - Responsive design with custom CSS
+      - Real-time API communication
+      - Color-coded classification system
+
+data_sources:
+  - Hubble Space Telescope
+  - Kepler Space Telescope  
+  - TESS (Transiting Exoplanet Survey Satellite)
+  - CSV training data for ML models
+  - Multiple sensor types (CDIPS, ELEANOR, QLP, SPOC, etc.)
+
+development_notes:
+  - Use two terminal windows (backend + frontend)
+  - Backend serves on port 8000, frontend on port 5173
+  - Modify code with hot reload in development mode
+  - Model training uses GPU if available, fallback to CPU
+  - Sample data includes 5 different star types with realistic variability

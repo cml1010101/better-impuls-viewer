@@ -32,35 +32,103 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   selectedCampaign,
   setSelectedCampaign,
 }) => {
+  const handlePrevStar = () => {
+    if (selectedStar) {
+      const currentIndex = stars.indexOf(selectedStar);
+      const prevIndex = currentIndex > 0 ? currentIndex - 1 : stars.length - 1;
+      setSelectedStar(stars[prevIndex]);
+    }
+  };
+
+  const handleNextStar = () => {
+    if (selectedStar) {
+      const currentIndex = stars.indexOf(selectedStar);
+      const nextIndex = currentIndex < stars.length - 1 ? currentIndex + 1 : 0;
+      setSelectedStar(stars[nextIndex]);
+    }
+  };
+
+  const handlePrevTelescope = () => {
+    if (selectedTelescope && telescopes.length > 0) {
+      const currentIndex = telescopes.indexOf(selectedTelescope);
+      const prevIndex = currentIndex > 0 ? currentIndex - 1 : telescopes.length - 1;
+      setSelectedTelescope(telescopes[prevIndex]);
+    }
+  };
+
+  const handleNextTelescope = () => {
+    if (selectedTelescope && telescopes.length > 0) {
+      const currentIndex = telescopes.indexOf(selectedTelescope);
+      const nextIndex = currentIndex < telescopes.length - 1 ? currentIndex + 1 : 0;
+      setSelectedTelescope(telescopes[nextIndex]);
+    }
+  };
+
   return (
     <div className={styles.controlPanel}>
       <div className={styles.controlGroup}>
         <label>Star Number:</label>
-        <select
-          value={selectedStar || ''}
-          onChange={(e) => setSelectedStar(Number(e.target.value))}
-        >
-          {stars.map((star) => (
-            <option key={star} value={star}>
-              Star {star}
-            </option>
-          ))}
-        </select>
+        <div className={styles.controlWithNav}>
+          <button
+            className={styles.navButton}
+            onClick={handlePrevStar}
+            disabled={!selectedStar || stars.length <= 1}
+            title="Previous Star"
+          >
+            ←
+          </button>
+          <select
+            value={selectedStar || ''}
+            onChange={(e) => setSelectedStar(Number(e.target.value))}
+          >
+            {stars.map((star) => (
+              <option key={star} value={star}>
+                Star {star}
+              </option>
+            ))}
+          </select>
+          <button
+            className={styles.navButton}
+            onClick={handleNextStar}
+            disabled={!selectedStar || stars.length <= 1}
+            title="Next Star"
+          >
+            →
+          </button>
+        </div>
       </div>
 
       <div className={styles.controlGroup}>
         <label>Telescope/Sensor:</label>
-        <select
-          value={selectedTelescope}
-          onChange={(e) => setSelectedTelescope(e.target.value)}
-          disabled={!selectedStar}
-        >
-          {telescopes.map((telescope) => (
-            <option key={telescope} value={telescope}>
-              {telescope.charAt(0).toUpperCase() + telescope.slice(1)}
-            </option>
-          ))}
-        </select>
+        <div className={styles.controlWithNav}>
+          <button
+            className={styles.navButton}
+            onClick={handlePrevTelescope}
+            disabled={!selectedStar || !selectedTelescope || telescopes.length <= 1}
+            title="Previous Sensor"
+          >
+            ←
+          </button>
+          <select
+            value={selectedTelescope}
+            onChange={(e) => setSelectedTelescope(e.target.value)}
+            disabled={!selectedStar}
+          >
+            {telescopes.map((telescope) => (
+              <option key={telescope} value={telescope}>
+                {telescope.charAt(0).toUpperCase() + telescope.slice(1)}
+              </option>
+            ))}
+          </select>
+          <button
+            className={styles.navButton}
+            onClick={handleNextTelescope}
+            disabled={!selectedStar || !selectedTelescope || telescopes.length <= 1}
+            title="Next Sensor"
+          >
+            →
+          </button>
+        </div>
       </div>
 
       <div className={styles.controlGroup}>
