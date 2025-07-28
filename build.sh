@@ -54,15 +54,15 @@ npm run build-backend
 case $PLATFORM in
     linux)
         echo "🐧 Building for Linux..."
-        npx electron-builder --linux
+        npx electron-builder --linux --publish=never
         ;;
     windows)
         echo "🪟 Building for Windows..."
-        npx electron-builder --win
+        npx electron-builder --win --publish=never
         ;;
     mac)
         echo "🍎 Building for macOS..."
-        npx electron-builder --mac
+        npx electron-builder --mac --publish=never
         ;;
     all)
         echo "🌍 Building for all platforms..."

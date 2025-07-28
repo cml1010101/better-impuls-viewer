@@ -11,7 +11,7 @@
     "build-backend": "echo 'Backend build placeholder'",
     "frontend-dev": "cd frontend && npm run dev",
     "backend-dev": "cd backend && python3 server.py",
-    "dist": "npm run build && electron-builder",
+    "dist": "npm run build && electron-builder --publish=never",
     "dist-all": "npm run build && electron-builder --publish=never --linux --win --mac",
     "pack": "npm run build && electron-builder --dir"
   },
@@ -57,6 +57,12 @@
     ],
     "linux": {
       "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
         {
           "target": "tar.gz",
           "arch": [
