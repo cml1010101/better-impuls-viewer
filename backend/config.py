@@ -13,9 +13,8 @@ load_dotenv()
 class Config:
     """Application configuration settings."""
     
-    # Google Sheets configuration
-    GOOGLE_SHEET_URL = os.getenv("GOOGLE_SHEET_URL")
-    GOOGLE_SERVICE_ACCOUNT_KEY_PATH = os.getenv("GOOGLE_SERVICE_ACCOUNT_KEY_PATH", "google_sheets_service_account.json")
+    # CSV data configuration
+    CSV_TRAINING_DATA_PATH = os.getenv("CSV_TRAINING_DATA_PATH", "sample_training_data.csv")
     
     # API configuration
     CORS_ORIGINS = ["http://localhost:5173", "http://localhost:3000"]
@@ -37,8 +36,8 @@ class Config:
     @classmethod
     def validate(cls):
         """Validate that required configuration is present."""
-        if not cls.GOOGLE_SHEET_URL:
-            print("Warning: GOOGLE_SHEET_URL not set in environment variables")
+        if not os.path.exists(cls.CSV_TRAINING_DATA_PATH):
+            print(f"Warning: CSV training data file not found: {cls.CSV_TRAINING_DATA_PATH}")
             return False
         return True
 

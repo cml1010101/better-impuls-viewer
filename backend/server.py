@@ -534,29 +534,27 @@ async def get_model_status() -> Dict[str, Any]:
 
 
 @app.post("/train_model")
-async def train_model_from_sheets(
+async def train_model_from_csv(
+    csv_file_path: Optional[str] = None,
     stars_to_extract: Optional[List[int]] = None,
     force_retrain: bool = False
 ) -> ModelTrainingResult:
     """
-    Train the CNN model using data from Google Sheets with enhanced 5-period strategy.
+    Train the CNN model using data from CSV file.
     
     Parameters:
+    - csv_file_path: Path to CSV training data file. If None, uses Config.CSV_TRAINING_DATA_PATH
     - stars_to_extract: Optional list of star numbers to include in training. 
                        If None, all available stars will be used.
     - force_retrain: If True, trains a new model even if one already exists.
                     If False, returns existing model info if available.
-    
-    The enhanced system generates 5 training samples per light curve:
-    - 1-2 correct periods (high confidence)
-    - 2 periodogram peaks that are not correct (medium confidence) 
-    - 2 random periods (low confidence)
     """
     try:
-        if not Config.GOOGLE_SHEET_URL:
-            raise HTTPException(status_code=400, detail="GOOGLE_SHEET_URL not configured in environment variables")
+        csv_path = csv_file_path or Config.CSV_TRAINING_DATA_PATH
+        if not os.path.exists(csv_path):
+            raise HTTPException(status_code=400, detail=f"CSV training data file not found: {csv_path}")
         
-        from model_training import model_exists, get_model_info
+        from model_training import model_exists, get_model_info, ModelTrainer
         
         # Check if model already exists and force_retrain is False
         if not force_retrain and model_exists():
@@ -571,7 +569,7 @@ async def train_model_from_sheets(
                 )
         
         trainer = ModelTrainer()
-        result = trainer.train_from_google_sheets(stars_to_extract)
+        result = trainer.train_from_csv(stars_to_extract, csv_file_path)
         
         if not result.success:
             raise HTTPException(status_code=500, detail="Model training failed")
@@ -579,63 +577,6 @@ async def train_model_from_sheets(
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error training model: {str(e)}")
-
-
-@app.post("/export_training_csv")
-async def export_training_data_to_csv(
-    stars_to_extract: Optional[List[int]] = None,
-    output_dir: str = "ml-dataset"
-) -> Dict[str, Any]:
-    """
-    Export training data from Google Sheets to CSV format for external analysis.
-    
-    Creates CSV files containing phase-folded light curves with corresponding
-    category and confidence information suitable for machine learning training.
-    
-    Parameters:
-    - stars_to_extract: Optional list of star numbers to include in export. 
-                       If None, all available stars will be used.
-    - output_dir: Directory to save the CSV files (default: "ml-dataset")
-    
-    Returns:
-    - Dictionary with export summary information
-    """
-    try:
-        if not Config.GOOGLE_SHEET_URL:
-            raise HTTPException(status_code=400, detail="GOOGLE_SHEET_URL not configured in environment variables")
-        
-        from google_sheets import GoogleSheetsLoader
-        
-        loader = GoogleSheetsLoader()
-        csv_path = loader.export_training_data_to_csv(
-            output_dir=output_dir,
-            stars_to_extract=stars_to_extract
-        )
-        
-        # Get file info
-        import os
-        if os.path.exists(csv_path):
-            file_size = os.path.getsize(csv_path)
-            
-            # Count rows in CSV
-            with open(csv_path, 'r') as f:
-                row_count = sum(1 for _ in f) - 1  # Subtract header
-        else:
-            file_size = 0
-            row_count = 0
-        
-        return {
-            "success": True,
-            "csv_path": csv_path,
-            "file_size_bytes": file_size,
-            "total_rows": row_count,
-            "output_directory": output_dir,
-            "stars_requested": stars_to_extract,
-            "message": f"Successfully exported training data to {csv_path}"
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error exporting training data: {str(e)}")
 
 
 @app.get("/sed/{star_number}")

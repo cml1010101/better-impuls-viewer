@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """
 Test the complete training workflow with sample data.
-This simulates the Google Sheets data and tests the end-to-end training process.
+This simulates the CSV data and tests the end-to-end training process.
 """
 
 import pandas as pd
 import numpy as np
 from backend.model_training import ModelTrainer
 from backend.models import TrainingDataPoint
-from backend.google_sheets import GoogleSheetsLoader
+from backend.csv_data_loader import CSVDataLoader
 
 def create_mock_training_data():
-    """Create mock training data that simulates Google Sheets structure."""
+    """Create mock training data that simulates CSV structure."""
     
     # Sample data: star_number, period_1, period_2, lc_category
     training_samples = [
@@ -23,7 +23,7 @@ def create_mock_training_data():
     ]
     
     training_data = []
-    loader = GoogleSheetsLoader('https://dummy-url')
+    loader = CSVDataLoader('https://dummy-url')
     
     for star_number, period_1, period_2, category in training_samples:
         try:

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test script to demonstrate star range functionality in google_sheets.py
+Test script to demonstrate star range functionality in csv_data_loader.py
 """
 
 import sys
@@ -92,9 +92,9 @@ def main():
     
     print("\n" + "=" * 50)
     print("Command line usage examples:")
-    print("python backend/google_sheets.py --stars '30:50' --export-csv")
-    print("python backend/google_sheets.py --stars '42'")
-    print("python backend/google_sheets.py --stars '1,5,10,20' --export-csv")
+    print("python backend/csv_data_loader.py --stars '30:50' --export-csv")
+    print("python backend/csv_data_loader.py --stars '42'")
+    print("python backend/csv_data_loader.py --stars '1,5,10,20' --export-csv")
     print("python backend/model_training.py --stars '30:100' --force-retrain")
     print("python backend/model_training.py --stars '42'")
     

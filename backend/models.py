@@ -51,7 +51,7 @@ class MethodResult(BaseModel):
 
 
 class TrainingDataPoint(BaseModel):
-    """Data model for a single training example from Google Sheets."""
+    """Data model for a single training example from CSV data."""
     star_number: int
     period_1: Optional[float]
     period_2: Optional[float]
