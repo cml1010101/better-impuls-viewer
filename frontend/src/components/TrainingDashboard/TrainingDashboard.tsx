@@ -38,10 +38,51 @@ const TrainingDashboard: React.FC = () => {
   const [trainingResult, setTrainingResult] = useState<TrainingResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [csvFilePath, setCsvFilePath] = useState<string>('');
+  const [selectedFileName, setSelectedFileName] = useState<string>('');
+  const [starRange, setStarRange] = useState<string>('');
 
   useEffect(() => {
     fetchModelStatus();
   }, []);
+
+  const parseStarRange = (rangeStr: string): number[] => {
+    if (!rangeStr.trim()) return [];
+    
+    const stars: number[] = [];
+    const parts = rangeStr.split(',');
+    
+    for (const part of parts) {
+      const trimmedPart = part.trim();
+      if (trimmedPart.includes('-')) {
+        // Handle range like "1-10"
+        const [start, end] = trimmedPart.split('-').map(num => parseInt(num.trim()));
+        if (!isNaN(start) && !isNaN(end) && start <= end) {
+          for (let i = start; i <= end; i++) {
+            stars.push(i);
+          }
+        }
+      } else {
+        // Handle single number
+        const num = parseInt(trimmedPart);
+        if (!isNaN(num)) {
+          stars.push(num);
+        }
+      }
+    }
+    
+    // Remove duplicates and sort
+    return [...new Set(stars)].sort((a, b) => a - b);
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      setSelectedFileName(file.name);
+      // In a real scenario, you'd need to upload the file to the server first
+      // For now, we'll use the file name and assume the user places it in the correct location
+      setCsvFilePath(file.name);
+    }
+  };
 
   const fetchModelStatus = async () => {
     try {
@@ -67,6 +108,15 @@ const TrainingDashboard: React.FC = () => {
       
       if (csvFilePath.trim()) {
         params.append('csv_file_path', csvFilePath.trim());
+      }
+      
+      // Parse and add star range if provided
+      const starsToExtract = parseStarRange(starRange);
+      if (starsToExtract.length > 0) {
+        // Add multiple query parameters for each star
+        starsToExtract.forEach(star => {
+          params.append('stars_to_extract', star.toString());
+        });
       }
       
       const response = await fetch(`${API_BASE}/train_model?${params.toString()}`, {
@@ -106,6 +156,15 @@ const TrainingDashboard: React.FC = () => {
       
       if (csvFilePath.trim()) {
         params.append('csv_file_path', csvFilePath.trim());
+      }
+      
+      // Parse and add star range if provided
+      const starsToExtract = parseStarRange(starRange);
+      if (starsToExtract.length > 0) {
+        // Add multiple query parameters for each star
+        starsToExtract.forEach(star => {
+          params.append('stars_to_extract', star.toString());
+        });
       }
       
       const response = await fetch(`${API_BASE}/train_model?${params.toString()}`, {
@@ -180,20 +239,54 @@ const TrainingDashboard: React.FC = () => {
         
         {/* CSV File Path Input */}
         <div className={styles.filePathSection}>
-          <label htmlFor="csvFilePath" className={styles.filePathLabel}>
-            CSV Training Data File Path (optional):
+          <label htmlFor="csvFileInput" className={styles.filePathLabel}>
+            CSV Training Data File (optional):
           </label>
+          
+          <div className={styles.fileInputContainer}>
+            <input
+              type="file"
+              id="csvFileInput"
+              accept=".csv"
+              onChange={handleFileSelect}
+              className={styles.fileInput}
+              disabled={isTraining}
+            />
+            <label htmlFor="csvFileInput" className={styles.fileInputLabel}>
+              {selectedFileName || 'Choose CSV File'}
+            </label>
+          </div>
+          
           <input
             type="text"
-            id="csvFilePath"
             value={csvFilePath}
             onChange={(e) => setCsvFilePath(e.target.value)}
-            placeholder="Leave empty to use default training data file"
+            placeholder="Or enter file path manually (leave empty for default)"
             className={styles.filePathInput}
             disabled={isTraining}
           />
+          
           <div className={styles.filePathHelp}>
-            Specify a custom CSV file path for training, or leave empty to use the default training dataset.
+            Select a CSV file or enter the file path manually. Leave empty to use the default training dataset.
+          </div>
+        </div>
+
+        {/* Star Range Input */}
+        <div className={styles.starRangeSection}>
+          <label htmlFor="starRange" className={styles.starRangeLabel}>
+            Star Range (optional):
+          </label>
+          <input
+            type="text"
+            id="starRange"
+            value={starRange}
+            onChange={(e) => setStarRange(e.target.value)}
+            placeholder="e.g., 1-100, 1,5,10-20, or leave empty for all stars"
+            className={styles.starRangeInput}
+            disabled={isTraining}
+          />
+          <div className={styles.starRangeHelp}>
+            Specify which stars to include in training. Examples: "1-100" (range), "1,5,10-20" (mixed), or leave empty to use all available stars.
           </div>
         </div>
         
@@ -218,6 +311,7 @@ const TrainingDashboard: React.FC = () => {
             <p>• <strong>Train Model:</strong> Use existing model if available, train new one if not</p>
             <p>• <strong>Force Retrain:</strong> Train a new model even if one exists</p>
             <p>• <strong>Data Source:</strong> Training uses CSV data file for model training</p>
+            <p>• <strong>Star Selection:</strong> Optionally specify which stars to include in training</p>
           </div>
         </div>
 
