@@ -45,7 +45,10 @@
       "backend/**/*",
       "!backend/.gitignore",
       "!backend/__pycache__",
-      "requirements.txt"
+      "requirements.txt",
+      "setup-dependencies.sh",
+      "setup-dependencies.ps1",
+      "DEPENDENCY_SETUP.md"
     ],
     "extraResources": [
       {

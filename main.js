@@ -65,8 +65,25 @@ function startBackend() {
     const backendPath = path.join(__dirname, 'backend');
     const serverScript = path.join(backendPath, 'server.py');
     
+    // Determine Python executable
+    let pythonExecutable = 'python';
+    
+    // Try different Python commands
+    const pythonCommands = ['python3', 'python', 'py'];
+    for (const cmd of pythonCommands) {
+      try {
+        require('child_process').execSync(`${cmd} --version`, { stdio: 'ignore' });
+        pythonExecutable = cmd;
+        break;
+      } catch (error) {
+        // Continue to next command
+      }
+    }
+    
+    console.log('Using Python command:', pythonExecutable);
+    
     // Start the Python backend
-    backendProcess = spawn('python', [serverScript], {
+    backendProcess = spawn(pythonExecutable, [serverScript], {
       cwd: backendPath,
       stdio: ['pipe', 'pipe', 'pipe']
     });
@@ -134,7 +151,26 @@ function stopBackend() {
 // Check if Python and required packages are available
 async function checkDependencies() {
   return new Promise((resolve) => {
-    const checkProcess = spawn('python', ['-c', 
+    // Try different Python commands
+    const pythonCommands = ['python3', 'python', 'py'];
+    let pythonExecutable = null;
+    
+    for (const cmd of pythonCommands) {
+      try {
+        require('child_process').execSync(`${cmd} --version`, { stdio: 'ignore' });
+        pythonExecutable = cmd;
+        break;
+      } catch (error) {
+        // Continue to next command
+      }
+    }
+    
+    if (!pythonExecutable) {
+      resolve(false);
+      return;
+    }
+    
+    const checkProcess = spawn(pythonExecutable, ['-c', 
       'import fastapi, uvicorn, pandas, numpy; print("Dependencies OK")'
     ]);
     
@@ -150,14 +186,27 @@ async function checkDependencies() {
 
 // Show error dialog for missing dependencies
 function showDependencyError() {
-  dialog.showErrorBox(
-    'Missing Dependencies',
-    'Python and required packages are not installed or not in PATH.\n\n' +
-    'Please install:\n' +
-    '1. Python 3.8+\n' +
-    '2. Run: pip install -r requirements.txt\n\n' +
-    'Then restart the application.'
-  );
+  const isWindows = process.platform === 'win32';
+  const setupScript = isWindows ? 'setup-dependencies.ps1' : 'setup-dependencies.sh';
+  const setupCommand = isWindows 
+    ? 'Right-click on setup-dependencies.ps1 and select "Run with PowerShell"'
+    : 'Run: ./setup-dependencies.sh';
+  
+  const errorMessage = isDev 
+    ? 'Python and required packages are not installed or not in PATH.\n\n' +
+      'Please install:\n' +
+      '1. Python 3.8+\n' +
+      '2. Run: pip install -r requirements.txt\n\n' +
+      'Then restart the application.'
+    : `Python dependencies are missing.\n\n` +
+      `To fix this issue:\n` +
+      `1. Open the application installation folder\n` +
+      `2. ${setupCommand}\n` +
+      `3. Follow the on-screen instructions\n` +
+      `4. Restart Better Impuls Viewer\n\n` +
+      `If you continue to have issues, please ensure Python 3.8+ is installed on your system.`;
+      
+  dialog.showErrorBox('Missing Dependencies', errorMessage);
 }
 
 // App event handlers
