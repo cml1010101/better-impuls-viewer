@@ -54,6 +54,21 @@ def get_data_folder():
     """Get the data folder path"""
     return Config.DATA_DIR
 
+def get_data_filename(star_number: int, telescope: str) -> str:
+    """Get the correct filename format for a star and telescope, checking both padded and unpadded formats"""
+    folder = get_data_folder()
+    
+    # Try unpadded format first (e.g., "1-hubble.tbl")
+    unpadded_filename = f"{star_number}-{telescope}.tbl"
+    unpadded_path = os.path.join(folder, unpadded_filename)
+    
+    if os.path.exists(unpadded_path):
+        return unpadded_filename
+    
+    # Fall back to padded format (e.g., "001-hubble.tbl")
+    padded_filename = f"{str(star_number).zfill(3)}-{telescope}.tbl"
+    return padded_filename
+
 def load_data_file(filepath: str) -> np.ndarray:
     """Load data from a .tbl file with caching"""
     file_hash = get_file_hash(filepath)
@@ -105,7 +120,7 @@ def get_campaigns_for_star_telescope(star_number: int, telescope: str) -> List[C
         cache_entry = _processed_data_cache[cache_key]
         # Check if cache is still valid (file hasn't changed)
         folder = get_data_folder()
-        filename = f"{str(star_number).zfill(3)}-{telescope}.tbl"
+        filename = get_data_filename(star_number, telescope)
         filepath = os.path.join(folder, filename)
         
         if os.path.exists(filepath):
@@ -114,7 +129,7 @@ def get_campaigns_for_star_telescope(star_number: int, telescope: str) -> List[C
                 return cache_entry['campaigns']
     
     folder = get_data_folder()
-    filename = f"{str(star_number).zfill(3)}-{telescope}.tbl"
+    filename = get_data_filename(star_number, telescope)
     filepath = os.path.join(folder, filename)
     
     if not os.path.exists(filepath):
@@ -216,7 +231,11 @@ async def get_telescopes_for_star(star_number: int) -> List[str]:
     telescopes = set()
     
     for filename in all_files:
-        if filename.startswith(f"{str(star_number).zfill(3)}-") and filename.endswith('.tbl'):
+        # Check both padded (001-) and unpadded (1-) formats
+        padded_prefix = f"{str(star_number).zfill(3)}-"
+        unpadded_prefix = f"{star_number}-"
+        
+        if (filename.startswith(padded_prefix) or filename.startswith(unpadded_prefix)) and filename.endswith('.tbl'):
             try:
                 parts = filename.split('-')
                 if len(parts) >= 2:

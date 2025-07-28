@@ -81,6 +81,54 @@
   cursor: not-allowed;
 }
 
+/* Auto Periods inline styling */
+.autoPeriodsInline {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.inlinePeriod {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  padding: 0.2rem 0.4rem;
+}
+
+.periodValue {
+  color: white;
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-width: 60px;
+}
+
+.usePeriodBtn {
+  background: rgba(255, 255, 255, 0.9);
+  border: none;
+  border-radius: 3px;
+  padding: 0.15rem 0.4rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.usePeriodBtn:hover {
+  background: white;
+  transform: scale(1.05);
+}
+
+.usePeriodBtn.primaryBtn {
+  color: #2563eb;
+}
+
+.usePeriodBtn.secondaryBtn {
+  color: #7c3aed;
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
   .controlPanel {
@@ -100,5 +148,23 @@
     width: 20px;
     height: 24px;
     font-size: 0.8rem;
+  }
+  
+  .autoPeriodsInline {
+    gap: 0.3rem;
+  }
+  
+  .inlinePeriod {
+    padding: 0.15rem 0.3rem;
+  }
+  
+  .periodValue {
+    font-size: 0.7rem;
+    min-width: 50px;
+  }
+  
+  .usePeriodBtn {
+    padding: 0.1rem 0.3rem;
+    font-size: 0.65rem;
   }
 }

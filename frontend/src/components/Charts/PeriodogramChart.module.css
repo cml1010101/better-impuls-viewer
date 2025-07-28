@@ -1,56 +1,56 @@
 /* Periodogram Chart styles */
 .chartSection {
   background: white;
-  border-radius: 6px;
-  padding: 0.75rem;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  padding: 0.5rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .chartSection h3 {
-  margin: 0 0 0.4rem 0;
+  margin: 0 0 0.25rem 0;
   color: #333;
-  font-size: 1rem;
+  font-size: 0.9rem;
   font-weight: 600;
 }
 
 .chartDescription {
   text-align: center;
-  margin: 0 0 0.75rem 0;
+  margin: 0 0 0.5rem 0;
   color: #666;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
 }
 
 .periodInputSection {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 0.4rem;
-  margin-top: 0.75rem;
+  gap: 0.3rem;
+  margin-top: 0.5rem;
   flex-wrap: wrap;
 }
 
 .periodLabel {
   font-weight: 600;
   color: #333;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
 }
 
 .periodInput {
-  padding: 0.4rem;
-  border: 2px solid #e1e8ed;
-  border-radius: 4px;
-  width: 100px;
-  font-size: 0.9rem;
+  padding: 0.3rem;
+  border: 1px solid #e1e8ed;
+  border-radius: 3px;
+  width: 80px;
+  font-size: 0.8rem;
 }
 
 .periodButton {
-  padding: 0.4rem 0.8rem;
+  padding: 0.3rem 0.6rem;
   background: #667eea;
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 3px;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
   font-weight: 600;
   transition: background-color 0.2s;
 }
@@ -61,10 +61,10 @@
 
 .selectedPeriod {
   text-align: center;
-  margin: 0.5rem 0 0 0;
+  margin: 0.25rem 0 0 0;
   color: #667eea;
   font-weight: 600;
-  font-size: 0.9rem;
+  font-size: 0.8rem;
 }
 
 /* Responsive design */
