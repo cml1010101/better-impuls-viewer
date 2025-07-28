@@ -193,14 +193,20 @@ async function installDependencies() {
     console.log('Installing Python dependencies automatically...');
     
     // Try to install from requirements.txt first, then fallback to individual packages
-    const requirementsPath = path.join(__dirname, 'requirements.txt');
+    const appPath = app.getAppPath();
+    const requirementsPath = path.join(appPath, 'requirements.txt');
     let installCommand = ['-m', 'pip', 'install', '--user', '-r', requirementsPath];
+    
+    console.log('Looking for requirements.txt at:', requirementsPath);
     
     // Check if requirements.txt exists
     if (!require('fs').existsSync(requirementsPath)) {
+      console.log('requirements.txt not found, using individual packages');
       // Fallback to installing individual packages
       const packages = ['fastapi', 'uvicorn', 'pandas', 'numpy', 'matplotlib', 'astropy', 'torch', 'scipy', 'python-dotenv', 'scikit-learn'];
       installCommand = ['-m', 'pip', 'install', '--user'].concat(packages);
+    } else {
+      console.log('Found requirements.txt, installing from file');
     }
     
     const installProcess = spawn(pythonExecutable, installCommand, {
