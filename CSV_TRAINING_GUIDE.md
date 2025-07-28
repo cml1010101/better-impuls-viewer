@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Better Impuls Viewer supports loading training data from CSV files. This provides a simple way for users to provide their own training data without external dependencies.
+The Better Impuls Viewer supports loading training data from CSV files using a format that matches the original Google Sheets structure with multiple telescopes/sensors per star. This provides a comprehensive way to train models with data from multiple instruments.
 
 ## Installation
 
@@ -21,26 +21,39 @@ CSV_TRAINING_DATA_PATH=sample_training_data.csv
 
 ## CSV Format
 
-### Required Columns
+### Column Structure (No Headers)
 
-- **star_number**: Integer star identifier (must match data files in sample_data directory)
-- **period_1**: Primary period in days (use -9 or leave empty for no valid period)
-- **lc_category**: Light curve category (see supported categories below)
+The CSV file should contain **no header row** and use the following hardcoded column positions that match the original Google Sheets format:
 
-### Optional Columns
+- **Column 0 (A)**: Star number
+- **Columns 5-6 (F-G)**: CDIPS period 1 & 2
+- **Columns 7-8 (H-I)**: ELEANOR period 1 & 2  
+- **Columns 9-10 (J-K)**: QLP period 1 & 2
+- **Columns 11-12 (L-M)**: SPOC period 1 & 2
+- **Columns 13-14 (N-O)**: TESS 16 period 1 & 2
+- **Columns 15-16 (P-Q)**: TASOC period 1 & 2
+- **Columns 17-18 (R-S)**: TGLC period 1 & 2
+- **Columns 19-20 (T-U)**: EVEREST period 1 & 2
+- **Columns 21-22 (V-W)**: K2SC period 1 & 2
+- **Columns 23-24 (X-Y)**: K2SFF period 1 & 2
+- **Columns 25-26 (Z-AA)**: K2VARCAT period 1 & 2
+- **Columns 27-28 (AB-AC)**: ZTF_R period 1 & 2
+- **Columns 29-30 (AD-AE)**: ZTF_G period 1 & 2
+- **Columns 31-32 (AF-AG)**: W1 period 1 & 2
+- **Columns 33-34 (AH-AI)**: W2 period 1 & 2
+- **Column 40**: LC category
 
-- **period_2**: Secondary period in days (use -9 or leave empty for no valid period)
-- **sensor**: Sensor/instrument name (defaults to 'csv' if not provided)
+### Period Values
 
-### Example CSV
+- Use valid float numbers for detected periods (e.g., `2.5`, `15.3`)
+- Use `-9` or `"no"` for no valid period detected
+- Leave blank/empty for no data
+
+### Example CSV (First Few Columns)
 
 ```csv
-star_number,period_1,period_2,lc_category,sensor
-1,2.5,-9,dipper,csv
-2,7.8,-9,resolved distant peaks,csv
-3,15.3,-9,sinusoidal,csv
-4,5.2,-9,resolved close peaks,csv
-5,12.7,-9,stochastic,csv
+1,,,,,,2.5,-9,7.8,-9,15.3,-9,5.2,-9,12.7,-9,8.4,-9,6.1,-9,4.3,-9,9.6,-9,3.7,-9,11.2,-9,2.8,-9,14.5,-9,7.9,-9,5.8,-9,,,,,dipper
+2,,,,,,3.1,-9,8.2,-9,16.7,-9,6.4,-9,13.1,-9,9.8,-9,7.2,-9,5.5,-9,10.3,-9,4.1,-9,12.6,-9,3.2,-9,15.8,-9,8.7,-9,6.9,-9,,,,,resolved distant peaks
 ```
 
 ## Supported Light Curve Categories

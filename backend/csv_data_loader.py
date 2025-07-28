@@ -76,9 +76,10 @@ class CSVDataLoader:
             raise FileNotFoundError(f"CSV file not found: {csv_file_path}")
     
     def load_raw_data(self) -> pd.DataFrame:
-        """Load raw data from CSV file."""
+        """Load raw data from CSV file, ignoring headers and using column indices."""
         try:
-            df = pd.read_csv(self.csv_file_path)
+            # Load CSV without headers, treating all rows as data
+            df = pd.read_csv(self.csv_file_path, header=None)
             print(f"Loaded {len(df)} rows from CSV file: {self.csv_file_path}")
             return df
         except Exception as e:
@@ -87,14 +88,26 @@ class CSVDataLoader:
     
     def extract_training_data(self, stars_to_extract: Union[str, List[int], None] = None) -> List[TrainingDataPoint]:
         """
-        Extract training data from CSV file.
+        Extract training data from CSV file using hardcoded column indices like Google Sheets.
         
-        Expected CSV format:
-        - star_number: Integer star identifier
-        - period_1: Primary period (float, -9 or NaN for no valid period)
-        - period_2: Secondary period (float, -9 or NaN for no valid period, optional)
-        - lc_category: Light curve category (string)
-        - sensor: Sensor name (string, optional, defaults to 'csv')
+        Expected CSV format (no header, hardcoded column positions):
+        - Column 0 (A): Star number
+        - Columns 5-6 (F-G): CDIPS period 1 & 2
+        - Columns 7-8 (H-I): ELEANOR period 1 & 2  
+        - Columns 9-10 (J-K): QLP period 1 & 2
+        - Columns 11-12 (L-M): SPOC period 1 & 2
+        - Columns 13-14 (N-O): TESS 16 period 1 & 2
+        - Columns 15-16 (P-Q): TASOC period 1 & 2
+        - Columns 17-18 (R-S): TGLC period 1 & 2
+        - Columns 19-20 (T-U): EVEREST period 1 & 2
+        - Columns 21-22 (V-W): K2SC period 1 & 2
+        - Columns 23-24 (X-Y): K2SFF period 1 & 2
+        - Columns 25-26 (Z-AA): K2VARCAT period 1 & 2
+        - Columns 27-28 (AB-AC): ZTF_R period 1 & 2
+        - Columns 29-30 (AD-AE): ZTF_G period 1 & 2
+        - Columns 31-32 (AF-AG): W1 period 1 & 2
+        - Columns 33-34 (AH-AI): W2 period 1 & 2
+        - Column 39 (AN): LC category
         
         Args:
             stars_to_extract: Can be:
@@ -103,7 +116,7 @@ class CSVDataLoader:
                 - String: Range like "30:50" or single number like "42"
         
         Returns:
-            List of TrainingDataPoint objects
+            List of TrainingDataPoint objects with multiple entries per star (one per sensor)
         """
         df = self.load_raw_data()
         training_data = []
@@ -115,33 +128,50 @@ class CSVDataLoader:
         else:
             print("Extracting data for all available stars")
         
-        # Validate required columns
-        required_columns = ['star_number', 'period_1', 'lc_category']
-        for col in required_columns:
-            if col not in df.columns:
-                raise ValueError(f"Required column '{col}' not found in CSV. Available columns: {list(df.columns)}")
+        # Define sensor mappings using hardcoded column indices (same as Google Sheets)
+        sensors = {
+            'cdips': (5, 6),      # Columns F-G
+            'eleanor': (7, 8),    # Columns H-I
+            'qlp': (9, 10),       # Columns J-K
+            'spoc': (11, 12),     # Columns L-M
+            't16': (13, 14),      # Columns N-O
+            'tasoc': (15, 16),    # Columns P-Q
+            'tglc': (17, 18),     # Columns R-S
+            'everest': (19, 20),  # Columns T-U
+            'k2sc': (21, 22),     # Columns V-W
+            'k2sff': (23, 24),    # Columns X-Y
+            'k2varcat': (25, 26), # Columns Z-AA
+            'ztf_r': (27, 28),    # Columns AB-AC
+            'ztf_g': (29, 30),    # Columns AD-AE
+            'w1': (31, 32),       # Columns AF-AG
+            'w2': (33, 34),       # Columns AH-AI
+        }
+
+        CATEGORY_COL_INDEX = 40  # Column for LC category (was column AN in Google Sheets, but we have it at index 40)
         
         print(f"Processing {len(df)} rows from CSV...")
+        print(f"Processing multiple telescopes/sensors per star")
         
         for index, row in df.iterrows():
             try:
-                star_number = int(row['star_number'])
+                # Skip if we don't have enough columns for star number
+                if len(row) <= 0:
+                    continue
+                    
+                star_number = int(row.iloc[0])  # Column A (index 0)
                 
                 # Filter by star range if specified
                 if parsed_stars is not None and star_number not in parsed_stars:
                     continue
                 
-                # Extract periods
-                period_1 = self._extract_period(row['period_1'])
-                period_2 = self._extract_period(row.get('period_2', -9))
-                
-                # Skip if no valid periods
-                if period_1 is None:
-                    continue
-                
-                # Get category and sensor
-                lc_category = self._normalize_lc_category(str(row['lc_category']))
-                sensor = str(row.get('sensor', 'csv'))
+                # Get LC category (with safety check for column existence)
+                lc_category = 'stochastic'  # Default fallback
+                if len(row) > CATEGORY_COL_INDEX:
+                    try:
+                        lc_category = self._normalize_lc_category(str(row.iloc[CATEGORY_COL_INDEX]))
+                    except:
+                        print(f"Warning: Could not normalize category for star {star_number}, defaulting to 'stochastic'")
+                        lc_category = 'stochastic'
                 
                 # Load time series data for this star
                 time_series, flux_series = self._load_star_data(star_number)
@@ -150,25 +180,144 @@ class CSVDataLoader:
                 if len(time_series) == 0 or len(flux_series) == 0:
                     continue
                 
-                # Create training data point
-                training_data.append(TrainingDataPoint(
-                    star_number=star_number,
-                    period_1=period_1,
-                    period_2=period_2,
-                    lc_category=lc_category,
-                    time_series=time_series.tolist(),
-                    flux_series=flux_series.tolist(),
-                    sensor=sensor,
-                    period_type='csv_provided',
-                    period_confidence=0.8  # Default confidence for CSV-provided periods
-                ))
-                
+                # Process each sensor's data to extract training samples
+                for sensor, (period1_col_idx, period2_col_idx) in sensors.items():
+                    try:
+                        # Skip if we don't have enough columns for this sensor
+                        if len(row) <= max(period1_col_idx, period2_col_idx):
+                            continue
+                            
+                        # Get correct periods from CSV columns
+                        correct_periods = self._extract_correct_periods_by_index(row, period1_col_idx, period2_col_idx)
+                        
+                        if len(correct_periods) == 0:
+                            continue  # Skip this sensor if no valid periods
+                        
+                        # Generate 5 periods for training per light curve (same as Google Sheets approach)
+                        training_periods = self._generate_training_periods(
+                            time_series, flux_series, correct_periods
+                        )
+                        
+                        # Create training data points for each period
+                        for period_info in training_periods:
+                            period_value = period_info['period']
+                            period_type = period_info['type']  # 'correct', 'periodogram_peak', or 'random'
+                            confidence = period_info['confidence']
+                            
+                            training_data.append(TrainingDataPoint(
+                                star_number=star_number,
+                                period_1=period_value,
+                                period_2=None,  # Store as single period for training
+                                lc_category=lc_category,
+                                time_series=time_series.tolist(),
+                                flux_series=flux_series.tolist(),
+                                # Add metadata for training
+                                sensor=sensor,
+                                period_type=period_type,
+                                period_confidence=confidence
+                            ))
+                            
+                    except Exception as e:
+                        print(f"Error processing sensor {sensor} for star {star_number}: {e}")
+                        continue
+                        
             except Exception as e:
-                print(f"Error processing row {index} (star {row.get('star_number', 'unknown')}): {e}")
+                print(f"Error processing row {index}: {e}")
                 continue
         
-        print(f"Extracted {len(training_data)} training examples from CSV")
+        print(f"Extracted {len(training_data)} training examples from CSV with multiple telescopes/sensors")
         return training_data
+    
+    def _extract_correct_periods_by_index(self, row: pd.Series, period1_col_idx: int, period2_col_idx: int) -> List[float]:
+        """Extract valid correct periods from a CSV row using column indices."""
+        correct_periods = []
+        
+        # Extract period 1
+        try:
+            period1 = row.iloc[period1_col_idx]
+            if not pd.isna(period1) and period1 != -9 and period1 != "-9" and period1 != "no":
+                period1_float = float(period1)
+                if period1_float > 0:
+                    correct_periods.append(period1_float)
+        except (ValueError, TypeError, IndexError):
+            pass
+        
+        # Extract period 2
+        try:
+            period2 = row.iloc[period2_col_idx]
+            if not pd.isna(period2) and period2 != -9 and period2 != "-9" and period2 != "no":
+                period2_float = float(period2)
+                if period2_float > 0:
+                    correct_periods.append(period2_float)
+        except (ValueError, TypeError, IndexError):
+            pass
+        
+        return correct_periods
+    
+    def _generate_training_periods(self, time_series: np.ndarray, flux_series: np.ndarray, correct_periods: List[float]) -> List[Dict]:
+        """
+        Generate 5 training periods for each light curve (same strategy as Google Sheets):
+        - 1-2 correct periods (from CSV data)
+        - 2 peaks from periodogram that are not correct
+        - 2 random periods
+        """
+        from period_detection import calculate_lomb_scargle
+        
+        training_periods = []
+        
+        # Add correct periods
+        for period in correct_periods[:2]:  # Maximum 2 correct periods
+            training_periods.append({
+                'period': period,
+                'type': 'correct',
+                'confidence': 0.9
+            })
+        
+        try:
+            # Generate periodogram to find other peaks
+            data_array = np.column_stack((time_series, flux_series))
+            frequencies, power = calculate_lomb_scargle(data_array)
+            periods = 1.0 / frequencies
+            
+            # Find peaks in periodogram (excluding correct periods)
+            periodogram_peaks = []
+            for i in range(1, len(power) - 1):
+                if power[i] > power[i-1] and power[i] > power[i+1]:
+                    period = periods[i]
+                    # Exclude periods too close to correct ones
+                    if not any(abs(period - cp) / cp < 0.1 for cp in correct_periods):
+                        periodogram_peaks.append((period, power[i]))
+            
+            # Sort by power and take top peaks
+            periodogram_peaks.sort(key=lambda x: x[1], reverse=True)
+            
+            # Add up to 2 periodogram peaks
+            for period, power_val in periodogram_peaks[:2]:
+                if len(training_periods) < 4:  # Leave room for random periods
+                    training_periods.append({
+                        'period': period,
+                        'type': 'periodogram_peak',
+                        'confidence': 0.3
+                    })
+        
+        except Exception as e:
+            print(f"Error generating periodogram: {e}")
+        
+        # Fill remaining slots with random periods
+        min_period = 0.5
+        max_period = min(50.0, (time_series[-1] - time_series[0]) / 4.0)
+        
+        while len(training_periods) < 5:
+            random_period = np.random.uniform(min_period, max_period)
+            # Ensure it's not too close to existing periods
+            if not any(abs(random_period - tp['period']) / tp['period'] < 0.1 for tp in training_periods):
+                training_periods.append({
+                    'period': random_period,
+                    'type': 'random',
+                    'confidence': 0.1
+                })
+        
+        return training_periods[:5]  # Ensure exactly 5 periods
     
     def _extract_period(self, period_value) -> Optional[float]:
         """Extract valid period from CSV value."""
