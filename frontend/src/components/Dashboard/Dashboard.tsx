@@ -4,6 +4,7 @@ import AutoPeriodsSection from '../AutoPeriodsSection/AutoPeriodsSection';
 import SEDImageSection from '../SEDImageSection/SEDImageSection';
 import AlgorithmDocumentation from '../AlgorithmDocumentation/AlgorithmDocumentation';
 import ChartsContainer from '../Charts/ChartsContainer';
+import TrainingDashboard from '../TrainingDashboard/TrainingDashboard';
 import styles from './Dashboard.module.css';
 
 // Types
@@ -404,6 +405,9 @@ const Dashboard: React.FC = () => {
       {autoPeriodsData && (
         <AlgorithmDocumentation campaignData={campaignData} />
       )}
+
+      {/* Training Dashboard Section */}
+      <TrainingDashboard />
 
       {/* Hidden image to test SED availability */}
       {selectedStar && sedImageLoading && (

@@ -1,0 +1,273 @@
+.trainingDashboard {
+  padding: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 15px;
+  color: white;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.trainingDashboard h2 {
+  text-align: center;
+  margin-bottom: 30px;
+  font-size: 2.2em;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.section {
+  margin-bottom: 30px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.section h3 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  font-size: 1.5em;
+  color: #fff;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.3);
+  padding-bottom: 10px;
+}
+
+/* Model Status Styles */
+.statusCard {
+  background: rgba(255, 255, 255, 0.15);
+  padding: 20px;
+  border-radius: 10px;
+  margin-bottom: 15px;
+}
+
+.statusIndicator {
+  font-size: 1.2em;
+  font-weight: bold;
+  padding: 10px 15px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+  text-align: center;
+}
+
+.statusIndicator.available {
+  background: rgba(76, 175, 80, 0.3);
+  border: 2px solid #4CAF50;
+  color: #E8F5E8;
+}
+
+.statusIndicator.unavailable {
+  background: rgba(255, 152, 0, 0.3);
+  border: 2px solid #FF9800;
+  color: #FFF3E0;
+}
+
+.statusMessage {
+  font-size: 1.1em;
+  margin-bottom: 10px;
+  color: #f0f0f0;
+}
+
+.modelPath {
+  font-size: 0.9em;
+  color: #d0d0d0;
+  font-family: monospace;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 8px;
+  border-radius: 5px;
+  margin-bottom: 15px;
+}
+
+.modelDetails {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 15px;
+  border-radius: 8px;
+  margin-top: 15px;
+}
+
+.modelDetails h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #fff;
+}
+
+.modelDetails p {
+  margin: 5px 0;
+  color: #f0f0f0;
+}
+
+.loading {
+  text-align: center;
+  font-style: italic;
+  color: #d0d0d0;
+  padding: 20px;
+}
+
+/* Button Styles */
+.refreshButton, .trainButton, .retrainButton, .exportButton {
+  background: linear-gradient(45deg, #667eea, #764ba2);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1em;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  margin-right: 10px;
+  margin-bottom: 10px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.refreshButton:hover, .trainButton:hover, .retrainButton:hover, .exportButton:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+.refreshButton:disabled, .trainButton:disabled, .retrainButton:disabled, .exportButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.retrainButton {
+  background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+}
+
+.exportButton {
+  background: linear-gradient(45deg, #54a0ff, #2e86de);
+}
+
+/* Training Controls */
+.trainingControls {
+  margin-bottom: 20px;
+}
+
+.trainingInfo, .exportInfo {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 15px;
+  border-radius: 8px;
+  margin-top: 15px;
+  font-size: 0.95em;
+}
+
+.trainingInfo p, .exportInfo p {
+  margin: 5px 0;
+  color: #f0f0f0;
+}
+
+/* Progress Indicators */
+.trainingProgress, .exportProgress {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  margin-top: 15px;
+}
+
+.spinner {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top: 3px solid #fff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin-right: 15px;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Results */
+.trainingResult, .exportResult {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 20px;
+  border-radius: 8px;
+  margin-top: 15px;
+}
+
+.trainingResult h4 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #fff;
+}
+
+.resultStatus {
+  font-size: 1.1em;
+  font-weight: bold;
+  padding: 10px 15px;
+  border-radius: 6px;
+  margin-bottom: 15px;
+  text-align: center;
+}
+
+.resultStatus.success {
+  background: rgba(76, 175, 80, 0.3);
+  border: 2px solid #4CAF50;
+  color: #E8F5E8;
+}
+
+.resultStatus.error {
+  background: rgba(244, 67, 54, 0.3);
+  border: 2px solid #F44336;
+  color: #FFEBEE;
+}
+
+.resultDetails {
+  background: rgba(0, 0, 0, 0.2);
+  padding: 15px;
+  border-radius: 6px;
+  margin-top: 15px;
+}
+
+.resultDetails p {
+  margin: 5px 0;
+  color: #f0f0f0;
+}
+
+/* Error Display */
+.error {
+  background: rgba(244, 67, 54, 0.2);
+  border: 2px solid #F44336;
+  color: #FFEBEE;
+  padding: 15px;
+  border-radius: 8px;
+  margin-top: 20px;
+  text-align: center;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .trainingDashboard {
+    padding: 15px;
+    margin: 10px;
+  }
+  
+  .section {
+    padding: 15px;
+  }
+  
+  .trainingDashboard h2 {
+    font-size: 1.8em;
+  }
+  
+  .refreshButton, .trainButton, .retrainButton, .exportButton {
+    width: 100%;
+    margin-right: 0;
+    margin-bottom: 10px;
+  }
+  
+  .trainingProgress, .exportProgress {
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .spinner {
+    margin-right: 0;
+    margin-bottom: 10px;
+  }
+}
