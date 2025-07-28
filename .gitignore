@@ -24,3 +24,27 @@ frontend/.env.production.local
 Thumbs.db
 
 .env
+
+# Root Node.js dependencies for Electron
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Electron build output
+dist-electron/
+out/
+
+# Additional Python patterns
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+
+# Model files
+*.pth
+*.pkl
+
+# Logs
+logs/
+*.log

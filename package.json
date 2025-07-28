@@ -1,0 +1,92 @@
+{
+  "name": "better-impuls-viewer",
+  "version": "1.0.0",
+  "description": "Desktop application for viewing and analyzing stellar impulse data",
+  "main": "electron/main.js",
+  "scripts": {
+    "electron": "electron . --no-sandbox",
+    "electron-dev": "concurrently \"npm run backend-dev\" \"npm run frontend-dev\" \"wait-on http://localhost:8000 http://localhost:5173 && electron . --no-sandbox\"",
+    "build": "npm run build-frontend && npm run build-backend",
+    "build-frontend": "cd frontend && npm run build",
+    "build-backend": "echo 'Backend build placeholder'",
+    "frontend-dev": "cd frontend && npm run dev",
+    "backend-dev": "cd backend && python3 server.py",
+    "dist": "npm run build && electron-builder",
+    "dist-all": "npm run build && electron-builder --publish=never --linux --win --mac",
+    "pack": "npm run build && electron-builder --dir"
+  },
+  "keywords": [
+    "electron",
+    "stellar",
+    "astronomy",
+    "data-analysis",
+    "visualization"
+  ],
+  "author": "Better Impuls Viewer Team",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.0.0",
+    "concurrently": "^7.6.0",
+    "wait-on": "^7.0.1"
+  },
+  "build": {
+    "appId": "com.betterimpulsviewer.app",
+    "productName": "Better Impuls Viewer",
+    "directories": {
+      "output": "dist-electron"
+    },
+    "files": [
+      "electron/",
+      "frontend/dist/",
+      "backend/",
+      "requirements.txt",
+      "!backend/__pycache__",
+      "!backend/.pytest_cache"
+    ],
+    "extraResources": [
+      {
+        "from": "backend/",
+        "to": "backend/",
+        "filter": [
+          "**/*",
+          "!__pycache__",
+          "!.pytest_cache"
+        ]
+      }
+    ],
+    "linux": {
+      "target": [
+        {
+          "target": "tar.gz",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "category": "Science"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.education"
+    }
+  }
+}
