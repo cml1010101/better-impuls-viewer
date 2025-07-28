@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import ControlPanel from '../ControlPanel/ControlPanel';
-import AutoPeriodsSection from '../AutoPeriodsSection/AutoPeriodsSection';
-import SEDImageSection from '../SEDImageSection/SEDImageSection';
 import ChartsContainer from '../Charts/ChartsContainer';
 import styles from './Dashboard.module.css';
 
@@ -379,34 +377,13 @@ const Dashboard: React.FC = () => {
           campaigns={campaigns}
           selectedCampaign={selectedCampaign}
           setSelectedCampaign={setSelectedCampaign}
+          autoPeriodsData={autoPeriodsData}
+          onUsePrimaryPeriod={handleUsePrimaryPeriod}
+          onUseSecondaryPeriod={handleUseSecondaryPeriod}
         />
       </div>
 
       {loading && <div className={styles.loading}>Loading...</div>}
-
-      {/* Compact sections: AI view and SED side by side */}
-      {(autoPeriodsData || (selectedStar && sedImageAvailable)) && (
-        <div className={styles.compactSections}>
-          {/* Automatic Period Detection Results */}
-          {autoPeriodsData && (
-            <AutoPeriodsSection
-              autoPeriodsData={autoPeriodsData}
-              onUsePrimaryPeriod={handleUsePrimaryPeriod}
-              onUseSecondaryPeriod={handleUseSecondaryPeriod}
-            />
-          )}
-
-          {/* SED Image Section - Only show if image is available */}
-          {selectedStar && sedImageAvailable && (
-            <SEDImageSection
-              selectedStar={selectedStar}
-              apiBase={API_BASE}
-              onImageError={handleSedImageError}
-              onImageLoad={handleSedImageLoad}
-            />
-          )}
-        </div>
-      )}
 
       {/* Hidden image to test SED availability */}
       {selectedStar && sedImageLoading && (
@@ -436,6 +413,11 @@ const Dashboard: React.FC = () => {
           onPeriodogramClick={handlePeriodogramClick}
           onPeriodInputChange={handlePeriodInputChange}
           onPeriodSubmit={handlePeriodSubmit}
+          selectedStar={selectedStar}
+          apiBase={API_BASE}
+          sedImageAvailable={sedImageAvailable}
+          onSedImageError={handleSedImageError}
+          onSedImageLoad={handleSedImageLoad}
         />
       </div>
     </div>

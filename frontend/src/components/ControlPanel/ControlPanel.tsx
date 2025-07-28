@@ -9,6 +9,28 @@ interface Campaign {
   duration: number;
 }
 
+interface AutoPeriodClassification {
+  type: string;
+  confidence: number;
+  description: string;
+}
+
+interface AutoPeriodMethod {
+  success: boolean;
+  periods: number[];
+}
+
+interface AutoPeriodsData {
+  primary_period: number | null;
+  secondary_period: number | null;
+  classification: AutoPeriodClassification;
+  methods: {
+    periodogram?: AutoPeriodMethod;
+    cnn_validation?: AutoPeriodMethod;
+  };
+  error?: string;
+}
+
 interface ControlPanelProps {
   stars: number[];
   selectedStar: number | null;
@@ -19,6 +41,9 @@ interface ControlPanelProps {
   campaigns: Campaign[];
   selectedCampaign: string;
   setSelectedCampaign: (campaign: string) => void;
+  autoPeriodsData?: AutoPeriodsData | null;
+  onUsePrimaryPeriod?: () => void;
+  onUseSecondaryPeriod?: () => void;
 }
 
 const ControlPanel: React.FC<ControlPanelProps> = ({
@@ -31,6 +56,9 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
   campaigns,
   selectedCampaign,
   setSelectedCampaign,
+  autoPeriodsData,
+  onUsePrimaryPeriod,
+  onUseSecondaryPeriod,
 }) => {
   const handlePrevStar = () => {
     if (selectedStar) {
@@ -145,6 +173,44 @@ const ControlPanel: React.FC<ControlPanelProps> = ({
           ))}
         </select>
       </div>
+
+      {/* Auto Periods integrated into header */}
+      {autoPeriodsData && !autoPeriodsData.error && (
+        <div className={styles.controlGroup}>
+          <label>Auto Periods:</label>
+          <div className={styles.autoPeriodsInline}>
+            {autoPeriodsData.primary_period && (
+              <div className={styles.inlinePeriod}>
+                <span className={styles.periodValue}>
+                  {autoPeriodsData.primary_period.toFixed(4)}d
+                </span>
+                <button 
+                  className={`${styles.usePeriodBtn} ${styles.primaryBtn}`}
+                  onClick={onUsePrimaryPeriod}
+                  title="Use primary period"
+                >
+                  Use
+                </button>
+              </div>
+            )}
+            
+            {autoPeriodsData.secondary_period && (
+              <div className={styles.inlinePeriod}>
+                <span className={styles.periodValue}>
+                  {autoPeriodsData.secondary_period.toFixed(4)}d
+                </span>
+                <button 
+                  className={`${styles.usePeriodBtn} ${styles.secondaryBtn}`}
+                  onClick={onUseSecondaryPeriod}
+                  title="Use secondary period"
+                >
+                  Use
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
