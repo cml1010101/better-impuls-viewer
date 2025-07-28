@@ -150,8 +150,8 @@ class CSVDataLoader:
         # Try to detect the category column automatically
         category_col_idx = self._detect_category_column(df)
         if category_col_idx is None:
-            print("Warning: Could not detect category column, using default index 40")
-            category_col_idx = 40  # Fallback to hardcoded index
+            print("Warning: Could not detect category column, using default index 39")
+            category_col_idx = 39  # Fallback to hardcoded index
         else:
             print(f"Detected category column at index {category_col_idx}")
         
