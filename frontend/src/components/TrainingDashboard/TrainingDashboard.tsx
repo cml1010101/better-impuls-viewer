@@ -31,6 +31,7 @@ const TrainingDashboard: React.FC = () => {
   const [isTraining, setIsTraining] = useState(false);
   const [trainingResult, setTrainingResult] = useState<TrainingResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [csvFilePath, setCsvFilePath] = useState<string>('');
 
   useEffect(() => {
     fetchModelStatus();
@@ -54,20 +55,24 @@ const TrainingDashboard: React.FC = () => {
       setIsTraining(true);
       setTrainingResult(null);
       
-      const response = await fetch(`${API_BASE}/train_model`, {
+      // Build query parameters
+      const params = new URLSearchParams();
+      params.append('force_retrain', 'false');
+      
+      if (csvFilePath.trim()) {
+        params.append('csv_file_path', csvFilePath.trim());
+      }
+      
+      const response = await fetch(`${API_BASE}/train_model?${params.toString()}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          force_retrain: false,
-          stars_to_extract: null,
-          csv_file_path: null
-        }),
       });
 
       if (!response.ok) {
-        throw new Error(`Training failed: ${response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`Training failed: ${response.status} ${response.statusText} - ${errorText}`);
       }
 
       const result = await response.json();
@@ -89,20 +94,24 @@ const TrainingDashboard: React.FC = () => {
       setIsTraining(true);
       setTrainingResult(null);
       
-      const response = await fetch(`${API_BASE}/train_model`, {
+      // Build query parameters
+      const params = new URLSearchParams();
+      params.append('force_retrain', 'true');
+      
+      if (csvFilePath.trim()) {
+        params.append('csv_file_path', csvFilePath.trim());
+      }
+      
+      const response = await fetch(`${API_BASE}/train_model?${params.toString()}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          force_retrain: true,
-          stars_to_extract: null,
-          csv_file_path: null
-        }),
       });
 
       if (!response.ok) {
-        throw new Error(`Training failed: ${response.statusText}`);
+        const errorText = await response.text();
+        throw new Error(`Training failed: ${response.status} ${response.statusText} - ${errorText}`);
       }
 
       const result = await response.json();
@@ -155,6 +164,26 @@ const TrainingDashboard: React.FC = () => {
       {/* Training Section */}
       <div className={styles.section}>
         <h3>Model Training</h3>
+        
+        {/* CSV File Path Input */}
+        <div className={styles.filePathSection}>
+          <label htmlFor="csvFilePath" className={styles.filePathLabel}>
+            CSV Training Data File Path (optional):
+          </label>
+          <input
+            type="text"
+            id="csvFilePath"
+            value={csvFilePath}
+            onChange={(e) => setCsvFilePath(e.target.value)}
+            placeholder="Leave empty to use default training data file"
+            className={styles.filePathInput}
+            disabled={isTraining}
+          />
+          <div className={styles.filePathHelp}>
+            Specify a custom CSV file path for training, or leave empty to use the default training dataset.
+          </div>
+        </div>
+        
         <div className={styles.trainingControls}>
           <button 
             onClick={handleTrainModel} 

@@ -92,6 +92,7 @@ const Dashboard: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [sedImageAvailable, setSedImageAvailable] = useState<boolean>(false);
   const [sedImageLoading, setSedImageLoading] = useState<boolean>(false);
+  const [activeTab, setActiveTab] = useState<'main' | 'training'>('main');
 
   useEffect(() => {
     document.title = selectedStar ? `${selectedStar} - ${selectedTelescope}` : 'Better IMPULS Viewer';
@@ -369,89 +370,110 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className={styles.dashboard}>
-      {/* Control Panel */}
-      <div className={styles.fullWidthSection}>
-        <ControlPanel
-          stars={stars}
-          selectedStar={selectedStar}
-          setSelectedStar={setSelectedStar}
-          telescopes={telescopes}
-          selectedTelescope={selectedTelescope}
-          setSelectedTelescope={setSelectedTelescope}
-          campaigns={campaigns}
-          selectedCampaign={selectedCampaign}
-          setSelectedCampaign={setSelectedCampaign}
-        />
+      {/* Tab Navigation */}
+      <div className={styles.tabNavigation}>
+        <button 
+          className={`${styles.tabButton} ${activeTab === 'main' ? styles.activeTab : ''}`}
+          onClick={() => setActiveTab('main')}
+        >
+          Main Dashboard
+        </button>
+        <button 
+          className={`${styles.tabButton} ${activeTab === 'training' ? styles.activeTab : ''}`}
+          onClick={() => setActiveTab('training')}
+        >
+          Training
+        </button>
       </div>
 
-      {loading && <div className={styles.loading}>Loading...</div>}
-
-      {/* Compact sections: AI view and SED side by side */}
-      {(autoPeriodsData || (selectedStar && sedImageAvailable)) && (
-        <div className={styles.compactSections}>
-          {/* Automatic Period Detection Results */}
-          {autoPeriodsData && (
-            <AutoPeriodsSection
-              autoPeriodsData={autoPeriodsData}
-              onUsePrimaryPeriod={handleUsePrimaryPeriod}
-              onUseSecondaryPeriod={handleUseSecondaryPeriod}
-            />
-          )}
-
-          {/* SED Image Section - Only show if image is available */}
-          {selectedStar && sedImageAvailable && (
-            <SEDImageSection
+      {activeTab === 'main' && (
+        <>
+          {/* Control Panel */}
+          <div className={styles.fullWidthSection}>
+            <ControlPanel
+              stars={stars}
               selectedStar={selectedStar}
-              apiBase={API_BASE}
-              onImageError={handleSedImageError}
-              onImageLoad={handleSedImageLoad}
+              setSelectedStar={setSelectedStar}
+              telescopes={telescopes}
+              selectedTelescope={selectedTelescope}
+              setSelectedTelescope={setSelectedTelescope}
+              campaigns={campaigns}
+              selectedCampaign={selectedCampaign}
+              setSelectedCampaign={setSelectedCampaign}
+            />
+          </div>
+
+          {loading && <div className={styles.loading}>Loading...</div>}
+
+          {/* Compact sections: AI view and SED side by side */}
+          {(autoPeriodsData || (selectedStar && sedImageAvailable)) && (
+            <div className={styles.compactSections}>
+              {/* Automatic Period Detection Results */}
+              {autoPeriodsData && (
+                <AutoPeriodsSection
+                  autoPeriodsData={autoPeriodsData}
+                  onUsePrimaryPeriod={handleUsePrimaryPeriod}
+                  onUseSecondaryPeriod={handleUseSecondaryPeriod}
+                />
+              )}
+
+              {/* SED Image Section - Only show if image is available */}
+              {selectedStar && sedImageAvailable && (
+                <SEDImageSection
+                  selectedStar={selectedStar}
+                  apiBase={API_BASE}
+                  onImageError={handleSedImageError}
+                  onImageLoad={handleSedImageLoad}
+                />
+              )}
+            </div>
+          )}
+
+          {/* Algorithm Documentation Section */}
+          {autoPeriodsData && (
+            <div className={styles.fullWidthSection}>
+              <AlgorithmDocumentation campaignData={campaignData} />
+            </div>
+          )}
+
+          {/* Hidden image to test SED availability */}
+          {selectedStar && sedImageLoading && (
+            <img 
+              src={`${API_BASE}/sed/${selectedStar}`} 
+              alt=""
+              className={styles.hiddenImage}
+              onError={() => {
+                setSedImageAvailable(false);
+                setSedImageLoading(false);
+              }}
+              onLoad={() => {
+                setSedImageAvailable(true);
+                setSedImageLoading(false);
+              }}
             />
           )}
-        </div>
+
+          {/* Charts */}
+          <div className={styles.fullWidthSection}>
+            <ChartsContainer
+              campaignData={campaignData}
+              periodogramData={periodogramData}
+              phaseFoldedData={phaseFoldedData}
+              selectedPeriod={selectedPeriod}
+              periodInputValue={periodInputValue}
+              onPeriodogramClick={handlePeriodogramClick}
+              onPeriodInputChange={handlePeriodInputChange}
+              onPeriodSubmit={handlePeriodSubmit}
+            />
+          </div>
+        </>
       )}
 
-      {/* Algorithm Documentation Section */}
-      {autoPeriodsData && (
+      {activeTab === 'training' && (
         <div className={styles.fullWidthSection}>
-          <AlgorithmDocumentation campaignData={campaignData} />
+          <TrainingDashboard />
         </div>
       )}
-
-      {/* Hidden image to test SED availability */}
-      {selectedStar && sedImageLoading && (
-        <img 
-          src={`${API_BASE}/sed/${selectedStar}`} 
-          alt=""
-          className={styles.hiddenImage}
-          onError={() => {
-            setSedImageAvailable(false);
-            setSedImageLoading(false);
-          }}
-          onLoad={() => {
-            setSedImageAvailable(true);
-            setSedImageLoading(false);
-          }}
-        />
-      )}
-
-      {/* Charts */}
-      <div className={styles.fullWidthSection}>
-        <ChartsContainer
-          campaignData={campaignData}
-          periodogramData={periodogramData}
-          phaseFoldedData={phaseFoldedData}
-          selectedPeriod={selectedPeriod}
-          periodInputValue={periodInputValue}
-          onPeriodogramClick={handlePeriodogramClick}
-          onPeriodInputChange={handlePeriodInputChange}
-          onPeriodSubmit={handlePeriodSubmit}
-        />
-      </div>
-
-      {/* ML Training Dashboard */}
-      <div className={styles.fullWidthSection}>
-        <TrainingDashboard />
-      </div>
     </div>
   );
 };
