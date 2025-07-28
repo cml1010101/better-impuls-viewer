@@ -147,7 +147,13 @@ class CSVDataLoader:
             'w2': (33, 34),       # Columns AH-AI
         }
 
-        CATEGORY_COL_INDEX = 40  # Column for LC category (was column AN in Google Sheets, but we have it at index 40)
+        # Try to detect the category column automatically
+        category_col_idx = self._detect_category_column(df)
+        if category_col_idx is None:
+            print("Warning: Could not detect category column, using default index 40")
+            category_col_idx = 40  # Fallback to hardcoded index
+        else:
+            print(f"Detected category column at index {category_col_idx}")
         
         print(f"Processing {len(df)} rows from CSV...")
         print(f"Processing multiple telescopes/sensors per star")
@@ -166,9 +172,9 @@ class CSVDataLoader:
                 
                 # Get LC category (with safety check for column existence)
                 lc_category = 'stochastic'  # Default fallback
-                if len(row) > CATEGORY_COL_INDEX:
+                if len(row) > category_col_idx:
                     try:
-                        lc_category = self._normalize_lc_category(str(row.iloc[CATEGORY_COL_INDEX]))
+                        lc_category = self._normalize_lc_category(str(row.iloc[category_col_idx]))
                     except:
                         print(f"Warning: Could not normalize category for star {star_number}, defaulting to 'stochastic'")
                         lc_category = 'stochastic'
@@ -227,6 +233,41 @@ class CSVDataLoader:
         
         print(f"Extracted {len(training_data)} training examples from CSV with multiple telescopes/sensors")
         return training_data
+    
+    def _detect_category_column(self, df: pd.DataFrame) -> Optional[int]:
+        """
+        Try to detect which column contains the category information by looking for characteristic values.
+        
+        Returns the column index if found, None otherwise.
+        """
+        # Look for columns that contain category-like values
+        category_indicators = ['sinusoidal', 'double', 'shape', 'beater', 'resolved', 'eclipsing', 
+                             'pulsator', 'burster', 'dipper', 'co-rotating', 'stochastic', 'irregular']
+        
+        for col_idx in range(min(len(df.columns), 50)):  # Check first 50 columns
+            try:
+                # Get a sample of non-null values from this column
+                sample_values = df.iloc[:100, col_idx].dropna().astype(str).str.lower()
+                
+                if len(sample_values) == 0:
+                    continue
+                
+                # Count how many values contain category indicators
+                matches = 0
+                for value in sample_values:
+                    for indicator in category_indicators:
+                        if indicator in value:
+                            matches += 1
+                            break
+                
+                # If more than 10% of values match category patterns, this is likely the category column
+                if matches / len(sample_values) > 0.1:
+                    return col_idx
+                    
+            except Exception:
+                continue
+        
+        return None
     
     def _extract_correct_periods_by_index(self, row: pd.Series, period1_col_idx: int, period2_col_idx: int) -> List[float]:
         """Extract valid correct periods from a CSV row using column indices."""
@@ -333,7 +374,16 @@ class CSVDataLoader:
         """
         Normalize LC category strings to standard classifications.
         """
-        category = category.lower().strip()
+        category = str(category).lower().strip()
+        
+        # Handle NaN and empty values
+        if category in ['nan', 'none', '', 'null']:
+            return 'stochastic'
+        
+        # Handle yes/no values (might be from a boolean column)
+        if category in ['yes', 'no', 'true', 'false']:
+            print(f"Warning: Unexpected boolean value '{category}' in category column")
+            return 'stochastic'
         
         # Remove question marks and normalize
         category = category.replace('?', '').strip()

@@ -202,8 +202,8 @@ class ModelTrainer:
                 batch_X, batch_y = batch_X.to(self.device), batch_y.to(self.device)
                 
                 optimizer.zero_grad()
-                outputs = model(batch_X)
-                loss = criterion(outputs, batch_y)
+                confidence, classification = model(batch_X)  # Unpack the tuple
+                loss = criterion(classification, batch_y)  # Use only classification for loss
                 loss.backward()
                 optimizer.step()
                 
@@ -215,8 +215,8 @@ class ModelTrainer:
             with torch.no_grad():
                 for batch_X, batch_y in val_loader:
                     batch_X, batch_y = batch_X.to(self.device), batch_y.to(self.device)
-                    outputs = model(batch_X)
-                    loss = criterion(outputs, batch_y)
+                    confidence, classification = model(batch_X)  # Unpack the tuple
+                    loss = criterion(classification, batch_y)  # Use only classification for loss
                     val_loss += loss.item()
             
             # Calculate average losses

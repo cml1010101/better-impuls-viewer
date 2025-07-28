@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from typing import List, Dict, Any, Optional
@@ -9,6 +9,8 @@ from functools import lru_cache
 import hashlib
 import time
 import requests
+import tempfile
+import shutil
 
 # Import from our modular structure
 from config import Config
@@ -531,6 +533,55 @@ async def get_model_status() -> Dict[str, Any]:
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error checking model status: {str(e)}")
+
+
+@app.post("/upload_csv")
+async def upload_csv_file(file: UploadFile = File(...)) -> Dict[str, Any]:
+    """
+    Upload a CSV file for training.
+    
+    Returns the path to the uploaded file that can be used for training.
+    """
+    if not file.filename or not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="File must be a CSV file")
+    
+    try:
+        # Create a temporary file with a unique name
+        temp_dir = os.path.join(os.path.dirname(Config.CSV_TRAINING_DATA_PATH), "uploads")
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # Generate a unique filename to avoid conflicts
+        timestamp = str(int(time.time()))
+        safe_filename = f"uploaded_{timestamp}_{file.filename}"
+        file_path = os.path.join(temp_dir, safe_filename)
+        
+        # Save the uploaded file
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        # Validate the CSV file by trying to read it
+        try:
+            df = pd.read_csv(file_path, nrows=5)  # Read only first 5 rows for validation
+            rows_count = len(pd.read_csv(file_path))
+        except Exception as e:
+            # Clean up the file if it's invalid
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            raise HTTPException(status_code=400, detail=f"Invalid CSV file: {str(e)}")
+        
+        return {
+            "success": True,
+            "message": f"CSV file uploaded successfully",
+            "file_path": file_path,
+            "filename": file.filename,
+            "rows_count": rows_count,
+            "file_size": os.path.getsize(file_path)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error uploading file: {str(e)}")
 
 
 @app.post("/train_model")

@@ -162,6 +162,10 @@
 .fileInputContainer {
   position: relative;
   margin-bottom: 15px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 
 .fileInput {
@@ -195,6 +199,43 @@
   opacity: 0.5;
   cursor: not-allowed;
   transform: none;
+}
+
+.uploadButton {
+  padding: 12px 24px;
+  background: linear-gradient(45deg, #26c281, #20a085);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1em;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.uploadButton:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+.uploadButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.uploadSuccess {
+  background: rgba(38, 194, 129, 0.2);
+  border: 1px solid rgba(38, 194, 129, 0.5);
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 15px;
+}
+
+.uploadSuccess p {
+  margin: 5px 0;
+  color: #fff;
 }
 
 .filePathInput {

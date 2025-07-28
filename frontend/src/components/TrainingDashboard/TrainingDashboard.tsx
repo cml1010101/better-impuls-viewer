@@ -32,13 +32,24 @@ interface TrainingResult {
   training_samples: number;
 }
 
+interface UploadResult {
+  success: boolean;
+  message: string;
+  file_path: string;
+  filename: string;
+  rows_count: number;
+  file_size: number;
+}
+
 const TrainingDashboard: React.FC = () => {
   const [modelStatus, setModelStatus] = useState<ModelStatus | null>(null);
   const [isTraining, setIsTraining] = useState(false);
   const [trainingResult, setTrainingResult] = useState<TrainingResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [csvFilePath, setCsvFilePath] = useState<string>('');
-  const [selectedFileName, setSelectedFileName] = useState<string>('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [starRange, setStarRange] = useState<string>('');
 
   useEffect(() => {
@@ -77,10 +88,44 @@ const TrainingDashboard: React.FC = () => {
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      setSelectedFileName(file.name);
-      // In a real scenario, you'd need to upload the file to the server first
-      // For now, we'll use the file name and assume the user places it in the correct location
-      setCsvFilePath(file.name);
+      setSelectedFile(file);
+      setUploadResult(null);
+      setCsvFilePath(''); // Clear manual path when file is selected
+    }
+  };
+
+  const handleUploadFile = async () => {
+    if (!selectedFile) {
+      setError('Please select a file first');
+      return;
+    }
+
+    try {
+      setError(null);
+      setIsUploading(true);
+      
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      
+      const response = await fetch(`${API_BASE}/upload_csv`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Upload failed: ${response.status} ${response.statusText} - ${errorText}`);
+      }
+
+      const result = await response.json();
+      setUploadResult(result);
+      setCsvFilePath(result.file_path); // Set the server path for training
+      
+    } catch (err) {
+      setError(`Upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      console.error('Error uploading file:', err);
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -250,24 +295,52 @@ const TrainingDashboard: React.FC = () => {
               accept=".csv"
               onChange={handleFileSelect}
               className={styles.fileInput}
-              disabled={isTraining}
+              disabled={isTraining || isUploading}
             />
             <label htmlFor="csvFileInput" className={styles.fileInputLabel}>
-              {selectedFileName || 'Choose CSV File'}
+              {selectedFile ? selectedFile.name : 'Choose CSV File'}
             </label>
+            
+            {selectedFile && !uploadResult && (
+              <button
+                onClick={handleUploadFile}
+                disabled={isTraining || isUploading}
+                className={styles.uploadButton}
+              >
+                {isUploading ? 'Uploading...' : 'Upload File'}
+              </button>
+            )}
           </div>
+          
+          {uploadResult && (
+            <div className={styles.uploadSuccess}>
+              <p>✓ File uploaded successfully!</p>
+              <p><strong>Filename:</strong> {uploadResult.filename}</p>
+              <p><strong>Rows:</strong> {uploadResult.rows_count}</p>
+              <p><strong>Size:</strong> {(uploadResult.file_size / 1024).toFixed(1)} KB</p>
+            </div>
+          )}
           
           <input
             type="text"
             value={csvFilePath}
-            onChange={(e) => setCsvFilePath(e.target.value)}
+            onChange={(e) => {
+              setCsvFilePath(e.target.value);
+              if (e.target.value.trim()) {
+                setSelectedFile(null);
+                setUploadResult(null);
+              }
+            }}
             placeholder="Or enter file path manually (leave empty for default)"
             className={styles.filePathInput}
-            disabled={isTraining}
+            disabled={isTraining || isUploading}
           />
           
           <div className={styles.filePathHelp}>
-            Select a CSV file or enter the file path manually. Leave empty to use the default training dataset.
+            {selectedFile ? 
+              'Click "Upload File" to upload the selected CSV file to the server for training.' :
+              'Select a CSV file and upload it, or enter the file path manually. Leave empty to use the default training dataset.'
+            }
           </div>
         </div>
 
