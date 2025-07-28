@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from typing import List, Dict, Any, Optional
@@ -546,14 +546,21 @@ async def upload_csv_file(file: UploadFile = File(...)) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail="File must be a CSV file")
     
     try:
-        # Create a temporary file with a unique name
-        temp_dir = os.path.join(os.path.dirname(Config.CSV_TRAINING_DATA_PATH), "uploads")
+        # Create uploads directory - ensure it exists and is writable
+        base_dir = os.path.dirname(os.path.abspath(Config.CSV_TRAINING_DATA_PATH))
+        if not os.path.exists(base_dir):
+            # If the config directory doesn't exist, use current directory
+            base_dir = os.getcwd()
+        
+        temp_dir = os.path.join(base_dir, "uploads")
         os.makedirs(temp_dir, exist_ok=True)
         
         # Generate a unique filename to avoid conflicts
         timestamp = str(int(time.time()))
-        safe_filename = f"uploaded_{timestamp}_{file.filename}"
-        file_path = os.path.join(temp_dir, safe_filename)
+        # Sanitize filename to avoid security issues
+        safe_filename = "".join(c for c in file.filename if c.isalnum() or c in (' ', '.', '_', '-')).rstrip()
+        unique_filename = f"uploaded_{timestamp}_{safe_filename}"
+        file_path = os.path.join(temp_dir, unique_filename)
         
         # Save the uploaded file
         with open(file_path, "wb") as buffer:
@@ -561,8 +568,24 @@ async def upload_csv_file(file: UploadFile = File(...)) -> Dict[str, Any]:
         
         # Validate the CSV file by trying to read it
         try:
+            import pandas as pd
             df = pd.read_csv(file_path, nrows=5)  # Read only first 5 rows for validation
             rows_count = len(pd.read_csv(file_path))
+        except ImportError:
+            # If pandas is not available, do basic validation
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    lines = f.readlines()
+                    # Basic check for CSV format
+                    if len(lines) == 0:
+                        raise ValueError("File is empty")
+                    # Count non-empty lines
+                    rows_count = len([line for line in lines if line.strip()])
+            except Exception as e:
+                # Clean up the file if it's invalid
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                raise HTTPException(status_code=400, detail=f"Invalid CSV file: {str(e)}")
         except Exception as e:
             # Clean up the file if it's invalid
             if os.path.exists(file_path):
@@ -586,9 +609,9 @@ async def upload_csv_file(file: UploadFile = File(...)) -> Dict[str, Any]:
 
 @app.post("/train_model")
 async def train_model_from_csv(
-    csv_file_path: Optional[str] = None,
-    stars_to_extract: Optional[List[int]] = None,
-    force_retrain: bool = False
+    csv_file_path: Optional[str] = Query(None),
+    stars_to_extract: Optional[List[int]] = Query(None),
+    force_retrain: bool = Query(False)
 ) -> ModelTrainingResult:
     """
     Train the CNN model using data from CSV file.
