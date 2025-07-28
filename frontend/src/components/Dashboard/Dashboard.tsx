@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import ControlPanel from '../ControlPanel/ControlPanel';
 import AutoPeriodsSection from '../AutoPeriodsSection/AutoPeriodsSection';
 import SEDImageSection from '../SEDImageSection/SEDImageSection';
-import AlgorithmDocumentation from '../AlgorithmDocumentation/AlgorithmDocumentation';
 import ChartsContainer from '../Charts/ChartsContainer';
 import styles from './Dashboard.module.css';
 
@@ -406,13 +405,6 @@ const Dashboard: React.FC = () => {
               onImageLoad={handleSedImageLoad}
             />
           )}
-        </div>
-      )}
-
-      {/* Algorithm Documentation Section */}
-      {autoPeriodsData && (
-        <div className={styles.fullWidthSection}>
-          <AlgorithmDocumentation campaignData={campaignData} />
         </div>
       )}
 
