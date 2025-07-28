@@ -65,19 +65,12 @@ function startBackend() {
     const backendPath = path.join(__dirname, 'backend');
     const serverScript = path.join(backendPath, 'server.py');
     
-    // Determine Python executable
-    let pythonExecutable = 'python';
+    // Use the same Python executable finding logic
+    const pythonExecutable = findPythonExecutable();
     
-    // Try different Python commands
-    const pythonCommands = ['python3', 'python', 'py'];
-    for (const cmd of pythonCommands) {
-      try {
-        require('child_process').execSync(`${cmd} --version`, { stdio: 'ignore' });
-        pythonExecutable = cmd;
-        break;
-      } catch (error) {
-        // Continue to next command
-      }
+    if (!pythonExecutable) {
+      reject(new Error('Python executable not found'));
+      return;
     }
     
     console.log('Using Python command:', pythonExecutable);
@@ -148,65 +141,164 @@ function stopBackend() {
   }
 }
 
+// Find available Python executable
+function findPythonExecutable() {
+  const pythonCommands = ['python3', 'python', 'py'];
+  
+  for (const cmd of pythonCommands) {
+    try {
+      require('child_process').execSync(`${cmd} --version`, { stdio: 'ignore' });
+      return cmd;
+    } catch (error) {
+      // Continue to next command
+    }
+  }
+  return null;
+}
+
 // Check if Python and required packages are available
 async function checkDependencies() {
   return new Promise((resolve) => {
-    // Try different Python commands
-    const pythonCommands = ['python3', 'python', 'py'];
-    let pythonExecutable = null;
-    
-    for (const cmd of pythonCommands) {
-      try {
-        require('child_process').execSync(`${cmd} --version`, { stdio: 'ignore' });
-        pythonExecutable = cmd;
-        break;
-      } catch (error) {
-        // Continue to next command
-      }
-    }
+    const pythonExecutable = findPythonExecutable();
     
     if (!pythonExecutable) {
-      resolve(false);
+      resolve({ success: false, reason: 'python_not_found' });
       return;
     }
     
     const checkProcess = spawn(pythonExecutable, ['-c', 
-      'import fastapi, uvicorn, pandas, numpy; print("Dependencies OK")'
+      'import fastapi, uvicorn, pandas, numpy, matplotlib, astropy, torch, scipy, dotenv, sklearn; print("Dependencies OK")'
     ]);
     
     checkProcess.on('close', (code) => {
-      resolve(code === 0);
+      resolve({ success: code === 0, reason: code === 0 ? null : 'packages_missing' });
     });
 
     checkProcess.on('error', () => {
-      resolve(false);
+      resolve({ success: false, reason: 'python_error' });
     });
   });
 }
 
-// Show error dialog for missing dependencies
-function showDependencyError() {
-  const isWindows = process.platform === 'win32';
-  const setupScript = isWindows ? 'setup-dependencies.ps1' : 'setup-dependencies.sh';
-  const setupCommand = isWindows 
-    ? 'Right-click on setup-dependencies.ps1 and select "Run with PowerShell"'
-    : 'Run: ./setup-dependencies.sh';
-  
-  const errorMessage = isDev 
-    ? 'Python and required packages are not installed or not in PATH.\n\n' +
-      'Please install:\n' +
-      '1. Python 3.8+\n' +
-      '2. Run: pip install -r requirements.txt\n\n' +
-      'Then restart the application.'
-    : `Python dependencies are missing.\n\n` +
-      `To fix this issue:\n` +
-      `1. Open the application installation folder\n` +
-      `2. ${setupCommand}\n` +
-      `3. Follow the on-screen instructions\n` +
-      `4. Restart Better Impuls Viewer\n\n` +
-      `If you continue to have issues, please ensure Python 3.8+ is installed on your system.`;
-      
-  dialog.showErrorBox('Missing Dependencies', errorMessage);
+// Automatically install Python dependencies
+async function installDependencies() {
+  return new Promise((resolve) => {
+    const pythonExecutable = findPythonExecutable();
+    
+    if (!pythonExecutable) {
+      resolve({ success: false, error: 'Python not found on system' });
+      return;
+    }
+
+    console.log('Installing Python dependencies automatically...');
+    
+    // Try to install from requirements.txt first, then fallback to individual packages
+    const requirementsPath = path.join(__dirname, 'requirements.txt');
+    let installCommand = ['-m', 'pip', 'install', '--user', '-r', requirementsPath];
+    
+    // Check if requirements.txt exists
+    if (!require('fs').existsSync(requirementsPath)) {
+      // Fallback to installing individual packages
+      const packages = ['fastapi', 'uvicorn', 'pandas', 'numpy', 'matplotlib', 'astropy', 'torch', 'scipy', 'python-dotenv', 'scikit-learn'];
+      installCommand = ['-m', 'pip', 'install', '--user'].concat(packages);
+    }
+    
+    const installProcess = spawn(pythonExecutable, installCommand, {
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    
+    let output = '';
+    let errorOutput = '';
+    
+    installProcess.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+    
+    installProcess.stderr.on('data', (data) => {
+      errorOutput += data.toString();
+    });
+    
+    installProcess.on('close', (code) => {
+      if (code === 0) {
+        console.log('Dependencies installed successfully');
+        resolve({ success: true });
+      } else {
+        console.error('Failed to install dependencies:', errorOutput);
+        resolve({ success: false, error: errorOutput });
+      }
+    });
+
+    installProcess.on('error', (error) => {
+      console.error('Error running pip install:', error);
+      resolve({ success: false, error: error.message });
+    });
+  });
+}
+
+// Show progress dialog during dependency installation
+function showInstallationProgress() {
+  const progressWindow = new BrowserWindow({
+    width: 400,
+    height: 200,
+    show: false,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    closable: false,
+    alwaysOnTop: true,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true
+    }
+  });
+
+  progressWindow.loadURL(`data:text/html;charset=utf-8,
+    <html>
+      <head>
+        <style>
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0; 
+            padding: 20px; 
+            background: #f5f5f5;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: calc(100vh - 40px);
+            text-align: center;
+          }
+          .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 2s linear infinite;
+            margin-bottom: 20px;
+          }
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+          h2 { margin: 0 0 10px 0; color: #333; }
+          p { margin: 5px 0; color: #666; }
+        </style>
+      </head>
+      <body>
+        <div class="spinner"></div>
+        <h2>Setting up Better Impuls Viewer</h2>
+        <p>Installing required dependencies...</p>
+        <p>This may take a few minutes.</p>
+      </body>
+    </html>
+  `);
+
+  progressWindow.once('ready-to-show', () => {
+    progressWindow.show();
+  });
+
+  return progressWindow;
 }
 
 // App event handlers
@@ -214,11 +306,69 @@ app.whenReady().then(async () => {
   console.log('Electron app is ready');
 
   // Check dependencies first
-  const depsOk = await checkDependencies();
-  if (!depsOk) {
-    showDependencyError();
-    app.quit();
-    return;
+  const depsResult = await checkDependencies();
+  
+  if (!depsResult.success) {
+    if (depsResult.reason === 'python_not_found') {
+      dialog.showErrorBox(
+        'Python Required', 
+        'Python 3.8 or newer is required but not found on your system.\n\n' +
+        'Please install Python from https://python.org/downloads/\n' +
+        'Make sure to check "Add Python to PATH" during installation.\n\n' +
+        'After installing Python, restart Better Impuls Viewer.'
+      );
+      app.quit();
+      return;
+    }
+    
+    // Dependencies are missing, install them automatically
+    console.log('Dependencies missing, installing automatically...');
+    
+    const progressWindow = showInstallationProgress();
+    
+    try {
+      const installResult = await installDependencies();
+      progressWindow.close();
+      
+      if (!installResult.success) {
+        dialog.showErrorBox(
+          'Installation Failed', 
+          'Failed to install required Python packages automatically.\n\n' +
+          'Error: ' + (installResult.error || 'Unknown error') + '\n\n' +
+          'Please try installing manually:\n' +
+          'pip install fastapi uvicorn pandas numpy matplotlib astropy torch scipy python-dotenv scikit-learn'
+        );
+        app.quit();
+        return;
+      }
+      
+      // Verify installation worked
+      const verifyResult = await checkDependencies();
+      if (!verifyResult.success) {
+        dialog.showErrorBox(
+          'Installation Verification Failed', 
+          'Dependencies were installed but verification failed.\n\n' +
+          'Please restart Better Impuls Viewer and try again.'
+        );
+        app.quit();
+        return;
+      }
+      
+      console.log('Dependencies installed and verified successfully');
+      
+    } catch (error) {
+      progressWindow.close();
+      console.error('Error during dependency installation:', error);
+      dialog.showErrorBox(
+        'Installation Error', 
+        'An error occurred while installing dependencies:\n\n' +
+        error.message + '\n\n' +
+        'Please try installing manually:\n' +
+        'pip install fastapi uvicorn pandas numpy matplotlib astropy torch scipy python-dotenv scikit-learn'
+      );
+      app.quit();
+      return;
+    }
   }
 
   try {
