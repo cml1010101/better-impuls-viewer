@@ -63,12 +63,12 @@ function startBackend() {
     console.log('Starting backend server...');
     
     const backendPath = path.join(__dirname, 'backend');
-    const serverScript = path.join(backendPath, 'server.py');
+    const serverExecutable = path.join(backendPath, 'dist/impuls_backend')
     
-    // Start the Python backend
-    backendProcess = spawn('python', [serverScript], {
+    // Start the backend server
+    backendProcess = spawn(serverExecutable, [], {
       cwd: backendPath,
-      stdio: ['pipe', 'pipe', 'pipe']
+      env: process.env
     });
 
     let startupTimeout;
@@ -119,7 +119,7 @@ function startBackend() {
     startupTimeout = setTimeout(() => {
       console.log('Backend startup timeout - assuming ready');
       resolve();
-    }, 10000); // 10 second timeout
+    }, 30000); // 30 second timeout
   });
 }
 
@@ -131,46 +131,9 @@ function stopBackend() {
   }
 }
 
-// Check if Python and required packages are available
-async function checkDependencies() {
-  return new Promise((resolve) => {
-    const checkProcess = spawn('python', ['-c', 
-      'import fastapi, uvicorn, pandas, numpy; print("Dependencies OK")'
-    ]);
-    
-    checkProcess.on('close', (code) => {
-      resolve(code === 0);
-    });
-
-    checkProcess.on('error', () => {
-      resolve(false);
-    });
-  });
-}
-
-// Show error dialog for missing dependencies
-function showDependencyError() {
-  dialog.showErrorBox(
-    'Missing Dependencies',
-    'Python and required packages are not installed or not in PATH.\n\n' +
-    'Please install:\n' +
-    '1. Python 3.8+\n' +
-    '2. Run: pip install -r requirements.txt\n\n' +
-    'Then restart the application.'
-  );
-}
-
 // App event handlers
 app.whenReady().then(async () => {
   console.log('Electron app is ready');
-
-  // Check dependencies first
-  const depsOk = await checkDependencies();
-  if (!depsOk) {
-    showDependencyError();
-    app.quit();
-    return;
-  }
 
   try {
     // Start backend server
