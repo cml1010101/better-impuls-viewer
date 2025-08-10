@@ -7,7 +7,8 @@
     "electron": "electron . --no-sandbox",
     "electron:dev": "electron . --dev --no-sandbox",
     "build:frontend": "cd frontend && npm run build",
-    "build": "npm run build:frontend",
+    "build:backend": "cd backend && pyinstaller --onefile server.py --name impuls_backend",
+    "build": "npm run build:frontend && npm run build:backend",
     "dist": "npm run build && electron-builder",
     "pack": "npm run build && electron-builder --dir",
     "start": "npm run build && npm run electron",
@@ -42,7 +43,7 @@
     "files": [
       "main.js",
       "frontend/dist/**/*",
-      "backend/**/*",
+      "backend/dist/**/*",
       "!backend/.gitignore",
       "!backend/__pycache__",
       "requirements.txt"
