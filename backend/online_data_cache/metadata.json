@@ -19,7 +19,62 @@
       "downloaded_at": "2025-08-13T00:18:40.466564",
       "star_number": 2,
       "telescope": "kepler"
+    },
+    "1-tess": {
+      "downloaded_at": "2025-08-13T00:26:20.493469",
+      "star_number": 1,
+      "telescope": "tess"
+    },
+    "2-tess": {
+      "downloaded_at": "2025-08-13T00:26:20.523063",
+      "star_number": 2,
+      "telescope": "tess"
+    },
+    "3-hubble": {
+      "downloaded_at": "2025-08-13T00:26:20.527252",
+      "star_number": 3,
+      "telescope": "hubble"
+    },
+    "3-kepler": {
+      "downloaded_at": "2025-08-13T00:26:20.537263",
+      "star_number": 3,
+      "telescope": "kepler"
+    },
+    "3-tess": {
+      "downloaded_at": "2025-08-13T00:26:20.563848",
+      "star_number": 3,
+      "telescope": "tess"
+    },
+    "4-hubble": {
+      "downloaded_at": "2025-08-13T00:26:20.566752",
+      "star_number": 4,
+      "telescope": "hubble"
+    },
+    "4-kepler": {
+      "downloaded_at": "2025-08-13T00:26:20.576508",
+      "star_number": 4,
+      "telescope": "kepler"
+    },
+    "4-tess": {
+      "downloaded_at": "2025-08-13T00:26:20.606360",
+      "star_number": 4,
+      "telescope": "tess"
+    },
+    "5-hubble": {
+      "downloaded_at": "2025-08-13T00:26:20.610845",
+      "star_number": 5,
+      "telescope": "hubble"
+    },
+    "5-kepler": {
+      "downloaded_at": "2025-08-13T00:26:20.618475",
+      "star_number": 5,
+      "telescope": "kepler"
+    },
+    "5-tess": {
+      "downloaded_at": "2025-08-13T00:26:20.647348",
+      "star_number": 5,
+      "telescope": "tess"
     }
   },
-  "last_updated": "2025-08-13T00:18:40.466569"
+  "last_updated": "2025-08-13T00:26:20.647355"
 }

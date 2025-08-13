@@ -32,4 +32,7 @@ out/
 .DS_Store
 Thumbs.db
 
+# Online data cache (temporary data)
+backend/online_data_cache/
+
 .env

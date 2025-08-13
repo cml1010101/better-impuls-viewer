@@ -312,6 +312,20 @@ const Dashboard: React.FC = () => {
     }
   };
 
+  const handleDataSourceChange = () => {
+    // When data source changes, refresh the available stars and reset selections
+    fetchStars().then(() => {
+      // Reset selections when switching data sources
+      setSelectedStar(null);
+      setSelectedTelescope('');
+      setSelectedCampaign('');
+      setCampaignData([]);
+      setPeriodogramData([]);
+      setPhaseFoldedData([]);
+      setAutoPeriodsData(null);
+    });
+  };
+
   const handlePeriodogramClick = (data: Plotly.PlotMouseEvent) => {
     console.log('Periodogram clicked:', data);
     if (data && data.points && data.points[0]) {
@@ -380,6 +394,7 @@ const Dashboard: React.FC = () => {
           autoPeriodsData={autoPeriodsData}
           onUsePrimaryPeriod={handleUsePrimaryPeriod}
           onUseSecondaryPeriod={handleUseSecondaryPeriod}
+          onDataSourceChange={handleDataSourceChange}
         />
       </div>
 

@@ -129,7 +129,114 @@
   color: #7c3aed;
 }
 
-/* Responsive design */
+/* Data Source Toggle styles */
+.dataSourceGroup {
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+}
+
+.dataSourceToggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.toggleContainer {
+  display: flex;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 2px;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.toggleOption {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.3rem 0.6rem;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 50px;
+  text-transform: uppercase;
+}
+
+.toggleOption.active {
+  background: rgba(255, 255, 255, 0.9);
+  color: #333;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.toggleOption:hover:not(.active) {
+  color: white;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.dataSourceIndicator {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.8);
+  margin-top: 0.2rem;
+  font-style: italic;
+}
+
+.cacheControls {
+  display: flex;
+  gap: 0.3rem;
+  margin-top: 0.3rem;
+}
+
+.cacheButton {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  font-size: 0.65rem;
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-weight: 500;
+}
+
+.cacheButton:hover {
+  background: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.cacheButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cacheButton.download {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: rgba(34, 197, 94, 0.4);
+}
+
+.cacheButton.download:hover:not(:disabled) {
+  background: rgba(34, 197, 94, 0.3);
+}
+
+.cacheButton.clear {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.cacheButton.clear:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.3);
+}
+
+.loading {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.65rem;
+  font-style: italic;
+}
+
+/* Responsive design for data source controls */
+/* Responsive design for data source controls */
 @media (max-width: 768px) {
   .controlPanel {
     flex-direction: column;
@@ -137,6 +244,10 @@
   }
   
   .controlGroup {
+    min-width: unset;
+  }
+  
+  .dataSourceGroup {
     min-width: unset;
   }
   
@@ -166,5 +277,24 @@
   .usePeriodBtn {
     padding: 0.1rem 0.3rem;
     font-size: 0.65rem;
+  }
+  
+  .dataSourceToggle {
+    gap: 0.3rem;
+  }
+  
+  .toggleOption {
+    font-size: 0.65rem;
+    padding: 0.25rem 0.5rem;
+    min-width: 45px;
+  }
+  
+  .cacheControls {
+    gap: 0.2rem;
+  }
+  
+  .cacheButton {
+    font-size: 0.6rem;
+    padding: 0.15rem 0.3rem;
   }
 }
