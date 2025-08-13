@@ -14,7 +14,8 @@ import requests
 from config import Config
 from models import (
     CampaignInfo, ProcessedData, PeriodogramData, PhaseFoldedData, 
-    AutoPeriodsData, ModelTrainingResult, SEDCredentials
+    AutoPeriodsData, ModelTrainingResult, SEDCredentials,
+    DataSourceConfig, CacheInfo, OnlineDataRequest
 )
 from data_processing import (
     find_all_campaigns, sort_data, remove_y_outliers, 
@@ -22,6 +23,7 @@ from data_processing import (
 )
 from period_detection import calculate_lomb_scargle, determine_automatic_periods
 from model_training import ModelTrainer
+from online_data_manager import online_data_manager, OnlineDataManager
 
 app = FastAPI(title="Better Impuls Viewer API", version="1.0.0")
 
@@ -51,8 +53,8 @@ def get_file_hash(filepath: str) -> str:
         return hashlib.md5(filepath.encode()).hexdigest()
 
 def get_data_folder():
-    """Get the data folder path"""
-    return Config.DATA_DIR
+    """Get the data folder path based on current data source"""
+    return online_data_manager.get_data_directory()
 
 def get_data_filename(star_number: int, telescope: str) -> str:
     """Get the correct filename format for a star and telescope, checking both padded and unpadded formats"""
@@ -203,49 +205,12 @@ async def clear_cache():
 @app.get("/stars")
 async def get_available_stars() -> List[int]:
     """Get list of available star numbers"""
-    folder = get_data_folder()
-    if not os.path.exists(folder):
-        return []
-    
-    all_files = os.listdir(folder)
-    stars = set()
-    
-    for filename in all_files:
-        if filename.endswith('.tbl'):
-            try:
-                star_num = int(filename.split('-')[0])
-                stars.add(star_num)
-            except (ValueError, IndexError):
-                continue
-    
-    return sorted(list(stars))
+    return online_data_manager.get_available_stars()
 
 @app.get("/telescopes/{star_number}")
 async def get_telescopes_for_star(star_number: int) -> List[str]:
     """Get available telescopes/sensors for a specific star"""
-    folder = get_data_folder()
-    if not os.path.exists(folder):
-        return []
-    
-    all_files = os.listdir(folder)
-    telescopes = set()
-    
-    for filename in all_files:
-        # Check both padded (001-) and unpadded (1-) formats
-        padded_prefix = f"{str(star_number).zfill(3)}-"
-        unpadded_prefix = f"{star_number}-"
-        
-        if (filename.startswith(padded_prefix) or filename.startswith(unpadded_prefix)) and filename.endswith('.tbl'):
-            try:
-                parts = filename.split('-')
-                if len(parts) >= 2:
-                    telescope = parts[1].replace('.tbl', '')
-                    if telescope:
-                        telescopes.add(telescope)
-            except (ValueError, IndexError):
-                continue
-    
-    return sorted(list(telescopes))
+    return online_data_manager.get_available_telescopes(star_number)
 
 @app.get("/campaigns/{star_number}/{telescope}")
 async def get_campaigns(star_number: int, telescope: str) -> List[CampaignInfo]:
@@ -646,6 +611,97 @@ async def get_default_sed_config() -> Dict[str, Any]:
         "username": os.getenv('SED_USERNAME', ''),
         # Note: we don't return the password for security reasons
         "has_password": bool(os.getenv('SED_PASSWORD'))
+    }
+
+
+# Data Source Management Endpoints
+
+@app.get("/data_source/config")
+async def get_data_source_config() -> DataSourceConfig:
+    """Get current data source configuration."""
+    return DataSourceConfig(
+        source=online_data_manager.get_data_source(),
+        cache_enabled=True
+    )
+
+@app.post("/data_source/config")
+async def set_data_source_config(config: DataSourceConfig) -> Dict[str, Any]:
+    """Set data source configuration."""
+    success = online_data_manager.set_data_source(config.source)
+    if success:
+        # Clear existing caches when switching data sources
+        _file_cache.clear()
+        _campaigns_cache.clear()
+        _periodogram_cache.clear()
+        _processed_data_cache.clear()
+        
+        return {
+            "success": True,
+            "message": f"Data source switched to {config.source}",
+            "current_source": online_data_manager.get_data_source()
+        }
+    else:
+        raise HTTPException(status_code=400, detail="Invalid data source. Must be 'local' or 'online'")
+
+@app.get("/data_source/cache/info")
+async def get_cache_info() -> CacheInfo:
+    """Get information about the current cache."""
+    cache_info = online_data_manager.get_cache_info()
+    return CacheInfo(**cache_info)
+
+@app.post("/data_source/cache/clear")
+async def clear_online_cache() -> Dict[str, Any]:
+    """Clear the online data cache."""
+    success = online_data_manager.clear_cache()
+    if success:
+        # Also clear in-memory caches
+        _file_cache.clear()
+        _campaigns_cache.clear()
+        _periodogram_cache.clear()
+        _processed_data_cache.clear()
+        
+        return {"success": True, "message": "Online cache cleared successfully"}
+    else:
+        raise HTTPException(status_code=500, detail="Failed to clear online cache")
+
+@app.post("/data_source/download")
+async def download_online_data(request: OnlineDataRequest) -> Dict[str, Any]:
+    """Download data from online sources."""
+    if online_data_manager.get_data_source() != "online":
+        raise HTTPException(status_code=400, detail="Data source must be set to 'online' to download data")
+    
+    # Default values if not specified
+    if request.star_numbers is None:
+        # Get available stars from local data as reference
+        local_manager = OnlineDataManager()
+        local_manager.set_data_source("local")
+        request.star_numbers = local_manager.get_available_stars()[:10]  # Limit to first 10
+    
+    if request.telescopes is None:
+        request.telescopes = ["hubble", "kepler", "tess"]
+    
+    # Download data
+    results = online_data_manager.download_multiple_stars(
+        request.star_numbers, 
+        request.telescopes, 
+        request.force_refresh
+    )
+    
+    # Count successful downloads
+    successful = sum(1 for success in results.values() if success)
+    total = len(results)
+    
+    # Clear caches to ensure fresh data is loaded
+    _file_cache.clear()
+    _campaigns_cache.clear()
+    _periodogram_cache.clear()
+    _processed_data_cache.clear()
+    
+    return {
+        "success": successful > 0,
+        "message": f"Downloaded {successful}/{total} datasets successfully",
+        "results": results,
+        "cache_info": online_data_manager.get_cache_info()
     }
 
 if __name__ == "__main__":

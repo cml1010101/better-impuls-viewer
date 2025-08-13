@@ -78,3 +78,25 @@ class SEDCredentials(BaseModel):
     sed_url: str
     username: str
     password: str
+
+
+class DataSourceConfig(BaseModel):
+    """Configuration for data source (local vs online)."""
+    source: str  # "local" or "online"
+    cache_enabled: bool = True
+
+
+class CacheInfo(BaseModel):
+    """Information about cache status."""
+    source: str
+    cache_dir: str
+    cached_files: int
+    total_size_mb: float
+    last_updated: Optional[str] = None
+
+
+class OnlineDataRequest(BaseModel):
+    """Request to download data from online sources."""
+    star_numbers: Optional[List[int]] = None  # If None, download all available
+    telescopes: Optional[List[str]] = None    # If None, download all telescopes
+    force_refresh: bool = False

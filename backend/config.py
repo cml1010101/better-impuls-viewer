@@ -36,7 +36,11 @@ class Config:
     MODEL_SAVE_PATH = "trained_cnn_model.pth"
     DEVICE = "cpu"  # Can be changed to "cuda" if GPU is available
 
-    DATA_DIR = os.path.expanduser('~/Documents/impuls-data') if os.path.exists(os.path.expanduser('~/Documents/impuls-data')) else 'sample_data'
+    DATA_DIR = os.path.expanduser('~/Documents/impuls-data') if os.path.exists(os.path.expanduser('~/Documents/impuls-data')) else os.path.join(os.path.dirname(os.path.dirname(__file__)), 'sample_data')
+    
+    # Data source configuration
+    ONLINE_CACHE_DIR = "online_data_cache"
+    DEFAULT_DATA_SOURCE = "local"  # "local" or "online"
     
     @classmethod
     def validate(cls):

@@ -1,0 +1,25 @@
+{
+  "files": {
+    "1-hubble": {
+      "downloaded_at": "2025-08-13T00:18:40.443752",
+      "star_number": 1,
+      "telescope": "hubble"
+    },
+    "1-kepler": {
+      "downloaded_at": "2025-08-13T00:18:40.454034",
+      "star_number": 1,
+      "telescope": "kepler"
+    },
+    "2-hubble": {
+      "downloaded_at": "2025-08-13T00:18:40.458101",
+      "star_number": 2,
+      "telescope": "hubble"
+    },
+    "2-kepler": {
+      "downloaded_at": "2025-08-13T00:18:40.466564",
+      "star_number": 2,
+      "telescope": "kepler"
+    }
+  },
+  "last_updated": "2025-08-13T00:18:40.466569"
+}
