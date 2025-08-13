@@ -18,10 +18,14 @@ class Config:
     
     # API configuration
     CORS_ORIGINS = [
-        "http://localhost:5173", 
-        "http://localhost:3000",
-        "file://",  # For Electron file:// protocol
-        "http://localhost:8000"  # Allow backend self-requests
+        "http://localhost:5173",  # Vite dev server
+        "http://localhost:3000",  # Alternative dev port
+        "http://localhost:4173",  # Vite preview server
+        "http://localhost:8000",  # Backend self-requests
+        "http://127.0.0.1:5173",  # Alternative localhost
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:4173",
+        "http://127.0.0.1:8000"
     ]
     
     # Data processing configuration

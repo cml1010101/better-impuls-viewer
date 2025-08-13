@@ -1,71 +1,33 @@
 {
   "name": "better-impuls-viewer",
   "version": "1.0.0",
-  "description": "A modern electron application for astronomical data analysis with interactive visualization",
-  "main": "main.js",
+  "description": "A modern web application for astronomical data analysis with interactive visualization",
+
   "scripts": {
-    "electron": "electron . --no-sandbox",
-    "electron:dev": "electron . --dev --no-sandbox",
     "build:frontend": "cd frontend && npm run build",
-    "build:backend": "cd backend && pyinstaller --onefile server.py --name impuls_backend",
-    "build": "npm run build:frontend && npm run build:backend",
-    "dist": "npm run build && electron-builder",
-    "pack": "npm run build && electron-builder --dir",
-    "start": "npm run build && npm run electron",
-    "dev": "node dev.js",
+    "build:backend": "cd backend && pip install -r ../requirements.txt",
+    "build": "npm run build:frontend",
+    "start:backend": "cd backend && python server.py",
+    "start:frontend": "cd frontend && npm run preview",
+    "start": "npm run build && npm run start:frontend",
+    "dev": "node start-dev.js",
     "dev:frontend": "cd frontend && npm run dev",
-    "test:backend": "node test-backend.js"
+    "dev:backend": "cd backend && python server.py",
+    "test:backend": "python test_csv_functionality.py",
+    "test:webapp": "node test-webapp.js",
+    "deploy": "node deploy.js"
   },
   "keywords": [
-    "electron",
     "astronomy",
     "data-visualization",
     "react",
     "fastapi",
+    "web-app",
     "light-curves",
     "periodogram"
   ],
   "author": "Better Impuls Viewer Team",
   "license": "MIT",
-  "devDependencies": {
-    "electron": "^28.0.0",
-    "electron-builder": "^24.9.1"
-  },
-  "dependencies": {
-    "electron-is-dev": "^2.0.0"
-  },
-  "build": {
-    "appId": "com.astronomy.better-impuls-viewer",
-    "productName": "Better Impuls Viewer",
-    "directories": {
-      "output": "dist"
-    },
-    "files": [
-      "main.js",
-      "frontend/dist/**/*",
-      "backend/dist/**/*",
-      "!backend/.gitignore",
-      "!backend/__pycache__",
-      "requirements.txt"
-    ],
-    "extraResources": [
-      {
-        "from": "sample_data",
-        "to": "sample_data"
-      },
-      {
-        "from": "ml-dataset",
-        "to": "ml-dataset"
-      }
-    ],
-    "mac": {
-      "category": "public.app-category.education"
-    },
-    "win": {
-      "target": "nsis"
-    },
-    "linux": {
-      "target": "AppImage"
-    }
-  }
+  "devDependencies": {},
+  "dependencies": {}
 }
