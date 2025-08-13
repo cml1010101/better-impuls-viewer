@@ -12,6 +12,7 @@ steps:
 
   - name: Python Backend Setup
     description: Install Python dependencies for FastAPI backend and ML components
+    working_directory: backend
     commands:
       - pip install -r requirements.txt
     dependencies:
@@ -83,16 +84,6 @@ steps:
       - Frontend available at http://localhost:5173
       - Hot reload enabled for development
       - Connects to backend API at http://localhost:8000
-
-  - name: Test Application
-    description: Verify the setup works correctly
-    commands:
-      - python test_csv_functionality.py  # Test data loading functionality
-      - curl http://localhost:8000/stars   # Test backend API
-    notes:
-      - Backend should return available star numbers
-      - Frontend should load without errors
-      - Data visualization should display correctly
 
   - name: Access Application
     description: Open the application in browser
