@@ -88,15 +88,13 @@ async def get_star_survey_data_by_name(star_number: int, survey_name: str, use_m
         error=[0.0] * len(survey_data[survey_name])  # Placeholder for error values
     )
 
-from data_processing import find_all_campaigns, remove_y_outliers
+from data_processing import *
 
 from functools import lru_cache
 
 from models import CampaignInfo
 
 import numpy as np
-
-from period_detection import calculate_lomb_scargle
 
 @lru_cache(maxsize=128)
 def get_campaigns_for_survey(star_number: int, survey_name: str, use_mast: bool = False) -> list[tuple[CampaignInfo, np.ndarray]]:

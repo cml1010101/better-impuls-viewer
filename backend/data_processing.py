@@ -163,3 +163,54 @@ def remove_y_outliers(data: np.ndarray, iqr_multiplier: float = 3.0) -> np.ndarr
         print("All data points were identified as outliers and removed.")
 
     return filtered_data
+
+from astropy.timeseries import LombScargle
+
+def calculate_lomb_scargle(
+    data: np.ndarray, samples_per_peak: int = 10
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Calculate the Lomb-Scargle periodogram of the given data.
+
+    Parameters
+    ----------
+    data : np.ndarray
+        A 2D numpy array where the first column is the x-axis data (time) and the second column is the y-axis data (flux).
+    samples_per_peak : int, optional
+        The number of frequency samples to use across each significant peak.
+        Increasing this value can help resolve plateaus into sharper peaks
+        by providing a denser frequency grid. Default is 10.
+
+    Returns
+    -------
+    Tuple[np.ndarray, np.ndarray]
+        A tuple containing:
+        - frequency (np.ndarray): The frequencies at which the periodogram was calculated.
+        - power (np.ndarray): The Lomb-Scargle power at each frequency.
+    """
+    if data.shape[1] != 2:
+        raise ValueError("Input data must be a 2D array with two columns (x and y).")
+
+    time = data[:, 0]
+    flux = data[:, 1]
+
+    # Calculate the time span to determine appropriate frequency range
+    time_span = np.max(time) - np.min(time)
+
+    # Set frequency range to cover periods from 0.1 days to 2 * time_span
+    # but limit the maximum period to avoid very low frequency noise
+    max_period = min(2 * time_span, 50.0)  # Cap at 50 days
+    min_period = 0.1  # Minimum period of 0.1 days
+
+    min_frequency = 1.0 / max_period
+    max_frequency = 1.0 / min_period
+
+    # Calculate Lomb-Scargle periodogram with explicit frequency range
+    ls = LombScargle(time, flux)
+    frequency, power = ls.autopower(
+        minimum_frequency=min_frequency,
+        maximum_frequency=max_frequency,
+        samples_per_peak=samples_per_peak,
+    )
+
+    return frequency, power
