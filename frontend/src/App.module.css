@@ -1,42 +1,5 @@
 /* App module styles */
 .app {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-}
-
-.appHeader {
-  text-align: center;
-  padding: 0.5rem;
-  color: white;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  margin-bottom: 0.5rem;
-}
-
-.appHeader h1 {
-  margin: 0;
-  font-size: 1.5rem;
-  font-weight: 600;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-.appHeader p {
-  margin: 0.1rem 0 0 0;
-  font-size: 0.8rem;
-  opacity: 0.9;
-}
-
-/* Responsive design */
-@media (max-width: 768px) {
-  .appHeader {
-    padding: 0.4rem;
-  }
-  
-  .appHeader h1 {
-    font-size: 1.3rem;
-  }
-  
-  .appHeader p {
-    font-size: 0.75rem;
-  }
+  background: #f8fafc;
 }

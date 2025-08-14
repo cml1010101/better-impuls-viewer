@@ -1,0 +1,280 @@
+/* StarPage component styles */
+.starPage {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 1rem;
+  min-height: 100vh;
+  background: #f8fafc;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.backButton {
+  padding: 0.5rem 1rem;
+  border: 2px solid #3b82f6;
+  border-radius: 6px;
+  background: white;
+  color: #3b82f6;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.backButton:hover {
+  background: #3b82f6;
+  color: white;
+  transform: translateY(-1px);
+}
+
+.header h1 {
+  margin: 0;
+  color: #1e293b;
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.content {
+  display: grid;
+  grid-template-columns: 350px 1fr;
+  gap: 2rem;
+  min-height: 600px;
+}
+
+.surveysPanel {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  height: fit-content;
+}
+
+.surveysPanel h2 {
+  margin: 0 0 1rem 0;
+  color: #1e293b;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.surveySection {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+  overflow: hidden;
+}
+
+.surveyHeader {
+  width: 100%;
+  padding: 1rem;
+  border: none;
+  background: #f8fafc;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s;
+  text-align: left;
+}
+
+.surveyHeader:hover {
+  background: #e2e8f0;
+}
+
+.surveyHeader.expanded {
+  background: #3b82f6;
+  color: white;
+}
+
+.surveyName {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.campaignCount {
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.surveyHeader.expanded .campaignCount {
+  color: #e2e8f0;
+}
+
+.expandIcon {
+  font-size: 1.25rem;
+  font-weight: bold;
+}
+
+.campaignsList {
+  background: white;
+  border-top: 1px solid #e2e8f0;
+}
+
+.campaignItem {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: none;
+  background: white;
+  cursor: pointer;
+  border-bottom: 1px solid #f1f5f9;
+  transition: all 0.2s;
+  text-align: left;
+}
+
+.campaignItem:hover {
+  background: #f8fafc;
+}
+
+.campaignItem.selected {
+  background: #eff6ff;
+  border-left: 4px solid #3b82f6;
+}
+
+.campaignItem:last-child {
+  border-bottom: none;
+}
+
+.campaignDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.campaignId {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.campaignInfo {
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.noCampaigns {
+  padding: 1rem;
+  color: #64748b;
+  font-style: italic;
+  margin: 0;
+}
+
+.dataPanel {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+}
+
+.campaignData h3 {
+  margin: 0 0 1.5rem 0;
+  color: #1e293b;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.dataViews {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.lightCurveSection,
+.periodogramSection,
+.phaseFoldedSection {
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 1rem;
+}
+
+.lightCurveSection h4,
+.periodogramSection h4,
+.phaseFoldedSection h4 {
+  margin: 0 0 1rem 0;
+  color: #1e293b;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.placeholder {
+  background: #f8fafc;
+  border: 2px dashed #cbd5e1;
+  border-radius: 4px;
+  padding: 2rem;
+  text-align: center;
+  color: #64748b;
+  font-style: italic;
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.selectPrompt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 400px;
+  color: #64748b;
+  font-size: 1.125rem;
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 400px;
+  font-size: 1.125rem;
+  color: #3b82f6;
+  font-weight: 600;
+}
+
+.dataLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  font-size: 1rem;
+  color: #3b82f6;
+  font-weight: 600;
+}
+
+/* Responsive design */
+@media (max-width: 1024px) {
+  .content {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .surveysPanel {
+    padding: 1rem;
+  }
+  
+  .dataPanel {
+    padding: 1rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .starPage {
+    padding: 0.5rem;
+  }
+  
+  .header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .header h1 {
+    font-size: 1.5rem;
+  }
+  
+  .content {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+}
