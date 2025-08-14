@@ -8,4 +8,4 @@ requests
 fastapi
 uvicorn
 scikit-learn
-pyinstaller
+lightkurve

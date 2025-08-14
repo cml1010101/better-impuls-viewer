@@ -1,6 +1,6 @@
 # Better Impuls Viewer
 
-A modern desktop application and web application for astronomical data analysis, providing interactive visualization of light curves, periodogram analysis, and phase folding capabilities. Available as both a standalone Electron desktop app and traditional web application.
+A modern web application for astronomical data analysis, providing interactive visualization of light curves, periodogram analysis, and phase folding capabilities.
 
 ![Dashboard Preview](https://github.com/user-attachments/assets/a95f9e76-4b76-44f8-a31e-b7854e7fad4c)
 
@@ -41,10 +41,12 @@ A modern desktop application and web application for astronomical data analysis,
 
 ## 🛠 Technology Stack
 
-### Desktop Application
-- **Electron**: Cross-platform desktop app framework
-- **Node.js**: Runtime for desktop app orchestration
-- **Process Management**: Automatic backend spawning and lifecycle management
+### Web Application
+- **React 19**: Modern UI framework
+- **TypeScript**: Type-safe development  
+- **Vite**: Fast build tool and dev server
+- **FastAPI**: High-performance backend API
+- **Node.js**: Development tooling and scripts
 
 ### Backend
 - **FastAPI**: High-performance API framework
@@ -72,7 +74,7 @@ A modern desktop application and web application for astronomical data analysis,
 - Node.js 16+
 - npm or yarn
 
-### Quick Start (Electron App)
+### Quick Start (Web App)
 ```bash
 # Install Python dependencies
 pip install -r requirements.txt
@@ -80,30 +82,30 @@ pip install -r requirements.txt
 # Install Node.js dependencies
 npm install
 
-# Build and run the Electron app
+# Build and run the web app
 npm start
 ```
 
-### Development Mode (Electron)
+### Development Mode
 ```bash
 # Install dependencies (if not done above)
 pip install -r requirements.txt
 npm install
 
-# Start development mode with hot reloading
+# Start development mode with both frontend and backend
 npm run dev
 ```
 
-### Traditional Web Development Setup
+### Manual Setup (Backend and Frontend separately)
 
 #### Backend Setup
 ```bash
 cd backend
-pip install fastapi uvicorn pandas numpy astropy torch scipy scikit-learn python-dotenv requests pydantic
+pip install -r ../requirements.txt
 python server.py
 ```
 
-#### Frontend Setup
+#### Frontend Setup  
 ```bash
 cd frontend
 npm install
@@ -112,24 +114,15 @@ npm run dev
 
 ## 🚦 Usage
 
-### Electron App Usage
-1. **Quick Start**: Run `npm start` to build and launch the desktop application
-2. **Development**: Run `npm run dev` for development mode with frontend hot reloading
-3. **Test Backend**: Run `npm run test:backend` to verify backend integration
+### Web App Usage
+1. **Quick Start**: Run `npm start` to build and serve the web application
+2. **Development**: Run `npm run dev` for development mode with frontend hot reloading and backend auto-restart
+3. **Manual Setup**: Start backend with `npm run dev:backend` and frontend with `npm run dev:frontend`
+4. **Testing**: Run `npm run test:webapp` to verify all components work
 
-### Web Browser Usage (Traditional)
-1. **Start the Backend**: Run `python server.py` in the `backend` directory (serves on port 8000)
-2. **Start the Frontend**: Run `npm run dev` in the `frontend` directory (serves on port 5173)  
-3. **Open Browser**: Navigate to `http://localhost:5173`
-
-### Packaging for Distribution
-```bash
-# Create distributable packages for your platform
-npm run dist
-
-# Create unpacked directory for testing
-npm run pack
-```
+### Accessing the Application
+- **Frontend**: Navigate to `http://localhost:5173` (dev) or `http://localhost:4173` (production preview)
+- **Backend API**: `http://localhost:8000/docs` for API documentation
 
 ### Using the Dashboard
 

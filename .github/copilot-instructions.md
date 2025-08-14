@@ -4,7 +4,7 @@
 
 ## Overview
 
-Better Impuls Viewer is an Electron-based desktop application for astronomical data analysis with interactive visualization. It combines a React/TypeScript frontend, FastAPI/Python backend with PyTorch ML capabilities, and Electron for desktop distribution.
+Better Impuls Viewer is a modern web application for astronomical data analysis with interactive visualization. It combines a React/TypeScript frontend, FastAPI/Python backend with PyTorch ML capabilities, and can be deployed to any web hosting service.
 
 ## Bootstrap Commands - Run These First
 
@@ -13,9 +13,6 @@ Always run these commands in this exact order before any development work:
 ```bash
 # Install Python dependencies (takes ~2-3 minutes)
 pip install -r requirements.txt
-
-# Install root Node.js dependencies (takes ~1 minute)
-npm install
 
 # Install frontend dependencies (takes ~1 minute) 
 cd frontend && npm install && cd ..
@@ -43,20 +40,27 @@ cd frontend && npm run dev
 # Hot reloading enabled automatically
 ```
 
-### Electron Development Mode
+### Web Application Development Mode
 ```bash
-# Start both frontend and Electron together (recommended for development)
+# Start both frontend and backend together (recommended for development)
 npm run dev
 
 # This automatically:
-# 1. Starts frontend dev server on port 5173
-# 2. Waits for frontend to be ready
-# 3. Launches Electron pointing to dev server
+# 1. Starts backend server on port 8000
+# 2. Starts frontend dev server on port 5173
+# 3. Enables hot reloading for frontend changes
 ```
 
-**Note**: Electron GUI will not display in headless environments but the process will start successfully for testing purposes.
+### Individual Component Development
+```bash
+# Start only the backend server
+npm run dev:backend
 
-## Building and Packaging
+# Start only the frontend dev server  
+npm run dev:frontend
+```
+
+## Building and Deployment
 
 ### Frontend Build
 ```bash
@@ -66,39 +70,36 @@ cd frontend && npm run build
 # Output: frontend/dist/ directory
 ```
 
-### Backend Build
+### Production Build
 ```bash
-# Build backend executable with PyInstaller
-# NEVER CANCEL: Takes 12-15 minutes to complete. Set timeout to 20+ minutes.
-cd backend && pyinstaller --onefile server.py --name impuls_backend
-
-# Output: backend/dist/impuls_backend (4GB+ executable including PyTorch)
-```
-
-### Complete Build
-```bash
-# Build both frontend and backend
-# NEVER CANCEL: Takes 15-18 minutes total. Set timeout to 25+ minutes.
+# Build the complete web application
 npm run build
+
+# Serve the production build locally
+npm run start
 ```
 
-### Electron Packaging
+### Deployment
 ```bash
-# Create unpacked Electron app for testing
-# NEVER CANCEL: Takes 15-20 minutes. Set timeout to 30+ minutes.
-npm run pack
+# Get deployment instructions and build the app
+npm run deploy
 
-# Create distributable packages (.AppImage, .exe, .dmg)
-# NEVER CANCEL: Takes 20-25 minutes. Set timeout to 35+ minutes.
-npm run dist
+# The frontend/dist/ directory contains the static files
+# that can be deployed to any web hosting service
 ```
 
 ## Testing
 
 ### Backend Integration Test
 ```bash
-# Test backend functionality without GUI (takes ~15 seconds)
+# Test backend functionality (takes ~15 seconds)
 npm run test:backend
+```
+
+### Web Application Test
+```bash
+# Test web application build and functionality (takes ~30 seconds)
+npm run test:webapp
 ```
 
 ### Python Test Suite
@@ -148,10 +149,13 @@ cd frontend && npm run lint && cd ..
 # 2. Test backend integration
 npm run test:backend
 
-# 3. Build frontend
+# 3. Test web application functionality
+npm run test:webapp
+
+# 4. Build frontend
 cd frontend && npm run build && cd ..
 
-# 4. Start backend and test API
+# 5. Start backend and test API
 python backend/server.py &
 sleep 5
 curl http://localhost:8000/stars
@@ -172,10 +176,11 @@ When testing the application UI, always verify these core workflows:
 
 ```
 better-impuls-viewer/
-├── main.js                  # Electron main process
-├── dev.js                   # Development launcher script
-├── package.json            # Root dependencies and scripts
-├── requirements.txt        # Python dependencies
+├── start-dev.js             # Development script for concurrent frontend/backend
+├── deploy.js                # Production deployment helper
+├── test-webapp.js           # Web application testing script
+├── package.json             # Root project configuration and scripts
+├── requirements.txt         # Python dependencies
 ├── backend/
 │   ├── server.py            # FastAPI application (start from root!)
 │   ├── config.py           # Configuration settings
@@ -209,23 +214,16 @@ better-impuls-viewer/
 - **Expected behavior**: CUDA/GPU library warnings are normal in CPU-only environments
 
 ### Electron display issues in containers
-- **Expected behavior**: Electron GUI cannot display in headless environments but the process starts successfully
+- **No longer applicable**: Application now runs as a web app in browsers
 
 ## CI/CD Integration
 
-The GitHub Actions workflow (`.github/workflows/release.yml`) builds the application for Linux, Windows, and macOS. Build times per platform:
-
-- **Linux**: 20-25 minutes
-- **Windows**: 25-30 minutes  
-- **macOS**: 25-30 minutes
-
-Always ensure your changes pass frontend linting before pushing to avoid CI failures.
+The application can be deployed to various web hosting platforms including Netlify, Vercel, GitHub Pages, and traditional web servers. The `npm run deploy` command provides specific instructions for different hosting options.
 
 ## Performance Notes
 
 - **Frontend build**: ~50 seconds
-- **Backend build**: 12-15 minutes (PyTorch compilation)
-- **Full Electron packaging**: 15-25 minutes
+- **Web application startup**: ~5 seconds
 - **Python dependency installation**: 2-3 minutes
 - **Node.js dependency installation**: 1-2 minutes
 
@@ -233,8 +231,8 @@ Always ensure your changes pass frontend linting before pushing to avoid CI fail
 
 - **Python**: 3.8+ (tested with 3.12)
 - **Node.js**: 16+ (tested with 20.19)
-- **Memory**: 8GB+ recommended for backend builds
-- **Disk Space**: 10GB+ for complete build artifacts
+- **Memory**: 4GB+ recommended for development
+- **Disk Space**: 2GB+ for dependencies and builds
 
 ## Machine Learning Features
 
@@ -244,7 +242,6 @@ The application includes a PyTorch CNN for automatic period detection and astron
 
 - **Backend**: FastAPI, PyTorch, pandas, astropy, scikit-learn, uvicorn
 - **Frontend**: React 19, TypeScript, Vite, Plotly.js
-- **Desktop**: Electron 28, electron-builder
-- **Development**: ESLint, PyInstaller
+- **Development**: ESLint, concurrent process management
 
 Always run the complete validation workflow after making changes to ensure all components work together correctly.

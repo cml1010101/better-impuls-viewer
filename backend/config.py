@@ -13,15 +13,16 @@ load_dotenv()
 class Config:
     """Application configuration settings."""
     
-    # CSV data configuration
-    CSV_TRAINING_DATA_PATH = os.getenv("CSV_TRAINING_DATA_PATH", "sample_training_data.csv")
-    
     # API configuration
     CORS_ORIGINS = [
-        "http://localhost:5173", 
-        "http://localhost:3000",
-        "file://",  # For Electron file:// protocol
-        "http://localhost:8000"  # Allow backend self-requests
+        "http://localhost:5173",  # Vite dev server
+        "http://localhost:3000",  # Alternative dev port
+        "http://localhost:4173",  # Vite preview server
+        "http://localhost:8000",  # Backend self-requests
+        "http://127.0.0.1:5173",  # Alternative localhost
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:4173",
+        "http://127.0.0.1:8000"
     ]
     
     # Data processing configuration
@@ -33,10 +34,17 @@ class Config:
     MAX_PERIOD = 100.0
     
     # Model configuration
-    MODEL_SAVE_PATH = "trained_cnn_model.pth"
+    MODEL_PATH = os.getenv('MODEL_PATH', 'model.pth')
     DEVICE = "cpu"  # Can be changed to "cuda" if GPU is available
 
-    DATA_DIR = os.path.expanduser('~/Documents/impuls-data') if os.path.exists(os.path.expanduser('~/Documents/impuls-data')) else 'sample_data'
+    DEFAULT_DATA_DIR = 'impuls-data'
+    DATA_DIR = os.getenv('DATA_DIR', DEFAULT_DATA_DIR)
+
+    IMPULS_STARS_PATH = os.path.join(DATA_DIR, 'impuls_stars.csv')
+
+    SED_USERNAME = os.getenv('SED_USERNAME', None)
+    SED_PASSWORD = os.getenv('SED_PASSWORD', None)
+    SED_API_URL = os.getenv('SED_API_URL', 'k2clusters.ipac.caltech.edu/impuls/seds')
     
     @classmethod
     def validate(cls):
@@ -46,19 +54,19 @@ class Config:
             return False
         return True
 
-CLASS_NAMES = [
-    "sinusoidal",
-    "double dip",
-    "shape changer",
-    "beater",
-    "beater/complex peak",
-    "resolved close peaks",
-    "resolved distant peaks",
-    "eclipsing binaries",
-    "pulsator",
-    "burster",
-    "dipper",
-    "co-rotating optically thin material",
-    "long term trend",
-    "stochastic"
-]
+    CLASS_NAMES = [
+        "sinusoidal",
+        "double dip",
+        "shape changer",
+        "beater",
+        "beater/complex peak",
+        "resolved close peaks",
+        "resolved distant peaks",
+        "eclipsing binaries",
+        "pulsator",
+        "burster",
+        "dipper",
+        "co-rotating optically thin material",
+        "long term trend",
+        "stochastic"
+    ]
