@@ -4,3 +4,5 @@ ml-dataset
 trained_cnn_model.pth
 *.spec
 build/
+impuls_stars.csv
+impuls-data

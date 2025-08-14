@@ -13,9 +13,6 @@ load_dotenv()
 class Config:
     """Application configuration settings."""
     
-    # CSV data configuration
-    CSV_TRAINING_DATA_PATH = os.getenv("CSV_TRAINING_DATA_PATH", "sample_training_data.csv")
-    
     # API configuration
     CORS_ORIGINS = [
         "http://localhost:5173",  # Vite dev server
@@ -37,10 +34,17 @@ class Config:
     MAX_PERIOD = 100.0
     
     # Model configuration
-    MODEL_SAVE_PATH = "trained_cnn_model.pth"
+    MODEL_PATH = os.getenv('MODEL_PATH', 'model.pth')
     DEVICE = "cpu"  # Can be changed to "cuda" if GPU is available
 
-    DATA_DIR = os.path.expanduser('~/Documents/impuls-data') if os.path.exists(os.path.expanduser('~/Documents/impuls-data')) else 'sample_data'
+    DEFAULT_DATA_DIR = 'impuls-data'
+    DATA_DIR = os.getenv('DATA_DIR', DEFAULT_DATA_DIR)
+
+    IMPULS_STARS_PATH = os.path.join(DATA_DIR, 'impuls_stars.csv')
+
+    SED_USERNAME = os.getenv('SED_USERNAME', None)
+    SED_PASSWORD = os.getenv('SED_PASSWORD', None)
+    SED_API_URL = os.getenv('SED_API_URL', 'k2clusters.ipac.caltech.edu/impuls/seds')
     
     @classmethod
     def validate(cls):
@@ -50,19 +54,19 @@ class Config:
             return False
         return True
 
-CLASS_NAMES = [
-    "sinusoidal",
-    "double dip",
-    "shape changer",
-    "beater",
-    "beater/complex peak",
-    "resolved close peaks",
-    "resolved distant peaks",
-    "eclipsing binaries",
-    "pulsator",
-    "burster",
-    "dipper",
-    "co-rotating optically thin material",
-    "long term trend",
-    "stochastic"
-]
+    CLASS_NAMES = [
+        "sinusoidal",
+        "double dip",
+        "shape changer",
+        "beater",
+        "beater/complex peak",
+        "resolved close peaks",
+        "resolved distant peaks",
+        "eclipsing binaries",
+        "pulsator",
+        "burster",
+        "dipper",
+        "co-rotating optically thin material",
+        "long term trend",
+        "stochastic"
+    ]
