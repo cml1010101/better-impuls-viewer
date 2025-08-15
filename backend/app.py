@@ -204,6 +204,170 @@ async def get_star_survey_campaign_phase_folded(star_number: int, survey_name: s
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# ML Model imports and utilities
+import torch
+from periodizer import MultiBranchStarModelHybrid, StarModelConfig, multitask_loss
+from models import PeriodizationResult
+import os
+
+# Global model variable
+_loaded_model = None
+_model_config = None
+
+def load_model():
+    """Load the trained MultiBranchStarModelHybrid model if available."""
+    global _loaded_model, _model_config
+    
+    if _loaded_model is not None:
+        return _loaded_model, _model_config
+    
+    model_path = config.Config.MODEL_PATH
+    if not os.path.exists(model_path):
+        return None, None
+    
+    try:
+        # Load model state
+        checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
+        _model_config = checkpoint['config']
+        
+        # Create model and load state
+        _loaded_model = MultiBranchStarModelHybrid(_model_config)
+        _loaded_model.load_state_dict(checkpoint['model_state_dict'])
+        _loaded_model.eval()
+        
+        print(f"Loaded trained model from {model_path}")
+        return _loaded_model, _model_config
+        
+    except Exception as e:
+        print(f"Error loading model from {model_path}: {e}")
+        return None, None
+
+def create_multi_branch_data(campaign_data: np.ndarray) -> dict:
+    """Create multi-branch input data from campaign light curve."""
+    
+    # Remove outliers and normalize
+    cleaned_data = remove_y_outliers(campaign_data)
+    time_clean = cleaned_data[:, 0]
+    flux_clean = cleaned_data[:, 1]
+    
+    # Detect period and get periodogram
+    true_period, frequency, power = detect_period_lomb_scargle(cleaned_data)
+    
+    # Normalize raw light curve
+    flux_norm = (flux_clean - np.mean(flux_clean)) / (np.std(flux_clean) + 1e-8)
+    
+    # Create periodogram data
+    pgram_data = power / (np.max(power) + 1e-8)
+    
+    # Generate period candidates
+    candidate_periods = generate_candidate_periods(true_period, num_candidates=4)
+    
+    # Create folded candidates
+    folded_candidates = []
+    for period in candidate_periods:
+        phase, flux_folded = phase_fold_data(time_clean, flux_norm, period)
+        # Resample to consistent length
+        phase_grid = np.linspace(0, 1, 200)
+        flux_interp = np.interp(phase_grid, phase, flux_folded)
+        folded_candidates.append(flux_interp)
+    
+    return {
+        'raw_lc': flux_norm,
+        'periodogram': pgram_data,
+        'folded_candidates': folded_candidates,
+        'candidate_periods': candidate_periods,
+        'detected_period': true_period
+    }
+
+def prepare_model_input(multi_branch_data: dict) -> tuple:
+    """Prepare data for model inference."""
+    # Raw light curve
+    lc = torch.tensor(multi_branch_data['raw_lc'], dtype=torch.float32).unsqueeze(0).unsqueeze(0)  # (1, 1, L)
+    
+    # Periodogram 
+    pgram = torch.tensor(multi_branch_data['periodogram'], dtype=torch.float32).unsqueeze(0).unsqueeze(0)  # (1, 1, L)
+    
+    # Folded candidates
+    folded_list = []
+    logP_list = []
+    for folded_data, period in zip(multi_branch_data['folded_candidates'], multi_branch_data['candidate_periods']):
+        folded_tensor = torch.tensor(folded_data, dtype=torch.float32).unsqueeze(0).unsqueeze(0)  # (1, 1, L)
+        folded_list.append(folded_tensor)
+        logP_list.append(torch.tensor([np.log10(period)], dtype=torch.float32))
+    
+    return lc, pgram, folded_list, logP_list
+
+@app.get("/api/star/{star_number}/survey/{survey_name}/campaigns/{campaign_id}/auto_analysis")
+async def get_auto_periodization_classification(star_number: int, survey_name: str, campaign_id: int, use_mast: bool = False) -> PeriodizationResult:
+    """Get automatic periodization and classification for a campaign using the trained ML model."""
+    
+    # Load the trained model
+    model, model_config = load_model()
+    if model is None:
+        raise HTTPException(status_code=503, detail="Trained model not available. Please train the model first using the training script.")
+    
+    # Get campaign data (same as other endpoints)
+    star_metadata = star_list.get_star(star_number)
+    if star_metadata is None:
+        raise HTTPException(status_code=404, detail="Star not found")
+    
+    try:
+        campaigns = get_campaigns_for_survey(star_number, survey_name, use_mast)
+        if campaign_id < 0 or campaign_id >= len(campaigns):
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        campaign_data = campaigns[campaign_id][1]
+        
+        if len(campaign_data) < 10:
+            raise HTTPException(status_code=400, detail="Campaign has insufficient data points for analysis")
+        
+        # Create multi-branch data
+        multi_branch_data = create_multi_branch_data(campaign_data)
+        
+        # Prepare model input
+        lc, pgram, folded_list, logP_list = prepare_model_input(multi_branch_data)
+        
+        # Run model inference
+        with torch.no_grad():
+            outputs = model(lc, pgram, folded_list, logP_list)
+        
+        # Extract predictions
+        predicted_logP = float(outputs['logP_pred'][0])
+        predicted_period = 10 ** predicted_logP
+        
+        type_logits = outputs['type_logits'][0]
+        predicted_class_idx = int(torch.argmax(type_logits))
+        confidence = float(torch.softmax(type_logits, dim=0)[predicted_class_idx])
+        
+        # Get class name
+        class_names = config.Config.CLASS_NAMES
+        predicted_class = class_names[predicted_class_idx] if predicted_class_idx < len(class_names) else "unknown"
+        
+        # Get candidate scores
+        cand_weights = outputs['cand_weights'][0].tolist()
+        candidate_info = []
+        for i, (period, weight) in enumerate(zip(multi_branch_data['candidate_periods'], cand_weights)):
+            candidate_info.append({
+                "period": period,
+                "score": weight,
+                "rank": i + 1
+            })
+        
+        # Sort candidates by score
+        candidate_info.sort(key=lambda x: x['score'], reverse=True)
+        for i, cand in enumerate(candidate_info):
+            cand['rank'] = i + 1
+        
+        return PeriodizationResult(
+            predicted_period=predicted_period,
+            predicted_class=predicted_class,
+            class_confidence=confidence,
+            detected_period=multi_branch_data['detected_period'],
+            candidate_periods=candidate_info
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error in auto analysis: {str(e)}")
+
 import argparse
 import uvicorn
 

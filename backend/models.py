@@ -39,3 +39,17 @@ class PeriodogramData(BaseModel):
 class PhaseFoldedData(BaseModel):
     phase: List[float]
     flux: List[float]
+
+
+class CandidatePeriod(BaseModel):
+    period: float
+    score: float
+    rank: int
+
+
+class PeriodizationResult(BaseModel):
+    predicted_period: float
+    predicted_class: str
+    class_confidence: float
+    detected_period: float
+    candidate_periods: List[CandidatePeriod]
