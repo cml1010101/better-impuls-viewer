@@ -3,15 +3,18 @@ import * as Plotly from 'plotly.js';
 import LightCurveChart from '../Charts/LightCurveChart';
 import PeriodogramChart from '../Charts/PeriodogramChart';
 import PhaseFoldedChart from '../Charts/PhaseFoldedChart';
+import AutoAnalysisChart from '../Charts/AutoAnalysisChart';
 import {
   fetchSurveys,
   fetchCampaignData,
   fetchPeriodogramData,
   fetchPhaseFoldedData,
+  fetchAutoAnalysis,
   type Survey,
   type DataPoint,
   type PeriodogramPoint,
-  type PhaseFoldedPoint
+  type PhaseFoldedPoint,
+  type AutoAnalysisResult
 } from '../../utils/api';
 import { PeriodCache } from '../../utils/periodCache';
 import styles from './StarPage.module.css';
@@ -34,6 +37,8 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
   const [selectedPeriod, setSelectedPeriod] = useState<number | null>(null);
   const [periodInputValue, setPeriodInputValue] = useState<string>('');
   const [dataLoading, setDataLoading] = useState(false);
+  const [autoAnalysis, setAutoAnalysis] = useState<AutoAnalysisResult | null>(null);
+  const [autoAnalysisLoading, setAutoAnalysisLoading] = useState(false);
   const [cachedPeriods, setCachedPeriods] = useState<Array<{
     survey: string;
     campaignId: number;
@@ -82,11 +87,22 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
     setPhaseFoldedData(data);
   }, [starNumber]);
 
+  const loadAutoAnalysis = useCallback(async (surveyName: string, campaignId: number) => {
+    try {
+      setAutoAnalysisLoading(true);
+      const data = await fetchAutoAnalysis(starNumber, surveyName, campaignId);
+      setAutoAnalysis(data);
+    } finally {
+      setAutoAnalysisLoading(false);
+    }
+  }, [starNumber]);
+
   // Fetch campaign data when a campaign is selected
   useEffect(() => {
     if (selectedCampaign) {
       loadCampaignData(selectedCampaign.survey, selectedCampaign.campaign);
       loadPeriodogramData(selectedCampaign.survey, selectedCampaign.campaign);
+      loadAutoAnalysis(selectedCampaign.survey, selectedCampaign.campaign);
       
       // Load cached period for this campaign if available
       const cachedPeriod = PeriodCache.getCachedPeriod(
@@ -166,6 +182,22 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
     setPeriodInputValue(period.toFixed(4));
   };
 
+  const handleAutoAnalysisPeriodClick = (period: number) => {
+    setSelectedPeriod(period);
+    setPeriodInputValue(period.toFixed(4));
+    
+    // Cache the period from auto analysis
+    if (selectedCampaign) {
+      PeriodCache.setCachedPeriod(
+        starNumber,
+        selectedCampaign.survey,
+        selectedCampaign.campaign,
+        period
+      );
+      loadCachedPeriods(); // Refresh cached periods display
+    }
+  };
+
   const handleSetPrimaryPeriod = (survey: string, campaignId: number) => {
     PeriodCache.setPrimaryPeriod(starNumber, survey, campaignId);
     loadCachedPeriods(); // Refresh cached periods display
@@ -177,6 +209,7 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
     setCampaignData([]);
     setPeriodogramData([]);
     setPhaseFoldedData([]);
+    setAutoAnalysis(null);
     setSelectedPeriod(null);
     setPeriodInputValue('');
   };
@@ -331,6 +364,18 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
                       <div className={styles.placeholder}>
                         {selectedPeriod ? 'Loading phase folded data...' : 'Select a period from the periodogram to view phase folded data'}
                       </div>
+                    )}
+                  </div>
+                  <div className={styles.autoAnalysisSection}>
+                    {autoAnalysisLoading ? (
+                      <div className={styles.placeholder}>Loading auto analysis...</div>
+                    ) : autoAnalysis ? (
+                      <AutoAnalysisChart 
+                        autoAnalysis={autoAnalysis} 
+                        onPeriodClick={handleAutoAnalysisPeriodClick}
+                      />
+                    ) : (
+                      <div className={styles.placeholder}>No auto analysis available</div>
                     )}
                   </div>
                 </div>
