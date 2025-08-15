@@ -80,7 +80,7 @@ const getMockPeriodogramData = (): PeriodogramPoint[] => {
   return points;
 };
 
-const getMockPhaseFoldedData = (period: number): PhaseFoldedPoint[] => {
+const getMockPhaseFoldedData = (): PhaseFoldedPoint[] => {
   // Generate synthetic phase-folded data
   const points: PhaseFoldedPoint[] = [];
   for (let i = 0; i < 100; i++) {
@@ -163,10 +163,12 @@ export const fetchCampaignData = async (
 export const fetchPeriodogramData = async (
   starNumber: number, 
   surveyName: string, 
-  campaignId: number
+  campaignId: number,
+  autoNormalize: boolean = false
 ): Promise<PeriodogramPoint[]> => {
   try {
-    const response = await fetch(`${API_BASE}/star/${starNumber}/survey/${surveyName}/campaigns/${campaignId}/periodogram`);
+    const url = `${API_BASE}/star/${starNumber}/survey/${surveyName}/campaigns/${campaignId}/periodogram${autoNormalize ? '?auto_normalize=true' : ''}`;
+    const response = await fetch(url);
     if (!response.ok) {
       console.error(`Error fetching periodogram: ${response.status}`);
       return getMockPeriodogramData();
@@ -194,19 +196,21 @@ export const fetchPhaseFoldedData = async (
   starNumber: number, 
   surveyName: string, 
   campaignId: number, 
-  period: number
+  period: number,
+  autoNormalize: boolean = false
 ): Promise<PhaseFoldedPoint[]> => {
   try {
-    const response = await fetch(`${API_BASE}/star/${starNumber}/survey/${surveyName}/campaigns/${campaignId}/phase_folded?period=${period}`);
+    const autoNormalizeParam = autoNormalize ? '&auto_normalize=true' : '';
+    const response = await fetch(`${API_BASE}/star/${starNumber}/survey/${surveyName}/campaigns/${campaignId}/phase_folded?period=${period}${autoNormalizeParam}`);
     if (!response.ok) {
       console.error(`Error fetching phase-folded data: ${response.status}`);
-      return getMockPhaseFoldedData(period);
+      return getMockPhaseFoldedData();
     }
     const data = await response.json();
     
     if (!data.phase || !data.flux) {
       console.error('Invalid phase-folded data format received');
-      return getMockPhaseFoldedData(period);
+      return getMockPhaseFoldedData();
     }
     
     const formattedData = data.phase.map((phase: number, index: number) => ({
@@ -217,7 +221,34 @@ export const fetchPhaseFoldedData = async (
     return formattedData;
   } catch (error) {
     console.error('Error fetching phase-folded data:', error);
-    return getMockPhaseFoldedData(period);
+    return getMockPhaseFoldedData();
+  }
+};
+
+export interface AutoAnalysisResult {
+  predicted_period: number;
+  confidence: number;
+  variability_type: string;
+}
+
+export const fetchAutoAnalysis = async (
+  starNumber: number,
+  surveyName: string,
+  campaignId: number,
+  autoNormalize: boolean = false
+): Promise<AutoAnalysisResult | null> => {
+  try {
+    const url = `${API_BASE}/star/${starNumber}/survey/${surveyName}/campaigns/${campaignId}/auto_analysis${autoNormalize ? '?auto_normalize=true' : ''}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error(`Error fetching auto analysis: ${response.status}`);
+      return null;
+    }
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching auto analysis:', error);
+    return null;
   }
 };
 

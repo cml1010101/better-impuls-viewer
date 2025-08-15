@@ -121,7 +121,7 @@ export class PeriodCache {
       const cache = this.getCachedPeriods();
       
       // Clear existing primary for this star
-      for (const [key, value] of Object.entries(cache)) {
+      for (const value of Object.values(cache)) {
         if (value.campaign.starNumber === starNumber) {
           value.isPrimary = false;
         }
