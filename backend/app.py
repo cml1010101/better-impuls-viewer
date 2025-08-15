@@ -34,6 +34,11 @@ async def list_stars() -> list[int]:
     """List all stars in the database."""
     return star_list.list_stars()
 
+@app.get("/api/categories")
+async def get_categories() -> list[str]:
+    """Get all available light curve categories."""
+    return config.Config.CLASS_NAMES
+
 @app.get("/api/star/{star_number}")
 async def get_star(star_number: int) -> StarInfo:
     """Get metadata for a specific star."""
