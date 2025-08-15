@@ -158,8 +158,17 @@ async def get_star_survey_campaign(star_number: int, survey_name: str, campaign_
 from models import PeriodogramData, PhaseFoldedData
 
 @app.get("/api/star/{star_number}/survey/{survey_name}/campaigns/{campaign_id}/periodogram")
-async def get_star_survey_campaign_periodogram(star_number: int, survey_name: str, campaign_id: int, use_mast: bool = False) -> PeriodogramData:
-    """Get periodogram data for a specific campaign."""
+async def get_star_survey_campaign_periodogram(star_number: int, survey_name: str, campaign_id: int, use_mast: bool = False, auto_normalize: bool = False) -> PeriodogramData:
+    """Get periodogram data for a specific campaign.
+    
+    Args:
+        star_number: Star identifier
+        survey_name: Survey name (e.g., 'hubble', 'kepler', 'tess')
+        campaign_id: Campaign identifier within the survey
+        use_mast: Whether to use MAST database for data retrieval
+        auto_normalize: If True, applies linear detrending and outlier removal
+                        before calculating the periodogram
+    """
     star_metadata = star_list.get_star(star_number)
     if star_metadata is None:
         raise HTTPException(status_code=404, detail="Star not found")
@@ -169,6 +178,12 @@ async def get_star_survey_campaign_periodogram(star_number: int, survey_name: st
         if campaign_id < 0 or campaign_id >= len(campaigns):
             raise HTTPException(status_code=404, detail="Campaign not found")
         campaign_data = campaigns[campaign_id][1]
+        
+        # Apply auto-normalization if requested
+        if auto_normalize:
+            campaign_data = remove_y_outliers(campaign_data)
+            campaign_data = detrend_linear(campaign_data)
+        
         frequencies, powers = calculate_lomb_scargle(campaign_data)
         periods = 1 / frequencies
     except ValueError as e:
@@ -180,8 +195,18 @@ async def get_star_survey_campaign_periodogram(star_number: int, survey_name: st
     )
 
 @app.get("/api/star/{star_number}/survey/{survey_name}/campaigns/{campaign_id}/phase_folded")
-async def get_star_survey_campaign_phase_folded(star_number: int, survey_name: str, campaign_id: int, period: float, use_mast: bool = False) -> PhaseFoldedData:
-    """Get phase-folded data for a specific campaign."""
+async def get_star_survey_campaign_phase_folded(star_number: int, survey_name: str, campaign_id: int, period: float, use_mast: bool = False, auto_normalize: bool = False) -> PhaseFoldedData:
+    """Get phase-folded data for a specific campaign.
+    
+    Args:
+        star_number: Star identifier
+        survey_name: Survey name (e.g., 'hubble', 'kepler', 'tess')
+        campaign_id: Campaign identifier within the survey
+        period: Period for phase folding (in days)
+        use_mast: Whether to use MAST database for data retrieval
+        auto_normalize: If True, applies linear detrending and outlier removal
+                        before phase folding
+    """
     star_metadata = star_list.get_star(star_number)
     if star_metadata is None:
         raise HTTPException(status_code=404, detail="Star not found")
@@ -191,6 +216,11 @@ async def get_star_survey_campaign_phase_folded(star_number: int, survey_name: s
         if campaign_id < 0 or campaign_id >= len(campaigns):
             raise HTTPException(status_code=404, detail="Campaign not found")
         campaign_data = campaigns[campaign_id][1]
+        
+        # Apply auto-normalization if requested
+        if auto_normalize:
+            campaign_data = remove_y_outliers(campaign_data)
+            campaign_data = detrend_linear(campaign_data)
         
         # Phase folding logic
         time = campaign_data[:, 0]
@@ -242,18 +272,33 @@ def load_model():
         print(f"Error loading model from {model_path}: {e}")
         return None, None
 
-def create_multi_branch_data(campaign_data: np.ndarray) -> dict:
-    """Create multi-branch input data from campaign light curve."""
+def create_multi_branch_data(campaign_data: np.ndarray, auto_normalize: bool = False) -> dict:
+    """Create multi-branch input data from campaign light curve.
     
-    # Remove outliers and normalize
+    Args:
+        campaign_data (np.ndarray): Light curve data with shape (n, 2) for (time, flux)
+        auto_normalize (bool): If True, applies linear detrending to remove secular trends
+                               before standard normalization. Default is False to preserve
+                               backward compatibility.
+    
+    Returns:
+        dict: Dictionary containing processed light curve data for ML model input
+    """
+    
+    # Remove outliers
     cleaned_data = remove_y_outliers(campaign_data)
+    
+    # Apply linear detrending if requested
+    if auto_normalize:
+        cleaned_data = detrend_linear(cleaned_data)
+    
     time_clean = cleaned_data[:, 0]
     flux_clean = cleaned_data[:, 1]
     
     # Detect period and get periodogram
     true_period, frequency, power = detect_period_lomb_scargle(cleaned_data)
     
-    # Normalize raw light curve
+    # Normalize raw light curve (z-score normalization)
     flux_norm = (flux_clean - np.mean(flux_clean)) / (np.std(flux_clean) + 1e-8)
     
     # Create periodogram data
@@ -298,8 +343,18 @@ def prepare_model_input(multi_branch_data: dict) -> tuple:
     return lc, pgram, folded_list, logP_list
 
 @app.get("/api/star/{star_number}/survey/{survey_name}/campaigns/{campaign_id}/auto_analysis")
-async def get_auto_periodization_classification(star_number: int, survey_name: str, campaign_id: int, use_mast: bool = False) -> PeriodizationResult:
-    """Get automatic periodization and classification for a campaign using the trained ML model."""
+async def get_auto_periodization_classification(star_number: int, survey_name: str, campaign_id: int, use_mast: bool = False, auto_normalize: bool = False) -> PeriodizationResult:
+    """Get automatic periodization and classification for a campaign using the trained ML model.
+    
+    Args:
+        star_number: Star identifier
+        survey_name: Survey name (e.g., 'hubble', 'kepler', 'tess')
+        campaign_id: Campaign identifier within the survey
+        use_mast: Whether to use MAST database for data retrieval
+        auto_normalize: If True, applies linear detrending to remove secular trends
+                        before analysis. Helps with data that has overall brightness
+                        changes over the campaign duration.
+    """
     
     # Load the trained model
     model, model_config = load_model()
@@ -321,7 +376,7 @@ async def get_auto_periodization_classification(star_number: int, survey_name: s
             raise HTTPException(status_code=400, detail="Campaign has insufficient data points for analysis")
         
         # Create multi-branch data
-        multi_branch_data = create_multi_branch_data(campaign_data)
+        multi_branch_data = create_multi_branch_data(campaign_data, auto_normalize=auto_normalize)
         
         # Prepare model input
         lc, pgram, folded_list, logP_list = prepare_model_input(multi_branch_data)

@@ -165,6 +165,54 @@ def remove_y_outliers(data: np.ndarray, iqr_multiplier: float = 3.0) -> np.ndarr
     return filtered_data
 
 from astropy.timeseries import LombScargle
+from scipy.stats import linregress
+
+def detrend_linear(data: np.ndarray) -> np.ndarray:
+    """
+    Remove linear trends from the flux data using linear regression.
+    
+    This function fits a linear model (y = mx + b) to the flux vs time data
+    and subtracts the trend component, preserving only the variations around
+    the trend line. This is useful for removing secular changes in brightness
+    that can interfere with periodic signal detection.
+    
+    Args:
+        data (np.ndarray): A NumPy array of shape (n, 2) where each row
+                           is a (time, flux) coordinate pair.
+    
+    Returns:
+        np.ndarray: A new NumPy array with the linear trend removed.
+                    The time values remain unchanged, but flux values are
+                    detrended (original flux - linear trend).
+    """
+    if data.shape[0] < 2:
+        print("Insufficient data points for linear detrending.")
+        return data.copy()
+    
+    if data.shape[1] != 2:
+        raise ValueError("Input data must be a 2D array with two columns (time and flux).")
+    
+    time = data[:, 0]
+    flux = data[:, 1]
+    
+    # Perform linear regression: flux = slope * time + intercept
+    slope, intercept, r_value, p_value, std_err = linregress(time, flux)
+    
+    # Calculate the linear trend
+    linear_trend = slope * time + intercept
+    
+    # Remove the trend from the flux
+    detrended_flux = flux - linear_trend
+    
+    # Add back the mean to center around the original mean level
+    # This preserves the scale while removing the trend
+    detrended_flux = detrended_flux + np.mean(flux)
+    
+    # Create new array with detrended flux
+    detrended_data = np.column_stack([time, detrended_flux])
+    
+    return detrended_data
+
 
 def calculate_lomb_scargle(
     data: np.ndarray, samples_per_peak: int = 10
