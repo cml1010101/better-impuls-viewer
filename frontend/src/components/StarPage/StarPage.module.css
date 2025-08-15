@@ -186,13 +186,19 @@
 
 .cachedPeriodItemContainer {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 0.5rem;
   margin-bottom: 0.5rem;
 }
 
 .cachedPeriodItemContainer:last-child {
   margin-bottom: 0;
+}
+
+.cachedPeriodMain {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .cachedPeriodItem {
@@ -306,6 +312,12 @@
   flex-shrink: 0;
 }
 
+.categorySelectContainer {
+  display: flex;
+  align-items: center;
+  padding-left: 0.75rem;
+}
+
 .categorySelect {
   padding: 0.25rem 0.5rem;
   border: 1px solid #d1d5db;
@@ -314,7 +326,8 @@
   font-size: 0.75rem;
   color: #374151;
   cursor: pointer;
-  min-width: 120px;
+  width: 100%;
+  max-width: 200px;
 }
 
 .categorySelect:focus {

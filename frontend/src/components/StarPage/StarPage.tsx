@@ -323,38 +323,54 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
               </p>
               {cachedPeriods.map((cached, index) => (
                 <div key={index} className={styles.cachedPeriodItemContainer}>
-                  <button
-                    className={`${styles.cachedPeriodItem} ${
-                      selectedCampaign?.survey === cached.survey && 
-                      selectedCampaign?.campaign === cached.campaignId &&
-                      selectedPeriod === cached.period ? 
-                      styles.active : ''
-                    } ${cached.isPrimary ? styles.primary : ''}`}
-                    onClick={() => handleLoadCachedPeriod(cached.period)}
-                    title={`Cached ${new Date(cached.timestamp).toLocaleString()}`}
-                  >
-                    <div className={styles.cachedPeriodDetails}>
-                      <span className={styles.cachedPeriodValue}>
-                        {cached.period !== null ? `${cached.period.toFixed(4)} days` : 'No period data'}
-                        {cached.isPrimary && <span className={styles.primaryBadge}>PRIMARY</span>}
-                        {cached.category && <span className={styles.categoryBadge}>{cached.category}</span>}
-                      </span>
-                      <span className={styles.cachedPeriodSource}>
-                        {cached.survey.toUpperCase()} Campaign {cached.campaignId}
-                      </span>
-                    </div>
-                  </button>
-                  <div className={styles.cachedPeriodActions}>
+                  <div className={styles.cachedPeriodMain}>
                     <button
-                      className={`${styles.primaryButton} ${cached.isPrimary ? styles.primaryActive : ''}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleSetPrimaryPeriod(cached.survey, cached.campaignId);
-                      }}
-                      title={cached.isPrimary ? "Remove as primary" : "Set as primary"}
+                      className={`${styles.cachedPeriodItem} ${
+                        selectedCampaign?.survey === cached.survey && 
+                        selectedCampaign?.campaign === cached.campaignId &&
+                        selectedPeriod === cached.period ? 
+                        styles.active : ''
+                      } ${cached.isPrimary ? styles.primary : ''}`}
+                      onClick={() => handleLoadCachedPeriod(cached.period)}
+                      title={`Cached ${new Date(cached.timestamp).toLocaleString()}`}
                     >
-                      ⭐
+                      <div className={styles.cachedPeriodDetails}>
+                        <span className={styles.cachedPeriodValue}>
+                          {cached.period !== null ? `${cached.period.toFixed(4)} days` : 'No period data'}
+                          {cached.isPrimary && <span className={styles.primaryBadge}>PRIMARY</span>}
+                          {cached.category && <span className={styles.categoryBadge}>{cached.category}</span>}
+                        </span>
+                        <span className={styles.cachedPeriodSource}>
+                          {cached.survey.toUpperCase()} Campaign {cached.campaignId}
+                        </span>
+                      </div>
                     </button>
+                    <div className={styles.cachedPeriodActions}>
+                      <button
+                        className={`${styles.primaryButton} ${cached.isPrimary ? styles.primaryActive : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSetPrimaryPeriod(cached.survey, cached.campaignId);
+                        }}
+                        title={cached.isPrimary ? "Remove as primary" : "Set as primary"}
+                      >
+                        ⭐
+                      </button>
+                      <button
+                        className={styles.removeButton}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (confirm('Remove this cached period?')) {
+                            handleRemoveCachedPeriod(cached.survey, cached.campaignId);
+                          }
+                        }}
+                        title="Remove from cache"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                  <div className={styles.categorySelectContainer}>
                     <select
                       className={styles.categorySelect}
                       value={cached.category || ''}
@@ -366,18 +382,6 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
                         <option key={category} value={category}>{category}</option>
                       ))}
                     </select>
-                    <button
-                      className={styles.removeButton}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (confirm('Remove this cached period?')) {
-                          handleRemoveCachedPeriod(cached.survey, cached.campaignId);
-                        }
-                      }}
-                      title="Remove from cache"
-                    >
-                      ✕
-                    </button>
                   </div>
                 </div>
               ))}
