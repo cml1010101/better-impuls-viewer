@@ -4,6 +4,9 @@ load_dotenv()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+import httpx
+import io
 
 import config
 
@@ -61,14 +64,49 @@ async def get_star_sed(star_number: int) -> SEDData:
             message="SED API URL not configured"
         )
     
-    # Build SED URL
-    sed_url = f"http://{config.Config.SED_USERNAME}:{config.Config.SED_PASSWORD}@{config.Config.SED_API_URL}/{star_number:03d}_SED.png"
+    # Return local backend URL that will serve the image
+    local_sed_url = f"/api/star/{star_number}/sed/image"
     
     return SEDData(
-        url=sed_url,
+        url=local_sed_url,
         available=True,
         message="SED data available"
     )
+
+@app.get("/api/star/{star_number}/sed/image")
+async def get_star_sed_image(star_number: int):
+    """Serve the SED PNG image for a specific star."""
+    star_metadata = star_list.get_star(star_number)
+    if star_metadata is None:
+        raise HTTPException(status_code=404, detail="Star not found")
+    
+    # Check if SED configuration is available
+    if not config.Config.SED_API_URL:
+        raise HTTPException(status_code=503, detail="SED API URL not configured")
+    
+    # Build external SED URL with credentials
+    external_sed_url = f"http://{config.Config.SED_USERNAME}:{config.Config.SED_PASSWORD}@{config.Config.SED_API_URL}/{star_number:03d}_SED.png"
+    
+    try:
+        # Fetch the image from external URL
+        async with httpx.AsyncClient() as client:
+            response = await client.get(external_sed_url)
+            response.raise_for_status()
+            
+            # Stream the image back to the frontend
+            image_stream = io.BytesIO(response.content)
+            
+            return StreamingResponse(
+                io.BytesIO(response.content),
+                media_type="image/png",
+                headers={
+                    "Content-Disposition": f"inline; filename=star_{star_number}_sed.png"
+                }
+            )
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=502, detail=f"Failed to fetch SED image: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error serving SED image: {str(e)}")
 
 @app.get("/api/star/{star_number}/surveys")
 async def get_star_surveys(star_number: int, use_mast: bool = False) -> StarSurveys:

@@ -241,6 +241,12 @@ export const fetchSEDData = async (starNumber: number): Promise<SEDData> => {
       };
     }
     const data = await response.json();
+    
+    // If the URL is relative, convert it to absolute URL using API_BASE
+    if (data.url && data.url.startsWith('/api/')) {
+      data.url = `${API_BASE.replace('/api', '')}${data.url}`;
+    }
+    
     return data;
   } catch (error) {
     console.error('Error fetching SED data:', error);
