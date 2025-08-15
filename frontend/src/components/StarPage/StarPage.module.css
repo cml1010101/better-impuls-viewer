@@ -391,6 +391,26 @@
   border: 1px solid #e5e7eb;
 }
 
+.csvSectionHeader {
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #f3f4f6;
+}
+
+.csvSectionHeader h4 {
+  margin: 0 0 0.25rem 0;
+  color: #374151;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.starsWithCache {
+  margin: 0;
+  color: #6b7280;
+  font-size: 0.8rem;
+  font-style: italic;
+}
+
 .csvDescription {
   margin: 0 0 1rem 0;
   color: #6b7280;

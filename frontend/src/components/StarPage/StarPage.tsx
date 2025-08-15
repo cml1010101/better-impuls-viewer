@@ -43,6 +43,8 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
     isPrimary: boolean;
     category?: string;
   }>>([]);
+  const [totalCachedCount, setTotalCachedCount] = useState(0);
+  const [starsWithCache, setStarsWithCache] = useState<number[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [showCsvPanel, setShowCsvPanel] = useState(false);
 
@@ -65,6 +67,8 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
   const loadCachedPeriods = useCallback(() => {
     const cached = PeriodCache.getAllCachedPeriodsForStar(starNumber);
     setCachedPeriods(cached);
+    setTotalCachedCount(PeriodCache.getTotalCachedCount());
+    setStarsWithCache(PeriodCache.getStarsWithCachedData());
   }, [starNumber]);
 
   const loadCategories = useCallback(async () => {
@@ -204,6 +208,10 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
     PeriodCache.downloadCSV(`star_periods_${starNumber}.csv`);
   };
 
+  const handleExportAllCSV = () => {
+    PeriodCache.downloadCSV(`all_star_periods.csv`);
+  };
+
   const handleImportCSV = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
@@ -223,6 +231,13 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
     }
     // Reset the input value so the same file can be selected again
     event.target.value = '';
+  };
+
+  const handleClearAllCache = () => {
+    if (confirm(`Clear ALL cached periods for ALL stars? This will remove ${totalCachedCount} cached periods across ${starsWithCache.length} stars. This action cannot be undone.`)) {
+      PeriodCache.clearCache();
+      loadCachedPeriods(); // Refresh display
+    }
   };
 
   const selectCampaign = (surveyName: string, campaignId: number) => {
@@ -322,10 +337,10 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
                       <span className={styles.cachedPeriodValue}>
                         {cached.period !== null ? `${cached.period.toFixed(4)} days` : 'No period data'}
                         {cached.isPrimary && <span className={styles.primaryBadge}>PRIMARY</span>}
+                        {cached.category && <span className={styles.categoryBadge}>{cached.category}</span>}
                       </span>
                       <span className={styles.cachedPeriodSource}>
                         {cached.survey.toUpperCase()} Campaign {cached.campaignId}
-                        {cached.category && <span className={styles.categoryBadge}>{cached.category}</span>}
                       </span>
                     </div>
                   </button>
@@ -388,14 +403,50 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
                   Export cached periods to CSV or import period data from CSV file
                 </p>
                 
+                <div className={styles.csvSectionHeader}>
+                  <h4>Current Star ({starNumber})</h4>
+                </div>
                 <div className={styles.csvActions}>
                   <button
                     className={styles.csvButton}
                     onClick={handleExportCSV}
                     disabled={cachedPeriods.length === 0}
-                    title="Download cached periods as CSV file"
+                    title="Download cached periods for this star as CSV file"
                   >
-                    📥 Export to CSV
+                    📥 Export Star {starNumber}
+                  </button>
+                  
+                  <button
+                    className={styles.csvButton}
+                    onClick={() => {
+                      if (confirm('Clear all cached periods for this star?')) {
+                        PeriodCache.clearCacheForStar(starNumber);
+                        loadCachedPeriods();
+                      }
+                    }}
+                    disabled={cachedPeriods.length === 0}
+                    title="Remove all cached periods for this star"
+                  >
+                    🗑️ Clear Star {starNumber}
+                  </button>
+                </div>
+
+                <div className={styles.csvSectionHeader}>
+                  <h4>All Stars ({totalCachedCount} periods across {starsWithCache.length} stars)</h4>
+                  {starsWithCache.length > 0 && (
+                    <p className={styles.starsWithCache}>
+                      Stars with cached data: {starsWithCache.join(', ')}
+                    </p>
+                  )}
+                </div>
+                <div className={styles.csvActions}>
+                  <button
+                    className={styles.csvButton}
+                    onClick={handleExportAllCSV}
+                    disabled={totalCachedCount === 0}
+                    title="Download all cached periods from all stars as CSV file"
+                  >
+                    📥 Export All Stars
                   </button>
                   
                   <label className={styles.csvButton}>
@@ -410,16 +461,11 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
                   
                   <button
                     className={styles.csvButton}
-                    onClick={() => {
-                      if (confirm('Clear all cached periods for this star?')) {
-                        PeriodCache.clearCacheForStar(starNumber);
-                        loadCachedPeriods();
-                      }
-                    }}
-                    disabled={cachedPeriods.length === 0}
-                    title="Remove all cached periods for this star"
+                    onClick={handleClearAllCache}
+                    disabled={totalCachedCount === 0}
+                    title="Remove ALL cached periods for ALL stars"
                   >
-                    🗑️ Clear Cache
+                    🗑️ Clear All Stars
                   </button>
                 </div>
                 

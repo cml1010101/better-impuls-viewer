@@ -328,6 +328,42 @@ export class PeriodCache {
       document.body.removeChild(link);
     }
   }
+
+  // Global operations for all stars
+  static getAllCachedPeriods(): Array<{
+    starNumber: number;
+    survey: string;
+    campaignId: number;
+    period: number | null;
+    timestamp: number;
+    isPrimary: boolean;
+    category?: string;
+  }> {
+    const cache = this.getCachedPeriods();
+    return Object.values(cache).map(cached => ({
+      starNumber: cached.campaign.starNumber,
+      survey: cached.campaign.survey,
+      campaignId: cached.campaign.campaignId,
+      period: cached.period,
+      timestamp: cached.timestamp,
+      isPrimary: cached.isPrimary || false,
+      category: cached.category
+    }));
+  }
+
+  static getTotalCachedCount(): number {
+    const cache = this.getCachedPeriods();
+    return Object.keys(cache).length;
+  }
+
+  static getStarsWithCachedData(): number[] {
+    const cache = this.getCachedPeriods();
+    const starNumbers = new Set<number>();
+    Object.values(cache).forEach(cached => {
+      starNumbers.add(cached.campaign.starNumber);
+    });
+    return Array.from(starNumbers).sort((a, b) => a - b);
+  }
 }
 
 export default PeriodCache;
