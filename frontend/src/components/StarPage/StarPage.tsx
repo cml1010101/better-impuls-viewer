@@ -1,42 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import * as Plotly from 'plotly.js';
 import LightCurveChart from '../Charts/LightCurveChart';
 import PeriodogramChart from '../Charts/PeriodogramChart';
 import PhaseFoldedChart from '../Charts/PhaseFoldedChart';
+import {
+  fetchSurveys,
+  fetchCampaignData,
+  fetchPeriodogramData,
+  fetchPhaseFoldedData,
+  type Survey,
+  type DataPoint,
+  type PeriodogramPoint,
+  type PhaseFoldedPoint
+} from '../../utils/api';
+import { PeriodCache } from '../../utils/periodCache';
 import styles from './StarPage.module.css';
-
-interface Survey {
-  name: string;
-  campaigns: Campaign[];
-}
-
-interface Campaign {
-  campaign_id: number;
-  data_points: number;
-  duration: number;
-}
-
-interface DataPoint {
-  time: number;
-  flux: number;
-  error: number;
-}
-
-interface PeriodogramPoint {
-  period: number;
-  power: number;
-}
-
-interface PhaseFoldedPoint {
-  phase: number;
-  flux: number;
-}
 
 interface StarPageProps {
   starNumber: number;
   onBackToStarList: () => void;
 }
-
-const API_BASE = 'http://localhost:8000/api';
 
 const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => {
   const [surveys, setSurveys] = useState<Survey[]>([]);
@@ -51,200 +34,84 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
   const [selectedPeriod, setSelectedPeriod] = useState<number | null>(null);
   const [periodInputValue, setPeriodInputValue] = useState<string>('');
   const [dataLoading, setDataLoading] = useState(false);
+  const [cachedPeriods, setCachedPeriods] = useState<Array<{
+    survey: string;
+    campaignId: number;
+    period: number;
+    timestamp: number;
+  }>>([]);
 
   useEffect(() => {
-    fetchSurveys();
+    loadSurveys();
+    loadCachedPeriods();
+  }, [starNumber]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadSurveys = useCallback(async () => {
+    try {
+      setLoading(true);
+      const surveysData = await fetchSurveys(starNumber);
+      setSurveys(surveysData);
+    } finally {
+      setLoading(false);
+    }
+  }, [starNumber]);
+
+  const loadCachedPeriods = useCallback(() => {
+    const cached = PeriodCache.getAllCachedPeriodsForStar(starNumber);
+    setCachedPeriods(cached);
+  }, [starNumber]);
+
+  const loadCampaignData = useCallback(async (surveyName: string, campaignId: number) => {
+    try {
+      setDataLoading(true);
+      const data = await fetchCampaignData(starNumber, surveyName, campaignId);
+      setCampaignData(data);
+    } finally {
+      setDataLoading(false);
+    }
+  }, [starNumber]);
+
+  const loadPeriodogramData = useCallback(async (surveyName: string, campaignId: number) => {
+    const data = await fetchPeriodogramData(starNumber, surveyName, campaignId);
+    setPeriodogramData(data);
+  }, [starNumber]);
+
+  const loadPhaseFoldedData = useCallback(async (surveyName: string, campaignId: number, period: number) => {
+    const data = await fetchPhaseFoldedData(starNumber, surveyName, campaignId, period);
+    setPhaseFoldedData(data);
   }, [starNumber]);
 
   // Fetch campaign data when a campaign is selected
   useEffect(() => {
     if (selectedCampaign) {
-      fetchCampaignData(selectedCampaign.survey, selectedCampaign.campaign);
-      fetchPeriodogramData(selectedCampaign.survey, selectedCampaign.campaign);
+      loadCampaignData(selectedCampaign.survey, selectedCampaign.campaign);
+      loadPeriodogramData(selectedCampaign.survey, selectedCampaign.campaign);
+      
+      // Load cached period for this campaign if available
+      const cachedPeriod = PeriodCache.getCachedPeriod(
+        starNumber, 
+        selectedCampaign.survey, 
+        selectedCampaign.campaign
+      );
+      if (cachedPeriod) {
+        setSelectedPeriod(cachedPeriod);
+        setPeriodInputValue(cachedPeriod.toFixed(4));
+      } else {
+        setSelectedPeriod(null);
+        setPeriodInputValue('');
+      }
     }
-  }, [selectedCampaign, starNumber]);
+  }, [selectedCampaign, starNumber]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch phase-folded data when period is selected
   useEffect(() => {
     if (selectedCampaign && selectedPeriod) {
-      fetchPhaseFoldedData(selectedCampaign.survey, selectedCampaign.campaign, selectedPeriod);
+      loadPhaseFoldedData(selectedCampaign.survey, selectedCampaign.campaign, selectedPeriod);
     }
-  }, [selectedCampaign, selectedPeriod, starNumber]);
+  }, [selectedCampaign, selectedPeriod, starNumber]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchSurveys = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(`${API_BASE}/star/${starNumber}/surveys`);
-      if (!response.ok) {
-        console.error(`Error fetching surveys: ${response.status}`);
-        // For demo purposes, show mock data when API is not available
-        const mockSurveys = [
-          {
-            name: 'hubble',
-            campaigns: [
-              { campaign_id: 0, data_points: 1250, duration: 45.2 },
-              { campaign_id: 1, data_points: 980, duration: 32.1 }
-            ]
-          },
-          {
-            name: 'kepler',
-            campaigns: [
-              { campaign_id: 0, data_points: 2340, duration: 89.7 },
-              { campaign_id: 1, data_points: 1890, duration: 67.3 }
-            ]
-          },
-          {
-            name: 'tess',
-            campaigns: [
-              { campaign_id: 0, data_points: 3200, duration: 27.4 }
-            ]
-          }
-        ];
-        setSurveys(mockSurveys);
-        return;
-      }
-      const data = await response.json();
-      
-      // Fetch campaigns for each survey
-      const surveysWithCampaigns = await Promise.all(
-        data.surveys.map(async (surveyName: string) => {
-          try {
-            const campaignsResponse = await fetch(`${API_BASE}/star/${starNumber}/survey/${surveyName}/campaigns`);
-            if (campaignsResponse.ok) {
-              const campaigns = await campaignsResponse.json();
-              return {
-                name: surveyName,
-                campaigns: campaigns
-              };
-            }
-          } catch (error) {
-            console.error(`Error fetching campaigns for ${surveyName}:`, error);
-          }
-          return {
-            name: surveyName,
-            campaigns: []
-          };
-        })
-      );
-      
-      setSurveys(surveysWithCampaigns);
-    } catch (error) {
-      console.error('Error fetching surveys:', error);
-      // For demo purposes, show mock data when API is not available
-      const mockSurveys = [
-        {
-          name: 'hubble',
-          campaigns: [
-            { campaign_id: 0, data_points: 1250, duration: 45.2 },
-            { campaign_id: 1, data_points: 980, duration: 32.1 }
-          ]
-        },
-        {
-          name: 'kepler',
-          campaigns: [
-            { campaign_id: 0, data_points: 2340, duration: 89.7 },
-            { campaign_id: 1, data_points: 1890, duration: 67.3 }
-          ]
-        },
-        {
-          name: 'tess',
-          campaigns: [
-            { campaign_id: 0, data_points: 3200, duration: 27.4 }
-          ]
-        }
-      ];
-      setSurveys(mockSurveys);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchCampaignData = async (surveyName: string, campaignId: number) => {
-    try {
-      setDataLoading(true);
-      const response = await fetch(`${API_BASE}/star/${starNumber}/survey/${surveyName}/campaigns/${campaignId}/raw`);
-      if (!response.ok) {
-        console.error(`Error fetching campaign data: ${response.status}`);
-        setCampaignData([]);
-        return;
-      }
-      const data = await response.json();
-      
-      if (!data.time || !data.flux) {
-        console.error('Invalid campaign data format received');
-        setCampaignData([]);
-        return;
-      }
-      
-      const formattedData = data.time.map((time: number, index: number) => ({
-        time,
-        flux: data.flux[index],
-        error: data.error?.[index] || 0,
-      }));
-      
-      setCampaignData(formattedData);
-    } catch (error) {
-      console.error('Error fetching campaign data:', error);
-      setCampaignData([]);
-    } finally {
-      setDataLoading(false);
-    }
-  };
-
-  const fetchPeriodogramData = async (surveyName: string, campaignId: number) => {
-    try {
-      const response = await fetch(`${API_BASE}/star/${starNumber}/survey/${surveyName}/campaigns/${campaignId}/periodogram`);
-      if (!response.ok) {
-        console.error(`Error fetching periodogram: ${response.status}`);
-        setPeriodogramData([]);
-        return;
-      }
-      const data = await response.json();
-      
-      if (!data.periods || !data.powers) {
-        console.error('Invalid periodogram data format received');
-        setPeriodogramData([]);
-        return;
-      }
-      
-      const formattedData = data.periods.map((period: number, index: number) => ({
-        period,
-        power: data.powers[index],
-      }));
-      
-      setPeriodogramData(formattedData);
-    } catch (error) {
-      console.error('Error fetching periodogram:', error);
-      setPeriodogramData([]);
-    }
-  };
-
-  const fetchPhaseFoldedData = async (surveyName: string, campaignId: number, period: number) => {
-    try {
-      const response = await fetch(`${API_BASE}/star/${starNumber}/survey/${surveyName}/campaigns/${campaignId}/phase_folded?period=${period}`);
-      if (!response.ok) {
-        console.error(`Error fetching phase-folded data: ${response.status}`);
-        setPhaseFoldedData([]);
-        return;
-      }
-      const data = await response.json();
-      
-      if (!data.phase || !data.flux) {
-        console.error('Invalid phase-folded data format received');
-        setPhaseFoldedData([]);
-        return;
-      }
-      
-      const formattedData = data.phase.map((phase: number, index: number) => ({
-        phase,
-        flux: data.flux[index],
-      }));
-      
-      setPhaseFoldedData(formattedData);
-    } catch (error) {
-      console.error('Error fetching phase-folded data:', error);
-      setPhaseFoldedData([]);
-    }
+  const toggleSurvey = (surveyName: string) => {
+    setExpandedSurvey(expandedSurvey === surveyName ? null : surveyName);
   };
 
   const handlePeriodogramClick = (data: Plotly.PlotMouseEvent) => {
@@ -253,6 +120,17 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
       if (period && typeof period === 'number') {
         setSelectedPeriod(period);
         setPeriodInputValue(period.toFixed(4));
+        
+        // Cache the selected period
+        if (selectedCampaign) {
+          PeriodCache.setCachedPeriod(
+            starNumber,
+            selectedCampaign.survey,
+            selectedCampaign.campaign,
+            period
+          );
+          loadCachedPeriods(); // Refresh cached periods display
+        }
       }
     }
   };
@@ -265,11 +143,23 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
     const value = parseFloat(periodInputValue);
     if (value && value >= 0.1 && value <= 100) {
       setSelectedPeriod(value);
+      
+      // Cache the manually entered period
+      if (selectedCampaign) {
+        PeriodCache.setCachedPeriod(
+          starNumber,
+          selectedCampaign.survey,
+          selectedCampaign.campaign,
+          value
+        );
+        loadCachedPeriods(); // Refresh cached periods display
+      }
     }
   };
 
-  const toggleSurvey = (surveyName: string) => {
-    setExpandedSurvey(expandedSurvey === surveyName ? null : surveyName);
+  const handleLoadCachedPeriod = (period: number) => {
+    setSelectedPeriod(period);
+    setPeriodInputValue(period.toFixed(4));
   };
 
   const selectCampaign = (surveyName: string, campaignId: number) => {
@@ -344,6 +234,38 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
                 )}
               </div>
             ))
+          )}
+          
+          {/* Cached Periods Section */}
+          {cachedPeriods.length > 0 && (
+            <div className={styles.cachedPeriodsSection}>
+              <h3>Cached Periods</h3>
+              <p className={styles.cachedDescription}>
+                Previously selected periods for this star
+              </p>
+              {cachedPeriods.map((cached, index) => (
+                <button
+                  key={index}
+                  className={`${styles.cachedPeriodItem} ${
+                    selectedCampaign?.survey === cached.survey && 
+                    selectedCampaign?.campaign === cached.campaignId &&
+                    selectedPeriod === cached.period ? 
+                    styles.active : ''
+                  }`}
+                  onClick={() => handleLoadCachedPeriod(cached.period)}
+                  title={`Cached ${new Date(cached.timestamp).toLocaleString()}`}
+                >
+                  <div className={styles.cachedPeriodDetails}>
+                    <span className={styles.cachedPeriodValue}>
+                      {cached.period.toFixed(4)} days
+                    </span>
+                    <span className={styles.cachedPeriodSource}>
+                      {cached.survey.toUpperCase()} Campaign {cached.campaignId}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
           )}
         </div>
 
