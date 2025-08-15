@@ -1,0 +1,230 @@
+/* StarList component styles */
+.starList {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem;
+  min-height: 100vh;
+  background: #f8fafc;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 3rem;
+  padding-bottom: 2rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.header h1 {
+  margin: 0 0 0.5rem 0;
+  color: #1e293b;
+  font-size: 2.5rem;
+  font-weight: 700;
+}
+
+.header p {
+  margin: 0;
+  color: #64748b;
+  font-size: 1.125rem;
+}
+
+.content {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.intro {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.intro h2 {
+  margin: 0 0 1rem 0;
+  color: #1e293b;
+  font-size: 1.875rem;
+  font-weight: 600;
+}
+
+.intro p {
+  margin: 0;
+  color: #64748b;
+  font-size: 1rem;
+}
+
+.starList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 2rem;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.starItem {
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1rem 1.5rem;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-decoration: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  text-align: left;
+}
+
+.starItem:hover {
+  border-color: #3b82f6;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+}
+
+.starItem:active {
+  transform: translateY(0);
+}
+
+.starInfo {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex: 1;
+}
+
+.starNumber {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #3b82f6;
+  line-height: 1;
+  min-width: 2rem;
+  text-align: center;
+}
+
+.starDetails {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.starName {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1e293b;
+  line-height: 1.2;
+}
+
+.primaryPeriod {
+  font-size: 0.875rem;
+  color: #059669;
+  font-weight: 500;
+}
+
+.cachedCount {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 400;
+}
+
+.arrow {
+  font-size: 1.25rem;
+  color: #64748b;
+  transition: all 0.3s;
+}
+
+.starItem:hover .arrow {
+  color: #3b82f6;
+  transform: translateX(2px);
+}
+
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  font-size: 1.125rem;
+  color: #3b82f6;
+  font-weight: 600;
+}
+
+.error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 300px;
+  gap: 1rem;
+}
+
+.error p {
+  color: #dc2626;
+  font-size: 1.125rem;
+  margin: 0;
+}
+
+.retryButton {
+  padding: 0.75rem 1.5rem;
+  border: 2px solid #3b82f6;
+  border-radius: 6px;
+  background: white;
+  color: #3b82f6;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.retryButton:hover {
+  background: #3b82f6;
+  color: white;
+  transform: translateY(-1px);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .starList {
+    padding: 1rem;
+  }
+  
+  .header h1 {
+    font-size: 2rem;
+  }
+  
+  .starItem {
+    padding: 0.75rem 1rem;
+  }
+  
+  .starNumber {
+    font-size: 1.25rem;
+  }
+  
+  .starName {
+    font-size: 0.875rem;
+  }
+  
+  .primaryPeriod {
+    font-size: 0.75rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .starInfo {
+    gap: 0.75rem;
+  }
+  
+  .starNumber {
+    font-size: 1.125rem;
+    min-width: 1.5rem;
+  }
+  
+  .starName {
+    font-size: 0.8rem;
+  }
+  
+  .primaryPeriod {
+    font-size: 0.7rem;
+  }
+  
+  .cachedCount {
+    font-size: 0.65rem;
+  }
+}
