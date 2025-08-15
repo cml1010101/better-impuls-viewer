@@ -313,14 +313,32 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
               sedData.available ? (
                 <div className={styles.sedAvailable}>
                   <p className={styles.sedMessage}>{sedData.message}</p>
-                  <a
-                    href={sedData.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={styles.sedLink}
-                  >
-                    View SED Data →
-                  </a>
+                  <div className={styles.sedImageContainer}>
+                    <img
+                      src={sedData.url}
+                      alt={`SED data for Star ${starNumber}`}
+                      className={styles.sedImage}
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        const fallbackDiv = target.nextSibling as HTMLDivElement;
+                        if (fallbackDiv) {
+                          fallbackDiv.style.display = 'block';
+                        }
+                      }}
+                    />
+                    <div className={styles.sedImageError} style={{ display: 'none' }}>
+                      <p>Unable to load SED image</p>
+                      <a
+                        href={sedData.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={styles.sedFallbackLink}
+                      >
+                        View SED Data →
+                      </a>
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className={styles.sedUnavailable}>
