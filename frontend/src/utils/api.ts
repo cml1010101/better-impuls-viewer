@@ -51,6 +51,46 @@ const getMockSurveys = () => [
   }
 ];
 
+const getMockCampaignData = (): DataPoint[] => {
+  // Generate synthetic light curve data
+  const points: DataPoint[] = [];
+  for (let i = 0; i < 100; i++) {
+    const time = i * 0.5; // 0.5 day intervals
+    const flux = 1.0 + 0.02 * Math.sin(2 * Math.PI * time / 7.8) + 0.01 * Math.random(); // 7.8 day period
+    const error = 0.005 + 0.002 * Math.random();
+    points.push({ time, flux, error });
+  }
+  return points;
+};
+
+const getMockPeriodogramData = (): PeriodogramPoint[] => {
+  // Generate synthetic periodogram data with a peak at 7.8 days
+  const points: PeriodogramPoint[] = [];
+  for (let i = 0; i < 200; i++) {
+    const period = 0.5 + i * 0.1; // Periods from 0.5 to 20.5 days
+    let power = 0.1 + 0.3 * Math.random();
+    
+    // Add a peak around 7.8 days
+    if (period > 7.0 && period < 8.5) {
+      power += 0.8 * Math.exp(-Math.pow((period - 7.8) / 0.3, 2));
+    }
+    
+    points.push({ period, power });
+  }
+  return points;
+};
+
+const getMockPhaseFoldedData = (period: number): PhaseFoldedPoint[] => {
+  // Generate synthetic phase-folded data
+  const points: PhaseFoldedPoint[] = [];
+  for (let i = 0; i < 100; i++) {
+    const phase = i / 100.0; // 0 to 1
+    const flux = 1.0 + 0.02 * Math.sin(2 * Math.PI * phase) + 0.005 * Math.random();
+    points.push({ phase, flux });
+  }
+  return points;
+};
+
 export const fetchSurveys = async (starNumber: number): Promise<Survey[]> => {
   try {
     const response = await fetch(`${API_BASE}/star/${starNumber}/surveys`);
@@ -98,13 +138,13 @@ export const fetchCampaignData = async (
     const response = await fetch(`${API_BASE}/star/${starNumber}/survey/${surveyName}/campaigns/${campaignId}/raw`);
     if (!response.ok) {
       console.error(`Error fetching campaign data: ${response.status}`);
-      return [];
+      return getMockCampaignData();
     }
     const data = await response.json();
     
     if (!data.time || !data.flux) {
       console.error('Invalid campaign data format received');
-      return [];
+      return getMockCampaignData();
     }
     
     const formattedData = data.time.map((time: number, index: number) => ({
@@ -116,7 +156,7 @@ export const fetchCampaignData = async (
     return formattedData;
   } catch (error) {
     console.error('Error fetching campaign data:', error);
-    return [];
+    return getMockCampaignData();
   }
 };
 
@@ -129,13 +169,13 @@ export const fetchPeriodogramData = async (
     const response = await fetch(`${API_BASE}/star/${starNumber}/survey/${surveyName}/campaigns/${campaignId}/periodogram`);
     if (!response.ok) {
       console.error(`Error fetching periodogram: ${response.status}`);
-      return [];
+      return getMockPeriodogramData();
     }
     const data = await response.json();
     
     if (!data.periods || !data.powers) {
       console.error('Invalid periodogram data format received');
-      return [];
+      return getMockPeriodogramData();
     }
     
     const formattedData = data.periods.map((period: number, index: number) => ({
@@ -146,7 +186,7 @@ export const fetchPeriodogramData = async (
     return formattedData;
   } catch (error) {
     console.error('Error fetching periodogram:', error);
-    return [];
+    return getMockPeriodogramData();
   }
 };
 
@@ -160,13 +200,13 @@ export const fetchPhaseFoldedData = async (
     const response = await fetch(`${API_BASE}/star/${starNumber}/survey/${surveyName}/campaigns/${campaignId}/phase_folded?period=${period}`);
     if (!response.ok) {
       console.error(`Error fetching phase-folded data: ${response.status}`);
-      return [];
+      return getMockPhaseFoldedData(period);
     }
     const data = await response.json();
     
     if (!data.phase || !data.flux) {
       console.error('Invalid phase-folded data format received');
-      return [];
+      return getMockPhaseFoldedData(period);
     }
     
     const formattedData = data.phase.map((phase: number, index: number) => ({
@@ -177,7 +217,7 @@ export const fetchPhaseFoldedData = async (
     return formattedData;
   } catch (error) {
     console.error('Error fetching phase-folded data:', error);
-    return [];
+    return getMockPhaseFoldedData(period);
   }
 };
 

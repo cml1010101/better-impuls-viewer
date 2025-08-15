@@ -1,20 +1,57 @@
 import React, { useState, useEffect } from 'react';
+import { PeriodCache } from '../../utils/periodCache';
 import styles from './StarList.module.css';
 
 interface StarListProps {
   onSelectStar: (starNumber: number) => void;
 }
 
+interface StarWithPeriods {
+  starNumber: number;
+  primaryPeriod: {
+    period: number;
+    survey: string;
+    campaignId: number;
+  } | null;
+  totalCachedPeriods: number;
+}
+
 const API_BASE = 'http://localhost:8000/api';
 
 const StarList: React.FC<StarListProps> = ({ onSelectStar }) => {
   const [stars, setStars] = useState<number[]>([]);
+  const [starsWithPeriods, setStarsWithPeriods] = useState<StarWithPeriods[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchStars();
   }, []);
+
+  useEffect(() => {
+    if (stars.length > 0) {
+      loadStarsWithPeriods();
+    }
+  }, [stars]);
+
+  const loadStarsWithPeriods = () => {
+    const starsData: StarWithPeriods[] = stars.map(starNumber => {
+      const primaryPeriod = PeriodCache.getPrimaryPeriodForStar(starNumber);
+      const allPeriods = PeriodCache.getAllCachedPeriodsForStar(starNumber);
+      
+      return {
+        starNumber,
+        primaryPeriod: primaryPeriod ? {
+          period: primaryPeriod.period,
+          survey: primaryPeriod.survey,
+          campaignId: primaryPeriod.campaignId
+        } : null,
+        totalCachedPeriods: allPeriods.length
+      };
+    });
+    
+    setStarsWithPeriods(starsData);
+  };
 
   const fetchStars = async () => {
     try {
@@ -78,19 +115,34 @@ const StarList: React.FC<StarListProps> = ({ onSelectStar }) => {
           <p>Choose from {stars.length} available stars to explore their survey data, light curves, and periodograms.</p>
         </div>
         
-        <div className={styles.starGrid}>
-          {stars.map((starNumber) => (
+        <div className={styles.starList}>
+          {starsWithPeriods.map((starData) => (
             <button
-              key={starNumber}
-              className={styles.starCard}
-              onClick={() => onSelectStar(starNumber)}
+              key={starData.starNumber}
+              className={styles.starItem}
+              onClick={() => onSelectStar(starData.starNumber)}
             >
-              <div className={styles.starNumber}>
-                {starNumber}
+              <div className={styles.starInfo}>
+                <div className={styles.starNumber}>
+                  {starData.starNumber}
+                </div>
+                <div className={styles.starDetails}>
+                  <div className={styles.starName}>
+                    Star {starData.starNumber}
+                  </div>
+                  {starData.primaryPeriod && (
+                    <div className={styles.primaryPeriod}>
+                      Primary: {starData.primaryPeriod.period.toFixed(4)} days ({starData.primaryPeriod.survey.toLowerCase()})
+                    </div>
+                  )}
+                  {starData.totalCachedPeriods > 0 && (
+                    <div className={styles.cachedCount}>
+                      {starData.totalCachedPeriods} cached period{starData.totalCachedPeriods !== 1 ? 's' : ''}
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className={styles.starLabel}>
-                Star {starNumber}
-              </div>
+              <div className={styles.arrow}>→</div>
             </button>
           ))}
         </div>

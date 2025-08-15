@@ -39,6 +39,7 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
     campaignId: number;
     period: number;
     timestamp: number;
+    isPrimary: boolean;
   }>>([]);
 
   useEffect(() => {
@@ -130,6 +131,9 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
             period
           );
           loadCachedPeriods(); // Refresh cached periods display
+          
+          // Immediately trigger phase folding
+          loadPhaseFoldedData(selectedCampaign.survey, selectedCampaign.campaign, period);
         }
       }
     }
@@ -160,6 +164,11 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
   const handleLoadCachedPeriod = (period: number) => {
     setSelectedPeriod(period);
     setPeriodInputValue(period.toFixed(4));
+  };
+
+  const handleSetPrimaryPeriod = (survey: string, campaignId: number) => {
+    PeriodCache.setPrimaryPeriod(starNumber, survey, campaignId);
+    loadCachedPeriods(); // Refresh cached periods display
   };
 
   const selectCampaign = (surveyName: string, campaignId: number) => {
@@ -244,26 +253,38 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
                 Previously selected periods for this star
               </p>
               {cachedPeriods.map((cached, index) => (
-                <button
-                  key={index}
-                  className={`${styles.cachedPeriodItem} ${
-                    selectedCampaign?.survey === cached.survey && 
-                    selectedCampaign?.campaign === cached.campaignId &&
-                    selectedPeriod === cached.period ? 
-                    styles.active : ''
-                  }`}
-                  onClick={() => handleLoadCachedPeriod(cached.period)}
-                  title={`Cached ${new Date(cached.timestamp).toLocaleString()}`}
-                >
-                  <div className={styles.cachedPeriodDetails}>
-                    <span className={styles.cachedPeriodValue}>
-                      {cached.period.toFixed(4)} days
-                    </span>
-                    <span className={styles.cachedPeriodSource}>
-                      {cached.survey.toUpperCase()} Campaign {cached.campaignId}
-                    </span>
-                  </div>
-                </button>
+                <div key={index} className={styles.cachedPeriodItemContainer}>
+                  <button
+                    className={`${styles.cachedPeriodItem} ${
+                      selectedCampaign?.survey === cached.survey && 
+                      selectedCampaign?.campaign === cached.campaignId &&
+                      selectedPeriod === cached.period ? 
+                      styles.active : ''
+                    } ${cached.isPrimary ? styles.primary : ''}`}
+                    onClick={() => handleLoadCachedPeriod(cached.period)}
+                    title={`Cached ${new Date(cached.timestamp).toLocaleString()}`}
+                  >
+                    <div className={styles.cachedPeriodDetails}>
+                      <span className={styles.cachedPeriodValue}>
+                        {cached.period.toFixed(4)} days
+                        {cached.isPrimary && <span className={styles.primaryBadge}>PRIMARY</span>}
+                      </span>
+                      <span className={styles.cachedPeriodSource}>
+                        {cached.survey.toUpperCase()} Campaign {cached.campaignId}
+                      </span>
+                    </div>
+                  </button>
+                  <button
+                    className={`${styles.primaryButton} ${cached.isPrimary ? styles.primaryActive : ''}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSetPrimaryPeriod(cached.survey, cached.campaignId);
+                    }}
+                    title={cached.isPrimary ? "Remove as primary" : "Set as primary"}
+                  >
+                    ⭐
+                  </button>
+                </div>
               ))}
             </div>
           )}
