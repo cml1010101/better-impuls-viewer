@@ -25,6 +25,20 @@ interface PhaseFoldedPoint {
   flux: number;
 }
 
+export interface CandidatePeriod {
+  period: number;
+  score: number;
+  rank: number;
+}
+
+export interface AutoAnalysisResult {
+  predicted_period: number;
+  predicted_class: string;
+  class_confidence: number;
+  detected_period: number;
+  candidate_periods: CandidatePeriod[];
+}
+
 const API_BASE = 'http://localhost:8000/api';
 
 // Mock data for when API is not available
@@ -81,11 +95,13 @@ const getMockPeriodogramData = (): PeriodogramPoint[] => {
 };
 
 const getMockPhaseFoldedData = (period: number): PhaseFoldedPoint[] => {
-  // Generate synthetic phase-folded data
+  // Generate synthetic phase-folded data based on the period
   const points: PhaseFoldedPoint[] = [];
   for (let i = 0; i < 100; i++) {
     const phase = i / 100.0; // 0 to 1
-    const flux = 1.0 + 0.02 * Math.sin(2 * Math.PI * phase) + 0.005 * Math.random();
+    // Use period to create realistic amplitude and shape variations
+    const amplitude = Math.max(0.01, 0.05 / Math.sqrt(period));
+    const flux = 1.0 + amplitude * Math.sin(2 * Math.PI * phase) + 0.005 * Math.random();
     points.push({ phase, flux });
   }
   return points;
@@ -99,6 +115,12 @@ export const fetchSurveys = async (starNumber: number): Promise<Survey[]> => {
       return getMockSurveys();
     }
     const data = await response.json();
+    
+    // If no surveys available from API, use mock data for demonstration
+    if (!data.surveys || data.surveys.length === 0) {
+      console.log('No surveys from API, using mock data for demonstration');
+      return getMockSurveys();
+    }
     
     // Fetch campaigns for each survey
     const surveysWithCampaigns = await Promise.all(
@@ -218,6 +240,38 @@ export const fetchPhaseFoldedData = async (
   } catch (error) {
     console.error('Error fetching phase-folded data:', error);
     return getMockPhaseFoldedData(period);
+  }
+};
+
+const getMockAutoAnalysis = (): AutoAnalysisResult => {
+  // Generate mock auto analysis data for demonstration
+  return {
+    predicted_period: 7.8234,
+    predicted_class: "sinusoidal",
+    class_confidence: 0.876,
+    detected_period: 7.8156,
+    candidate_periods: [
+      { period: 7.8234, score: 0.876, rank: 1 },
+      { period: 3.9117, score: 0.654, rank: 2 },
+      { period: 15.6468, score: 0.432, rank: 3 },
+      { period: 2.6078, score: 0.321, rank: 4 },
+      { period: 11.7351, score: 0.198, rank: 5 }
+    ]
+  };
+};
+
+export const fetchAutoAnalysis = async (starNumber: number, surveyName: string, campaignId: number): Promise<AutoAnalysisResult | null> => {
+  try {
+    const response = await fetch(`${API_BASE}/star/${starNumber}/survey/${surveyName}/campaigns/${campaignId}/auto_analysis`);
+    if (!response.ok) {
+      console.error(`Error fetching auto analysis: ${response.status}, using mock data for demonstration`);
+      return getMockAutoAnalysis();
+    }
+    const data = await response.json();
+    return data as AutoAnalysisResult;
+  } catch (error) {
+    console.error('Error fetching auto analysis:', error, ', using mock data for demonstration');
+    return getMockAutoAnalysis();
   }
 };
 
