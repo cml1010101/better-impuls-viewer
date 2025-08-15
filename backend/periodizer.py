@@ -2,8 +2,10 @@ import torch
 import torch.nn as nn
 
 class StarClassifier(nn.Module):
-    def __init__(self, num_classes):
+    def __init__(self, num_classes, input_length=512):
         super(StarClassifier, self).__init__()
+        
+        self.input_length = input_length
         
         # Shared Feature Extraction Backbone
         self.features = nn.Sequential(
@@ -16,16 +18,21 @@ class StarClassifier(nn.Module):
             nn.Flatten()
         )
         
+        # Calculate the number of features after convolution layers
+        # After two MaxPool1d with kernel_size=2: input_length // 4
+        # After final conv layer: 128 channels
+        conv_output_size = (input_length // 4) * 128
+        
         # Period Prediction Head (Regression)
         self.period_head = nn.Sequential(
-            nn.Linear(in_features=..., out_features=256), # in_features needs to be calculated
+            nn.Linear(in_features=conv_output_size, out_features=256),
             nn.ReLU(),
             nn.Linear(in_features=256, out_features=1)
         )
         
         # Star Type Classification Head (Classification)
         self.type_head = nn.Sequential(
-            nn.Linear(in_features=..., out_features=256), # in_features needs to be calculated
+            nn.Linear(in_features=conv_output_size, out_features=256),
             nn.ReLU(),
             nn.Linear(in_features=256, out_features=num_classes)
         )

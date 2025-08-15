@@ -32,4 +32,8 @@ out/
 .DS_Store
 Thumbs.db
 
+# Trained models
+*.pth
+trained_cnn_model.pth
+
 .env
