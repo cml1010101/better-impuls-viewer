@@ -169,7 +169,8 @@ async def get_star_survey_campaign_periodogram(star_number: int, survey_name: st
         if campaign_id < 0 or campaign_id >= len(campaigns):
             raise HTTPException(status_code=404, detail="Campaign not found")
         campaign_data = campaigns[campaign_id][1]
-        periods, powers = calculate_lomb_scargle(campaign_data)
+        frequencies, powers = calculate_lomb_scargle(campaign_data)
+        periods = 1 / frequencies
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
     
@@ -194,7 +195,7 @@ async def get_star_survey_campaign_phase_folded(star_number: int, survey_name: s
         # Phase folding logic
         time = campaign_data[:, 0]
         flux = campaign_data[:, 1]
-        phase = (time / period) % 1.0
+        phase = (time % period) / period  # Normalize phase to [0, 1)
         
         return PhaseFoldedData(
             phase=phase.tolist(),
