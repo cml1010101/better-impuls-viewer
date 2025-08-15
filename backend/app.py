@@ -62,7 +62,7 @@ async def get_star_sed(star_number: int) -> SEDData:
         )
     
     # Build SED URL
-    sed_url = f"https://{config.Config.SED_API_URL}/star/{star_number}"
+    sed_url = f"http://{config.Config.SED_USERNAME}:{config.Config.SED_PASSWORD}@{config.Config.SED_API_URL}/{star_number:03d}_SED.png"
     
     return SEDData(
         url=sed_url,
