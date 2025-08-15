@@ -227,7 +227,7 @@ def load_model():
     
     try:
         # Load model state
-        checkpoint = torch.load(model_path, map_location='cpu')
+        checkpoint = torch.load(model_path, map_location='cpu', weights_only=False)
         _model_config = checkpoint['config']
         
         # Create model and load state
@@ -244,10 +244,6 @@ def load_model():
 
 def create_multi_branch_data(campaign_data: np.ndarray) -> dict:
     """Create multi-branch input data from campaign light curve."""
-    from scipy.interpolate import interp1d
-    
-    time = campaign_data[:, 0]
-    flux = campaign_data[:, 1]
     
     # Remove outliers and normalize
     cleaned_data = remove_y_outliers(campaign_data)
