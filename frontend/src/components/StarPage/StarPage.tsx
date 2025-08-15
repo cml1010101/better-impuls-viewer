@@ -8,10 +8,12 @@ import {
   fetchCampaignData,
   fetchPeriodogramData,
   fetchPhaseFoldedData,
+  fetchSEDData,
   type Survey,
   type DataPoint,
   type PeriodogramPoint,
-  type PhaseFoldedPoint
+  type PhaseFoldedPoint,
+  type SEDData
 } from '../../utils/api';
 import { PeriodCache } from '../../utils/periodCache';
 import styles from './StarPage.module.css';
@@ -41,10 +43,13 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
     timestamp: number;
     isPrimary: boolean;
   }>>([]);
+  const [sedData, setSedData] = useState<SEDData | null>(null);
+  const [sedLoading, setSedLoading] = useState(false);
 
   useEffect(() => {
     loadSurveys();
     loadCachedPeriods();
+    loadSEDData();
   }, [starNumber]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadSurveys = useCallback(async () => {
@@ -60,6 +65,16 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
   const loadCachedPeriods = useCallback(() => {
     const cached = PeriodCache.getAllCachedPeriodsForStar(starNumber);
     setCachedPeriods(cached);
+  }, [starNumber]);
+
+  const loadSEDData = useCallback(async () => {
+    try {
+      setSedLoading(true);
+      const data = await fetchSEDData(starNumber);
+      setSedData(data);
+    } finally {
+      setSedLoading(false);
+    }
   }, [starNumber]);
 
   const loadCampaignData = useCallback(async (surveyName: string, campaignId: number) => {
@@ -288,6 +303,54 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
               ))}
             </div>
           )}
+          
+          {/* SED Viewer Section */}
+          <div className={styles.sedSection}>
+            <h3>SED Viewer</h3>
+            {sedLoading ? (
+              <div className={styles.sedLoading}>Loading SED data...</div>
+            ) : sedData ? (
+              sedData.available ? (
+                <div className={styles.sedAvailable}>
+                  <p className={styles.sedMessage}>{sedData.message}</p>
+                  <div className={styles.sedImageContainer}>
+                    <img
+                      src={sedData.url}
+                      alt={`SED data for Star ${starNumber}`}
+                      className={styles.sedImage}
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.style.display = 'none';
+                        const fallbackDiv = target.nextSibling as HTMLDivElement;
+                        if (fallbackDiv) {
+                          fallbackDiv.style.display = 'block';
+                        }
+                      }}
+                    />
+                    <div className={styles.sedImageError} style={{ display: 'none' }}>
+                      <p>Unable to load SED image</p>
+                      <a
+                        href={sedData.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={styles.sedFallbackLink}
+                      >
+                        View SED Data →
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className={styles.sedUnavailable}>
+                  <p className={styles.sedMessage}>{sedData.message || "SED data not available"}</p>
+                </div>
+              )
+            ) : (
+              <div className={styles.sedError}>
+                <p>Failed to load SED information</p>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className={styles.dataPanel}>

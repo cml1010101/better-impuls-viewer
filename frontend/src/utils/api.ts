@@ -25,6 +25,12 @@ interface PhaseFoldedPoint {
   flux: number;
 }
 
+interface SEDData {
+  url: string;
+  available: boolean;
+  message?: string;
+}
+
 const API_BASE = 'http://localhost:8000/api';
 
 // Mock data for when API is not available
@@ -81,11 +87,13 @@ const getMockPeriodogramData = (): PeriodogramPoint[] => {
 };
 
 const getMockPhaseFoldedData = (period: number): PhaseFoldedPoint[] => {
-  // Generate synthetic phase-folded data
+  // Generate synthetic phase-folded data based on period
   const points: PhaseFoldedPoint[] = [];
   for (let i = 0; i < 100; i++) {
     const phase = i / 100.0; // 0 to 1
-    const flux = 1.0 + 0.02 * Math.sin(2 * Math.PI * phase) + 0.005 * Math.random();
+    // Use period to modulate the signal slightly for realism
+    const periodFactor = Math.log10(period) / 2.0;
+    const flux = 1.0 + 0.02 * Math.sin(2 * Math.PI * phase * periodFactor) + 0.005 * Math.random();
     points.push({ phase, flux });
   }
   return points;
@@ -221,5 +229,34 @@ export const fetchPhaseFoldedData = async (
   }
 };
 
+export const fetchSEDData = async (starNumber: number): Promise<SEDData> => {
+  try {
+    const response = await fetch(`${API_BASE}/star/${starNumber}/sed`);
+    if (!response.ok) {
+      console.error(`Error fetching SED data: ${response.status}`);
+      return {
+        url: "",
+        available: false,
+        message: "Failed to fetch SED data"
+      };
+    }
+    const data = await response.json();
+    
+    // If the URL is relative, convert it to absolute URL using API_BASE
+    if (data.url && data.url.startsWith('/api/')) {
+      data.url = `${API_BASE.replace('/api', '')}${data.url}`;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error('Error fetching SED data:', error);
+    return {
+      url: "",
+      available: false,
+      message: "Error fetching SED data"
+    };
+  }
+};
+
 // Export types for use in components
-export type { Survey, Campaign, DataPoint, PeriodogramPoint, PhaseFoldedPoint };
+export type { Survey, Campaign, DataPoint, PeriodogramPoint, PhaseFoldedPoint, SEDData };
