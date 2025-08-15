@@ -404,12 +404,16 @@ def main():
     random.seed(42)
     
     # Configuration
-    # Note: sample_data is relative to project root, we're in backend/ directory
-    sample_data_dir = "../sample_data"
+    # Determine correct sample data path based on current working directory
+    if os.path.basename(os.getcwd()) == "backend":
+        sample_data_dir = "../sample_data"
+    else:
+        sample_data_dir = "sample_data"
+    
     batch_size = 8  # Smaller batch size for multi-branch model
     num_epochs = 30
     learning_rate = 0.0001  # Lower learning rate for complex model
-    save_path = "../trained_multi_branch_model.pth"  # Save to project root
+    save_path = Config.MODEL_PATH  # Use configured model path
     
     # Model configuration
     n_types = 13  # Reduced from 14 to 13 as per new model
