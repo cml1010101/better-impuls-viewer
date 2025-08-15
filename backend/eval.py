@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test script for train.py functionality.
+Evaluation script for train.py functionality.
 Validates that the training script works correctly.
 """
 
@@ -9,8 +9,7 @@ import sys
 import tempfile
 import shutil
 
-# Add backend to path
-sys.path.append('backend')
+# Import backend modules (now we're in backend directory)
 from periodizer import StarClassifier
 import torch
 
@@ -81,7 +80,8 @@ def test_training_data_format():
     """Test that sample data can be loaded."""
     print("Testing sample data loading...")
     
-    sample_data_dir = "sample_data"
+    # Note: sample_data is relative to project root, we're in backend/ directory  
+    sample_data_dir = "../sample_data"
     if not os.path.exists(sample_data_dir):
         print("⚠ Sample data directory not found, skipping data test")
         return
@@ -109,7 +109,7 @@ def test_training_data_format():
 
 def main():
     """Run all tests."""
-    print("Running train.py validation tests...")
+    print("Running train.py evaluation tests...")
     print("=" * 40)
     
     try:

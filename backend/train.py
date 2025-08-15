@@ -11,10 +11,10 @@ This script:
 5. Saves the trained model as 'trained_cnn_model.pth'
 
 Usage:
-    python train.py
+    python backend/train.py
 
 Requirements:
-    - sample_data/ directory with .tbl files
+    - sample_data/ directory with .tbl files (relative to project root)
     - All dependencies from backend/requirements.txt
 
 The script will create training data from all .tbl files in sample_data/,
@@ -45,8 +45,7 @@ import random
 from scipy.interpolate import interp1d
 import glob
 
-# Add backend to path
-sys.path.append('backend')
+# Import backend modules (now we're in backend directory)
 from periodizer import StarClassifier
 from config import Config
 from data_processing import calculate_lomb_scargle, remove_y_outliers
@@ -318,16 +317,18 @@ def main():
     random.seed(42)
     
     # Configuration
-    sample_data_dir = "sample_data"
+    # Note: sample_data is relative to project root, we're in backend/ directory
+    sample_data_dir = "../sample_data"
     input_length = 512
     batch_size = 16
     num_epochs = 50
     learning_rate = 0.001
-    save_path = "trained_cnn_model.pth"
+    save_path = "../trained_cnn_model.pth"  # Save to project root
     
     # Check if sample data directory exists
     if not os.path.exists(sample_data_dir):
         print(f"Error: Sample data directory '{sample_data_dir}' not found!")
+        print("Please run this script from the project root or ensure sample_data/ exists.")
         return
     
     # Create training data
