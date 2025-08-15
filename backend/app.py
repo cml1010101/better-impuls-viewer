@@ -27,7 +27,7 @@ star_list = StarList()
 pinput_star_db = PinputStarDatabase(config.Config.DATA_DIR)
 mast_star_db = MASTStarDatabase()
 
-from models import StarInfo, StarSurveys, Coordinates
+from models import StarInfo, StarSurveys, Coordinates, SEDData
 
 @app.get("/api/stars")
 async def list_stars() -> list[int]:
@@ -44,6 +44,30 @@ async def get_star(star_number: int) -> StarInfo:
         star_number=star_metadata.star_number,
         name=star_metadata.name,
         coordinates=Coordinates(ra=star_metadata.coordinates.ra.deg, dec=star_metadata.coordinates.dec.deg)
+    )
+
+@app.get("/api/star/{star_number}/sed")
+async def get_star_sed(star_number: int) -> SEDData:
+    """Get SED information for a specific star."""
+    star_metadata = star_list.get_star(star_number)
+    if star_metadata is None:
+        raise HTTPException(status_code=404, detail="Star not found")
+    
+    # Check if SED configuration is available
+    if not config.Config.SED_API_URL:
+        return SEDData(
+            url="",
+            available=False,
+            message="SED API URL not configured"
+        )
+    
+    # Build SED URL
+    sed_url = f"https://{config.Config.SED_API_URL}/star/{star_number}"
+    
+    return SEDData(
+        url=sed_url,
+        available=True,
+        message="SED data available"
     )
 
 @app.get("/api/star/{star_number}/surveys")

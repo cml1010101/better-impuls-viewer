@@ -403,3 +403,65 @@
     gap: 1rem;
   }
 }
+
+/* SED Viewer Styles */
+.sedSection {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  background: white;
+}
+
+.sedSection h3 {
+  margin: 0 0 1rem 0;
+  color: #1e293b;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.sedLoading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  color: #3b82f6;
+  font-weight: 500;
+}
+
+.sedAvailable {
+  text-align: center;
+}
+
+.sedUnavailable {
+  text-align: center;
+  color: #64748b;
+}
+
+.sedError {
+  text-align: center;
+  color: #dc2626;
+}
+
+.sedMessage {
+  margin: 0 0 1rem 0;
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.sedLink {
+  display: inline-block;
+  padding: 0.75rem 1.5rem;
+  background: #3b82f6;
+  color: white;
+  text-decoration: none;
+  border-radius: 6px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.sedLink:hover {
+  background: #2563eb;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+}

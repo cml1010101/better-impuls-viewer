@@ -53,3 +53,9 @@ class PeriodizationResult(BaseModel):
     class_confidence: float
     detected_period: float
     candidate_periods: List[CandidatePeriod]
+
+
+class SEDData(BaseModel):
+    url: str
+    available: bool
+    message: Optional[str] = None
