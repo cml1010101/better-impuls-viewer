@@ -8,6 +8,7 @@ import {
   fetchCampaignData,
   fetchPeriodogramData,
   fetchPhaseFoldedData,
+  fetchCategories,
   type Survey,
   type DataPoint,
   type PeriodogramPoint,
@@ -37,14 +38,18 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
   const [cachedPeriods, setCachedPeriods] = useState<Array<{
     survey: string;
     campaignId: number;
-    period: number;
+    period: number | null;
     timestamp: number;
     isPrimary: boolean;
+    category?: string;
   }>>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [showCsvPanel, setShowCsvPanel] = useState(false);
 
   useEffect(() => {
     loadSurveys();
     loadCachedPeriods();
+    loadCategories();
   }, [starNumber]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadSurveys = useCallback(async () => {
@@ -61,6 +66,15 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
     const cached = PeriodCache.getAllCachedPeriodsForStar(starNumber);
     setCachedPeriods(cached);
   }, [starNumber]);
+
+  const loadCategories = useCallback(async () => {
+    try {
+      const fetchedCategories = await fetchCategories();
+      setCategories(fetchedCategories);
+    } catch (error) {
+      console.error('Error loading categories:', error);
+    }
+  }, []);
 
   const loadCampaignData = useCallback(async (surveyName: string, campaignId: number) => {
     try {
@@ -161,14 +175,54 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
     }
   };
 
-  const handleLoadCachedPeriod = (period: number) => {
-    setSelectedPeriod(period);
-    setPeriodInputValue(period.toFixed(4));
+  const handleLoadCachedPeriod = (period: number | null) => {
+    if (period === null) {
+      setSelectedPeriod(null);
+      setPeriodInputValue('');
+    } else {
+      setSelectedPeriod(period);
+      setPeriodInputValue(period.toFixed(4));
+    }
   };
 
   const handleSetPrimaryPeriod = (survey: string, campaignId: number) => {
     PeriodCache.setPrimaryPeriod(starNumber, survey, campaignId);
     loadCachedPeriods(); // Refresh cached periods display
+  };
+
+  const handleSetPeriodCategory = (survey: string, campaignId: number, category: string) => {
+    PeriodCache.setCachedPeriodCategory(starNumber, survey, campaignId, category);
+    loadCachedPeriods(); // Refresh cached periods display
+  };
+
+  const handleRemoveCachedPeriod = (survey: string, campaignId: number) => {
+    PeriodCache.removeCachedPeriod(starNumber, survey, campaignId);
+    loadCachedPeriods(); // Refresh cached periods display
+  };
+
+  const handleExportCSV = () => {
+    PeriodCache.downloadCSV(`star_periods_${starNumber}.csv`);
+  };
+
+  const handleImportCSV = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const csvContent = e.target?.result as string;
+        const result = PeriodCache.importFromCSV(csvContent, false);
+        
+        if (result.success) {
+          alert(`Successfully imported ${result.imported} period(s).${result.errors.length > 0 ? ` Warnings: ${result.errors.join(', ')}` : ''}`);
+          loadCachedPeriods(); // Refresh display
+        } else {
+          alert(`Import failed: ${result.errors.join(', ')}`);
+        }
+      };
+      reader.readAsText(file);
+    }
+    // Reset the input value so the same file can be selected again
+    event.target.value = '';
   };
 
   const selectCampaign = (surveyName: string, campaignId: number) => {
@@ -266,28 +320,135 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
                   >
                     <div className={styles.cachedPeriodDetails}>
                       <span className={styles.cachedPeriodValue}>
-                        {cached.period.toFixed(4)} days
+                        {cached.period !== null ? `${cached.period.toFixed(4)} days` : 'No period data'}
                         {cached.isPrimary && <span className={styles.primaryBadge}>PRIMARY</span>}
                       </span>
                       <span className={styles.cachedPeriodSource}>
                         {cached.survey.toUpperCase()} Campaign {cached.campaignId}
+                        {cached.category && <span className={styles.categoryBadge}>{cached.category}</span>}
                       </span>
                     </div>
                   </button>
-                  <button
-                    className={`${styles.primaryButton} ${cached.isPrimary ? styles.primaryActive : ''}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSetPrimaryPeriod(cached.survey, cached.campaignId);
-                    }}
-                    title={cached.isPrimary ? "Remove as primary" : "Set as primary"}
-                  >
-                    ⭐
-                  </button>
+                  <div className={styles.cachedPeriodActions}>
+                    <button
+                      className={`${styles.primaryButton} ${cached.isPrimary ? styles.primaryActive : ''}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSetPrimaryPeriod(cached.survey, cached.campaignId);
+                      }}
+                      title={cached.isPrimary ? "Remove as primary" : "Set as primary"}
+                    >
+                      ⭐
+                    </button>
+                    <select
+                      className={styles.categorySelect}
+                      value={cached.category || ''}
+                      onChange={(e) => handleSetPeriodCategory(cached.survey, cached.campaignId, e.target.value)}
+                      title="Set category"
+                    >
+                      <option value="">No category</option>
+                      {categories.map(category => (
+                        <option key={category} value={category}>{category}</option>
+                      ))}
+                    </select>
+                    <button
+                      className={styles.removeButton}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm('Remove this cached period?')) {
+                          handleRemoveCachedPeriod(cached.survey, cached.campaignId);
+                        }
+                      }}
+                      title="Remove from cache"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           )}
+          
+          {/* CSV Data Management Panel */}
+          <div className={styles.csvManagementSection}>
+            <h3>
+              Data Management
+              <button 
+                className={styles.toggleButton}
+                onClick={() => setShowCsvPanel(!showCsvPanel)}
+                title={showCsvPanel ? "Hide CSV options" : "Show CSV options"}
+              >
+                {showCsvPanel ? '−' : '+'}
+              </button>
+            </h3>
+            
+            {showCsvPanel && (
+              <div className={styles.csvPanel}>
+                <p className={styles.csvDescription}>
+                  Export cached periods to CSV or import period data from CSV file
+                </p>
+                
+                <div className={styles.csvActions}>
+                  <button
+                    className={styles.csvButton}
+                    onClick={handleExportCSV}
+                    disabled={cachedPeriods.length === 0}
+                    title="Download cached periods as CSV file"
+                  >
+                    📥 Export to CSV
+                  </button>
+                  
+                  <label className={styles.csvButton}>
+                    📤 Import from CSV
+                    <input
+                      type="file"
+                      accept=".csv"
+                      onChange={handleImportCSV}
+                      style={{ display: 'none' }}
+                    />
+                  </label>
+                  
+                  <button
+                    className={styles.csvButton}
+                    onClick={() => {
+                      if (confirm('Clear all cached periods for this star?')) {
+                        PeriodCache.clearCacheForStar(starNumber);
+                        loadCachedPeriods();
+                      }
+                    }}
+                    disabled={cachedPeriods.length === 0}
+                    title="Remove all cached periods for this star"
+                  >
+                    🗑️ Clear Cache
+                  </button>
+                </div>
+                
+                <div className={styles.csvInfo}>
+                  <details className={styles.csvHelp}>
+                    <summary>CSV Format Information</summary>
+                    <div className={styles.csvHelpContent}>
+                      <p><strong>Required columns:</strong></p>
+                      <ul>
+                        <li><code>star_number</code> - Integer star identifier</li>
+                        <li><code>survey</code> - Survey name (hubble, kepler, tess)</li>
+                        <li><code>campaign_id</code> - Integer campaign identifier</li>
+                        <li><code>period</code> - Period in days (-9 for no period)</li>
+                        <li><code>category</code> - Light curve category</li>
+                        <li><code>is_primary</code> - true/false for primary period</li>
+                        <li><code>timestamp</code> - Unix timestamp</li>
+                      </ul>
+                      <p><strong>Available categories:</strong></p>
+                      <div className={styles.categoriesList}>
+                        {categories.map(category => (
+                          <span key={category} className={styles.categoryTag}>{category}</span>
+                        ))}
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className={styles.dataPanel}>
