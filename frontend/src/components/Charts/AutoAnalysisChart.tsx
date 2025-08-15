@@ -4,9 +4,10 @@ import styles from './AutoAnalysisChart.module.css';
 
 interface AutoAnalysisChartProps {
   autoAnalysis: AutoAnalysisResult;
+  onPeriodClick?: (period: number) => void;
 }
 
-const AutoAnalysisChart: React.FC<AutoAnalysisChartProps> = ({ autoAnalysis }) => {
+const AutoAnalysisChart: React.FC<AutoAnalysisChartProps> = ({ autoAnalysis, onPeriodClick }) => {
   // Format confidence as percentage
   const confidencePercent = (autoAnalysis.class_confidence * 100).toFixed(1);
   
@@ -21,7 +22,13 @@ const AutoAnalysisChart: React.FC<AutoAnalysisChartProps> = ({ autoAnalysis }) =
         <div className={styles.predictionCard}>
           <h4>ML Prediction</h4>
           <div className={styles.predictionValue}>
-            <span className={styles.periodValue}>{autoAnalysis.predicted_period.toFixed(4)} days</span>
+            <button 
+              className={styles.periodButton}
+              onClick={() => onPeriodClick?.(autoAnalysis.predicted_period)}
+              title="Click to use this period for phase folding"
+            >
+              {autoAnalysis.predicted_period.toFixed(4)} days
+            </button>
             <span className={styles.classValue}>{autoAnalysis.predicted_class}</span>
             <span className={styles.confidenceValue}>Confidence: {confidencePercent}%</span>
           </div>
@@ -30,7 +37,13 @@ const AutoAnalysisChart: React.FC<AutoAnalysisChartProps> = ({ autoAnalysis }) =
         <div className={styles.detectedCard}>
           <h4>Detected Period</h4>
           <div className={styles.detectedValue}>
-            {autoAnalysis.detected_period.toFixed(4)} days
+            <button 
+              className={styles.periodButton}
+              onClick={() => onPeriodClick?.(autoAnalysis.detected_period)}
+              title="Click to use this period for phase folding"
+            >
+              {autoAnalysis.detected_period.toFixed(4)} days
+            </button>
           </div>
         </div>
       </div>
@@ -40,11 +53,16 @@ const AutoAnalysisChart: React.FC<AutoAnalysisChartProps> = ({ autoAnalysis }) =
           <h4>Candidate Periods</h4>
           <div className={styles.candidatesGrid}>
             {sortedCandidates.slice(0, 5).map((candidate, index) => (
-              <div key={index} className={styles.candidateCard}>
+              <button 
+                key={index} 
+                className={styles.candidateCard}
+                onClick={() => onPeriodClick?.(candidate.period)}
+                title="Click to use this period for phase folding"
+              >
                 <div className={styles.candidateRank}>#{candidate.rank}</div>
                 <div className={styles.candidatePeriod}>{candidate.period.toFixed(4)}d</div>
                 <div className={styles.candidateScore}>Score: {candidate.score.toFixed(3)}</div>
-              </div>
+              </button>
             ))}
           </div>
         </div>

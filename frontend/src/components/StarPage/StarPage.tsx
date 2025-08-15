@@ -182,6 +182,22 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
     setPeriodInputValue(period.toFixed(4));
   };
 
+  const handleAutoAnalysisPeriodClick = (period: number) => {
+    setSelectedPeriod(period);
+    setPeriodInputValue(period.toFixed(4));
+    
+    // Cache the period from auto analysis
+    if (selectedCampaign) {
+      PeriodCache.setCachedPeriod(
+        starNumber,
+        selectedCampaign.survey,
+        selectedCampaign.campaign,
+        period
+      );
+      loadCachedPeriods(); // Refresh cached periods display
+    }
+  };
+
   const handleSetPrimaryPeriod = (survey: string, campaignId: number) => {
     PeriodCache.setPrimaryPeriod(starNumber, survey, campaignId);
     loadCachedPeriods(); // Refresh cached periods display
@@ -354,7 +370,10 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
                     {autoAnalysisLoading ? (
                       <div className={styles.placeholder}>Loading auto analysis...</div>
                     ) : autoAnalysis ? (
-                      <AutoAnalysisChart autoAnalysis={autoAnalysis} />
+                      <AutoAnalysisChart 
+                        autoAnalysis={autoAnalysis} 
+                        onPeriodClick={handleAutoAnalysisPeriodClick}
+                      />
                     ) : (
                       <div className={styles.placeholder}>No auto analysis available</div>
                     )}

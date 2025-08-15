@@ -45,6 +45,35 @@
   gap: 0.25rem;
 }
 
+.periodButton {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+  border-radius: 4px;
+  padding: 0.25rem;
+}
+
+.periodButton:hover {
+  background: rgba(59, 130, 246, 0.1);
+  color: #2563eb;
+}
+
+.predictionValue .periodButton {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #3b82f6;
+}
+
+.detectedValue .periodButton {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #059669;
+}
+
 .periodValue {
   font-size: 1.5rem;
   font-weight: 700;
@@ -96,11 +125,15 @@
   padding: 0.75rem;
   text-align: center;
   transition: all 0.2s;
+  cursor: pointer;
+  font-family: inherit;
 }
 
 .candidateCard:hover {
   background: #f8fafc;
   border-color: #3b82f6;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .candidateRank {
