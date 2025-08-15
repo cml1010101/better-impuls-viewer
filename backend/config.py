@@ -37,7 +37,7 @@ class Config:
     MODEL_PATH = os.getenv('MODEL_PATH', 'model.pth')
     DEVICE = "cpu"  # Can be changed to "cuda" if GPU is available
 
-    DEFAULT_DATA_DIR = 'impuls-data'
+    DEFAULT_DATA_DIR = 'sample_data'
     DATA_DIR = os.getenv('DATA_DIR', DEFAULT_DATA_DIR)
 
     IMPULS_STARS_PATH = os.path.join(DATA_DIR, 'impuls_stars.csv')
