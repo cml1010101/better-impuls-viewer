@@ -303,6 +303,12 @@ class MultiTaskLoss(nn.Module):
             period=loss_period
         )
 
+# Function alias for backward compatibility
+def multitask_loss(output: ModelOutput, target_types: torch.Tensor, target_periods: torch.Tensor) -> LossOutput:
+    """Functional interface for MultiTaskLoss."""
+    loss_fn = MultiTaskLoss()
+    return loss_fn(output, target_types, target_periods)
+
 import numpy as np
 
 def interpolate(x: np.ndarray, y: np.ndarray) -> np.ndarray:
@@ -323,7 +329,7 @@ def normalize(x: np.ndarray) -> np.ndarray:
         std = 1e-8  # Avoid division by zero
     return (x - mean) / std
 
-from data_processing import calculate_lomb_scargle, generate_candidate_periods, fold_light_curve
+from data_processing import calculate_lomb_scargle, generate_candidate_periods, phase_fold_data
 
 def create_input_data(lc: np.ndarray) -> ModelInput:
     time = lc[:, 0]
