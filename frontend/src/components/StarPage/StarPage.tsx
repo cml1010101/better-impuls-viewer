@@ -8,10 +8,12 @@ import {
   fetchCampaignData,
   fetchPeriodogramData,
   fetchPhaseFoldedData,
+  fetchAutoAnalysis,
   type Survey,
   type DataPoint,
   type PeriodogramPoint,
-  type PhaseFoldedPoint
+  type PhaseFoldedPoint,
+  type AutoAnalysisResult
 } from '../../utils/api';
 import { PeriodCache } from '../../utils/periodCache';
 import styles from './StarPage.module.css';
@@ -41,6 +43,10 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
     timestamp: number;
     isPrimary: boolean;
   }>>([]);
+  
+  // Auto-normalize state
+  const [autoNormalize, setAutoNormalize] = useState<boolean>(false);
+  const [autoAnalysisResult, setAutoAnalysisResult] = useState<AutoAnalysisResult | null>(null);
 
   useEffect(() => {
     loadSurveys();
@@ -73,14 +79,19 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
   }, [starNumber]);
 
   const loadPeriodogramData = useCallback(async (surveyName: string, campaignId: number) => {
-    const data = await fetchPeriodogramData(starNumber, surveyName, campaignId);
+    const data = await fetchPeriodogramData(starNumber, surveyName, campaignId, autoNormalize);
     setPeriodogramData(data);
-  }, [starNumber]);
+  }, [starNumber, autoNormalize]);
 
   const loadPhaseFoldedData = useCallback(async (surveyName: string, campaignId: number, period: number) => {
-    const data = await fetchPhaseFoldedData(starNumber, surveyName, campaignId, period);
+    const data = await fetchPhaseFoldedData(starNumber, surveyName, campaignId, period, autoNormalize);
     setPhaseFoldedData(data);
-  }, [starNumber]);
+  }, [starNumber, autoNormalize]);
+
+  const loadAutoAnalysis = useCallback(async (surveyName: string, campaignId: number) => {
+    const result = await fetchAutoAnalysis(starNumber, surveyName, campaignId, autoNormalize);
+    setAutoAnalysisResult(result);
+  }, [starNumber, autoNormalize]);
 
   // Fetch campaign data when a campaign is selected
   useEffect(() => {
@@ -110,6 +121,16 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
       loadPhaseFoldedData(selectedCampaign.survey, selectedCampaign.campaign, selectedPeriod);
     }
   }, [selectedCampaign, selectedPeriod, starNumber]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reload data when auto-normalize setting changes
+  useEffect(() => {
+    if (selectedCampaign) {
+      loadPeriodogramData(selectedCampaign.survey, selectedCampaign.campaign);
+      if (selectedPeriod) {
+        loadPhaseFoldedData(selectedCampaign.survey, selectedCampaign.campaign, selectedPeriod);
+      }
+    }
+  }, [autoNormalize]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleSurvey = (surveyName: string) => {
     setExpandedSurvey(expandedSurvey === surveyName ? null : surveyName);
@@ -171,6 +192,16 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
     loadCachedPeriods(); // Refresh cached periods display
   };
 
+  const handleAutoNormalizeToggle = (enabled: boolean) => {
+    setAutoNormalize(enabled);
+  };
+
+  const handleRunAutoAnalysis = async () => {
+    if (selectedCampaign) {
+      await loadAutoAnalysis(selectedCampaign.survey, selectedCampaign.campaign);
+    }
+  };
+
   const selectCampaign = (surveyName: string, campaignId: number) => {
     setSelectedCampaign({ survey: surveyName, campaign: campaignId });
     // Reset chart data
@@ -192,6 +223,20 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
           ← Back to Star List
         </button>
         <h1>Star {starNumber}</h1>
+        <div className={styles.controls}>
+          <label className={styles.toggleLabel}>
+            <input
+              type="checkbox"
+              checked={autoNormalize}
+              onChange={(e) => handleAutoNormalizeToggle(e.target.checked)}
+              className={styles.toggleInput}
+            />
+            <span className={styles.toggleText}>Auto-Linearization</span>
+            <span className={styles.toggleDescription}>
+              Remove linear trends from data
+            </span>
+          </label>
+        </div>
       </div>
 
       <div className={styles.content}>
@@ -309,14 +354,32 @@ const StarPage: React.FC<StarPageProps> = ({ starNumber, onBackToStarList }) => 
                   </div>
                   <div className={styles.periodogramSection}>
                     {periodogramData.length > 0 ? (
-                      <PeriodogramChart
-                        periodogramData={periodogramData}
-                        selectedPeriod={selectedPeriod}
-                        periodInputValue={periodInputValue}
-                        onPeriodogramClick={handlePeriodogramClick}
-                        onPeriodInputChange={handlePeriodInputChange}
-                        onPeriodSubmit={handlePeriodSubmit}
-                      />
+                      <div>
+                        <div className={styles.periodogramControls}>
+                          <button 
+                            className={styles.autoAnalysisButton}
+                            onClick={handleRunAutoAnalysis}
+                            disabled={!selectedCampaign}
+                          >
+                            Run Auto Analysis
+                          </button>
+                          {autoAnalysisResult && (
+                            <div className={styles.autoAnalysisResult}>
+                              <span>Auto-detected period: <strong>{autoAnalysisResult.predicted_period.toFixed(4)} days</strong></span>
+                              <span>Confidence: {(autoAnalysisResult.confidence * 100).toFixed(1)}%</span>
+                              <span>Type: {autoAnalysisResult.variability_type}</span>
+                            </div>
+                          )}
+                        </div>
+                        <PeriodogramChart
+                          periodogramData={periodogramData}
+                          selectedPeriod={selectedPeriod}
+                          periodInputValue={periodInputValue}
+                          onPeriodogramClick={handlePeriodogramClick}
+                          onPeriodInputChange={handlePeriodInputChange}
+                          onPeriodSubmit={handlePeriodSubmit}
+                        />
+                      </div>
                     ) : (
                       <div className={styles.placeholder}>No periodogram data available</div>
                     )}
