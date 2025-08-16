@@ -80,7 +80,7 @@ const getMockPeriodogramData = (): PeriodogramPoint[] => {
   return points;
 };
 
-const getMockPhaseFoldedData = (period: number): PhaseFoldedPoint[] => {
+const getMockPhaseFoldedData = (_period: number): PhaseFoldedPoint[] => { // eslint-disable-line @typescript-eslint/no-unused-vars
   // Generate synthetic phase-folded data
   const points: PhaseFoldedPoint[] = [];
   for (let i = 0; i < 100; i++) {
@@ -218,6 +218,52 @@ export const fetchPhaseFoldedData = async (
   } catch (error) {
     console.error('Error fetching phase-folded data:', error);
     return getMockPhaseFoldedData(period);
+  }
+};
+
+export const fetchCategories = async (): Promise<string[]> => {
+  try {
+    const response = await fetch(`${API_BASE}/categories`);
+    if (!response.ok) {
+      console.error(`Error fetching categories: ${response.status}`);
+      // Return default categories if API is not available
+      return [
+        "sinusoidal",
+        "double dip",
+        "shape changer",
+        "beater",
+        "beater/complex peak",
+        "resolved close peaks",
+        "resolved distant peaks",
+        "eclipsing binaries",
+        "pulsator",
+        "burster",
+        "dipper",
+        "co-rotating optically thin material",
+        "long term trend",
+        "stochastic"
+      ];
+    }
+    return response.json();
+  } catch (error) {
+    console.error('Error fetching categories:', error);
+    // Return default categories if API is not available
+    return [
+      "sinusoidal",
+      "double dip",
+      "shape changer",
+      "beater",
+      "beater/complex peak",
+      "resolved close peaks",
+      "resolved distant peaks",
+      "eclipsing binaries",
+      "pulsator",
+      "burster",
+      "dipper",
+      "co-rotating optically thin material",
+      "long term trend",
+      "stochastic"
+    ];
   }
 };
 

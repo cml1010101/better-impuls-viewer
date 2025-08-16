@@ -9,7 +9,7 @@ interface StarListProps {
 interface StarWithPeriods {
   starNumber: number;
   primaryPeriod: {
-    period: number;
+    period: number | null;
     survey: string;
     campaignId: number;
   } | null;
@@ -132,7 +132,7 @@ const StarList: React.FC<StarListProps> = ({ onSelectStar }) => {
                   </div>
                   {starData.primaryPeriod && (
                     <div className={styles.primaryPeriod}>
-                      Primary: {starData.primaryPeriod.period.toFixed(4)} days ({starData.primaryPeriod.survey.toLowerCase()})
+                      Primary: {starData.primaryPeriod.period !== null ? `${starData.primaryPeriod.period.toFixed(4)} days` : 'No period data'} ({starData.primaryPeriod.survey.toLowerCase()})
                     </div>
                   )}
                   {starData.totalCachedPeriods > 0 && (
