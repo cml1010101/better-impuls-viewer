@@ -397,13 +397,15 @@ LC_SLOPE_RANGES = {
 class SyntheticLightCurve(NamedTuple):
     time: np.ndarray
     flux: np.ndarray
-    label: str
+    label: int
+    label_str: str
     slope: float
     primary_period: float | None
     secondary_period: float | None
 
 def generate_light_curve(
-    class_type: str,
+    class_type: int,
+    class_type_str: str,
     noise_level: float = 0.02,
     min_days: float = 5,
     max_days: float = 30,
@@ -434,8 +436,8 @@ def generate_light_curve(
         Named tuple containing time, flux, label, slope, and periods
     -----------
     """
-    if class_type not in LC_GENERATORS:
-        raise ValueError(f"Unknown class_type: {class_type}")
+    if class_type_str not in LC_GENERATORS:
+        raise ValueError(f"Unknown class_type: {class_type_str}")
     
     rng = rng or np.random.default_rng()
 
@@ -446,11 +448,11 @@ def generate_light_curve(
     time = random_time(n_points=n_points, days=days, rng=rng)
     
     # Generate base flux pattern and get periods directly from generator
-    flux, primary_period, secondary_period = LC_GENERATORS[class_type](time, rng)
+    flux, primary_period, secondary_period = LC_GENERATORS[class_type_str](time, rng)
     
     # Add linear trend
     if slope is None:
-        slope = rng.uniform(*LC_SLOPE_RANGES[class_type])
+        slope = rng.uniform(*LC_SLOPE_RANGES[class_type_str])
     flux = add_linear_trend(time, flux, slope)
     
     # Add observational noise
@@ -460,6 +462,7 @@ def generate_light_curve(
         time=time,
         flux=flux,
         label=class_type,
+        label_str=class_type_str,
         slope=slope,
         primary_period=primary_period,
         secondary_period=secondary_period
@@ -486,13 +489,12 @@ def generate_dataset(
     List[SyntheticLightCurve]
         List of Named tuples containing generated light curves and their properties
     """
-    rng = kwargs.get("rng", np.random.default_rng())
     
     dataset = []
     
-    for cls in LC_GENERATORS.keys():
+    for i, cls in enumerate(LC_GENERATORS.keys()):
         for _ in range(n_per_class):
-            lc = generate_light_curve(cls, **kwargs)
+            lc = generate_light_curve(i, cls, **kwargs)
             dataset.append(lc)
     
     return dataset

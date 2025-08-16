@@ -263,12 +263,6 @@ def generate_candidate_periods(frequencies: np.ndarray, powers: np.ndarray, num_
         return []
 
     # Sort peaks by power
-    sorted_peaks = sorted(zip(powers[peaks], frequencies[peaks]), reverse=True)
-    
-    # Select the top num_candidates peaks
-    top_peaks = sorted_peaks[:num_candidates]
-    
-    # Convert frequencies to periods
-    candidate_periods = [1.0 / freq for _, freq in top_peaks]
-    
-    return candidate_periods
+    sorted_peak_indices = np.argsort(powers[peaks])[::-1]
+    top_peaks = sorted_peak_indices[:num_candidates]
+    return [1.0 / frequencies[idx] for idx in top_peaks]
