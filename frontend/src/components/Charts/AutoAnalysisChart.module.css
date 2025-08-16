@@ -1,0 +1,171 @@
+/* Auto Analysis Chart styles */
+.chartSection {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e2e8f0;
+}
+
+.chartSection h3 {
+  margin: 0 0 1rem 0;
+  color: #1e293b;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.mainResults {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.predictionCard,
+.detectedCard {
+  background: #f8fafc;
+  border-radius: 6px;
+  padding: 1rem;
+  border: 1px solid #e2e8f0;
+}
+
+.predictionCard h4,
+.detectedCard h4 {
+  margin: 0 0 0.5rem 0;
+  color: #475569;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.predictionValue {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.periodButton {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s;
+  border-radius: 4px;
+  padding: 0.25rem;
+}
+
+.periodButton:hover {
+  background: rgba(59, 130, 246, 0.1);
+  color: #2563eb;
+}
+
+.predictionValue .periodButton {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #3b82f6;
+}
+
+.detectedValue .periodButton {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #059669;
+}
+
+.periodValue {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #3b82f6;
+}
+
+.classValue {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1e293b;
+  text-transform: capitalize;
+}
+
+.confidenceValue {
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.detectedValue {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #059669;
+}
+
+.candidatesSection {
+  border-top: 1px solid #e2e8f0;
+  padding-top: 1rem;
+}
+
+.candidatesSection h4 {
+  margin: 0 0 0.75rem 0;
+  color: #475569;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.candidatesGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 0.75rem;
+}
+
+.candidateCard {
+  background: white;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 0.75rem;
+  text-align: center;
+  transition: all 0.2s;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.candidateCard:hover {
+  background: #f8fafc;
+  border-color: #3b82f6;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.candidateRank {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+
+.candidatePeriod {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1e293b;
+  margin-bottom: 0.25rem;
+}
+
+.candidateScore {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .mainResults {
+    grid-template-columns: 1fr;
+  }
+  
+  .candidatesGrid {
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  }
+  
+  .chartSection {
+    padding: 1rem;
+  }
+}
