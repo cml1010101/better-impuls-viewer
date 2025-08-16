@@ -251,20 +251,18 @@ def detect_period_lomb_scargle(lc_data: np.ndarray) -> Tuple[float, np.ndarray, 
         power = np.random.normal(0.5, 0.1, 900)
         return 2.0, frequency, power
 
+from scipy.signal import find_peaks
 
-def generate_candidate_periods(true_period: float, num_candidates: int = 4) -> List[float]:
-    """Generate multiple period candidates around the true period."""
-    import random
+def generate_candidate_periods(frequencies: np.ndarray, powers: np.ndarray, num_candidates: int = 4) -> List[float]:
+    """Generate multiple period candidates based on the Lomb-Scargle power spectrum."""
+    # Find peaks in the power spectrum
+    peaks, _ = find_peaks(powers, height=0.1 * np.max(powers))
     
-    candidates = [true_period]  # Include true period
-    
-    # Add some variations
-    for i in range(num_candidates - 1):
-        # Add some noise and harmonics
-        variation = np.random.uniform(0.8, 1.2)
-        harmonic = np.random.choice([0.5, 2.0]) if i % 2 == 0 else 1.0
-        candidate = true_period * variation * harmonic
-        candidate = np.clip(candidate, 0.1, 100.0)  # Keep in reasonable range
-        candidates.append(candidate)
-    
-    return candidates
+    if len(peaks) == 0:
+        print("No significant peaks found in the power spectrum.")
+        return []
+
+    # Sort peaks by power
+    sorted_peak_indices = np.argsort(powers[peaks])[::-1]
+    top_peaks = sorted_peak_indices[:num_candidates]
+    return [1.0 / frequencies[idx] for idx in top_peaks]
