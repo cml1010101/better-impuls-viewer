@@ -194,9 +194,7 @@ class MultiBranchStarModelHybrid(nn.Module):
 
     def encode_folded_candidates(
         self,
-        folded_list: List[torch.Tensor],  # each (B, C, L_i)
-        logP1: list[torch.Tensor],              # (B,)
-        logP2: list[torch.Tensor],              # (B,)
+        folded_list: list[FoldedCandidate]
     ) -> CandidateEncodingOutput:
         assert isinstance(folded_list, list) and len(folded_list) > 0
         N = len(folded_list)
@@ -204,10 +202,10 @@ class MultiBranchStarModelHybrid(nn.Module):
         
         # Normalize periods
 
-        for i in range(N):
-            norm_logP1 = (logP1[i] - self.cfg.logP_mean) / (self.cfg.logP_std + 1e-8)
-            norm_logP2 = (logP2[i] - self.cfg.logP_mean) / (self.cfg.logP_std + 1e-8)
-            xi = folded_list[i]  # (B, C, L_i)
+        for folded in folded_list:
+            xi, logP1, logP2 = folded.process()  # (B, C, L_i), primary and secondary periods
+            norm_logP1 = (logP1 - self.cfg.logP_mean) / (self.cfg.logP_std + 1e-8)
+            norm_logP2 = (logP2 - self.cfg.logP_mean) / (self.cfg.logP_std + 1e-8)
             # Add both period channels to each folded candidate
             xi_with_periods = self._add_two_period_channels(xi, norm_logP1, norm_logP2)  # (B, C+2, L_i)
             ei = self.folded_enc(xi_with_periods)  # (B, D)
@@ -224,15 +222,13 @@ class MultiBranchStarModelHybrid(nn.Module):
 
     def forward(
         self,
-        lc: torch.Tensor,                 # (B, C_lc, L_lc)
-        pgram: torch.Tensor,              # (B, C_pg, L_pg)
-        folded_list: List[torch.Tensor],  # len N, each (B, C_folded, L_i)
-        logP1: list[torch.Tensor],              # (B,) - first period for all candidates
-        logP2: list[torch.Tensor],              # (B,) - second period for all candidates
+        lc: LightCurve,
+        pgram: Periodogram,
+        folded_list: list[FoldedCandidate]
     ) -> ModelOutput:
-        z_lc = self.lc_enc(lc)
-        z_pg = self.pgram_enc(pgram)
-        cand_output = self.encode_folded_candidates(folded_list, logP1, logP2)
+        z_lc = self.lc_enc(lc.process())
+        z_pg = self.pgram_enc(pgram.process())
+        cand_output = self.encode_folded_candidates(folded_list)
 
         z = torch.cat([z_lc, z_pg, cand_output.folded_pooled], dim=-1)
         z = self.fuse(z)
@@ -338,3 +334,74 @@ if __name__ == "__main__":
 
     loss_output.total_loss.backward()
     print("Backward OK.")
+
+def interpolate(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    """
+    Interpolate values to a uniform grid.
+    
+    Args:
+        x: Tensor of shape (B, L) with values to interpolate.
+        y: Tensor of shape (B, L) with corresponding x-coordinates.
+        
+    Returns:
+        Interpolated values on a uniform grid.
+    """
+    # Create a uniform grid based on the minimum and maximum x values
+    min_x = y.min(dim=1, keepdim=True).values
+    max_x = y.max(dim=1, keepdim=True).values
+    uniform_x = torch.linspace(min_x.item(), max_x.item(), steps=1000).to(y.device)
+
+    # Interpolate y values for each sample in the batch
+    interpolated_y = torch.zeros((x.size(0), uniform_x.size(0)), device=x.device)
+    for i in range(x.size(0)):
+        interpolated_y[i] = torch.interp(uniform_x, y[i], x[i])
+
+    return interpolated_y
+
+def normalize(x: torch.Tensor) -> torch.Tensor:
+    """
+    Normalize values to zero mean and unit variance.
+    
+    Args:
+        x: Tensor of shape (B, L) with values.
+        
+    Returns:
+        Normalized values.
+    """
+    mean = x.mean(dim=1, keepdim=True)
+    std = x.std(dim=1, keepdim=True) + 1e-8  # Avoid division by zero
+    return (x - mean) / std
+
+class Periodogram(NamedTuple):
+    frequencies: torch.Tensor  # Shape (B, L)
+    power: torch.Tensor  # Shape (B, L)
+
+    @property
+    def periods(self) -> torch.Tensor:
+        """Calculate periods from frequencies."""
+        return 1.0 / self.frequencies
+    
+    def process(self) -> torch.Tensor:
+        """Interpolate the periodogram to a uniform frequency grid."""
+        return normalize(interpolate(self.power, self.frequencies))
+
+class LightCurve(NamedTuple):
+    time: torch.Tensor  # Shape (B, L)
+    flux: torch.Tensor  # Shape (B, L)
+
+    def process(self) -> torch.Tensor:
+        """Interpolate the light curve to a uniform time grid."""
+        return normalize(interpolate(self.flux, self.time))
+
+class FoldedCandidate(NamedTuple):
+    time: torch.Tensor  # Shape (B, L)
+    flux: torch.Tensor  # Shape (B, L)
+    primary_period: torch.Tensor  # Shape (B,)
+    secondary_period: torch.Tensor  # Shape (B,)
+
+    def process(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Interpolate the folded candidate light curve to a uniform time grid."""
+        return normalize(interpolate(self.flux, self.time)), self.primary_period, self.secondary_period
+
+import numpy as np
+from data_processing import generate_candidate_periods, calculate_lomb_scargle, phase_fold_data
