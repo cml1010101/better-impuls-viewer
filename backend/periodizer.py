@@ -195,18 +195,18 @@ class MultiBranchStarModelHybrid(nn.Module):
     def encode_folded_candidates(
         self,
         folded_list: List[torch.Tensor],  # each (B, C, L_i)
-        logP1: torch.Tensor,              # (B,)
-        logP2: torch.Tensor,              # (B,)
+        logP1: list[torch.Tensor],              # (B,)
+        logP2: list[torch.Tensor],              # (B,)
     ) -> CandidateEncodingOutput:
         assert isinstance(folded_list, list) and len(folded_list) > 0
         N = len(folded_list)
         cand_embs = []
         
         # Normalize periods
-        norm_logP1 = (logP1 - self.cfg.logP_mean) / (self.cfg.logP_std + 1e-8)
-        norm_logP2 = (logP2 - self.cfg.logP_mean) / (self.cfg.logP_std + 1e-8)
 
         for i in range(N):
+            norm_logP1 = (logP1[i] - self.cfg.logP_mean) / (self.cfg.logP_std + 1e-8)
+            norm_logP2 = (logP2[i] - self.cfg.logP_mean) / (self.cfg.logP_std + 1e-8)
             xi = folded_list[i]  # (B, C, L_i)
             # Add both period channels to each folded candidate
             xi_with_periods = self._add_two_period_channels(xi, norm_logP1, norm_logP2)  # (B, C+2, L_i)
@@ -227,8 +227,8 @@ class MultiBranchStarModelHybrid(nn.Module):
         lc: torch.Tensor,                 # (B, C_lc, L_lc)
         pgram: torch.Tensor,              # (B, C_pg, L_pg)
         folded_list: List[torch.Tensor],  # len N, each (B, C_folded, L_i)
-        logP1: torch.Tensor,              # (B,) - first period for all candidates
-        logP2: torch.Tensor,              # (B,) - second period for all candidates
+        logP1: list[torch.Tensor],              # (B,) - first period for all candidates
+        logP2: list[torch.Tensor],              # (B,) - second period for all candidates
     ) -> ModelOutput:
         z_lc = self.lc_enc(lc)
         z_pg = self.pgram_enc(pgram)
