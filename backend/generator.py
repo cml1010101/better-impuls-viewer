@@ -1,3 +1,5 @@
+# generator.py
+
 import numpy as np
 from typing import Tuple, List, Optional, NamedTuple
 
@@ -490,7 +492,7 @@ def generate_dataset(
     
     for cls in LC_GENERATORS.keys():
         for _ in range(n_per_class):
-            lc = generate_light_curve(cls, rng=rng, **kwargs)
+            lc = generate_light_curve(cls, **kwargs)
             dataset.append(lc)
     
     return dataset

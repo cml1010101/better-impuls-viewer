@@ -1,11 +1,9 @@
-# star_model.py
+# periodizer.py
 # Hybrid CNN+Transformer multi-branch, multi-task model for stellar light curves
 
 from __future__ import annotations
-import math
 from dataclasses import dataclass
-from typing import List, Optional, NamedTuple
-from collections import namedtuple
+from typing import Optional, NamedTuple
 
 import torch
 import torch.nn as nn
@@ -28,7 +26,8 @@ class CandidateEncodingOutput(NamedTuple):
 
 class ModelOutput(NamedTuple):
     type_logits: torch.Tensor
-    logP_pred: torch.Tensor
+    logP1_pred: torch.Tensor  # Primary period prediction
+    logP2_pred: torch.Tensor  # Secondary period prediction
     cand_logits: torch.Tensor
     cand_weights: torch.Tensor
     cand_embs: torch.Tensor
@@ -46,7 +45,8 @@ class LossOutput(NamedTuple):
 class LossLogs(NamedTuple):
     loss: float
     loss_type: float
-    loss_period: float
+    loss_period1: float
+    loss_period2: float
     loss_cand: float
 
 
@@ -123,6 +123,7 @@ class StarModelConfig:
     logP_mean: float = 0.0
     logP_std: float = 1.0
 
+from typing import NamedTuple
 
 class MultiBranchStarModelHybrid(nn.Module):
     """
@@ -131,12 +132,13 @@ class MultiBranchStarModelHybrid(nn.Module):
     - Periodogram branch (CNN+Transformer) 
     - Folded candidates branch (CNN+Transformer + attention pooling)
     
-    Each folded candidate has 2 period channels appended (for both periods).
+    Each folded candidate has 1 period channel appended (single input period).
     Variable number of candidates supported.
     
     Outputs:
     - Type classification
-    - Main period regression (log10 days)
+    - Primary period regression (log10 days)
+    - Secondary period regression (log10 days)
     - Per-candidate logits
     """
     
@@ -155,8 +157,8 @@ class MultiBranchStarModelHybrid(nn.Module):
             out_dim=cfg.emb_dim, dropout=cfg.dropout
         )
 
-        # Always add 2 period channels (+2 for both periods)
-        folded_channels = cfg.folded_in_channels + 2
+        # Only add 1 period channel (+1 for single input period)
+        folded_channels = cfg.folded_in_channels + 1
         self.folded_enc = CNNTransformer1DExtractor(
             in_channels=folded_channels, cnn_hidden=cfg.cnn_hidden,
             d_model=cfg.d_model, n_heads=cfg.n_heads, n_layers=cfg.n_layers,
@@ -175,71 +177,85 @@ class MultiBranchStarModelHybrid(nn.Module):
         )
 
         self.type_head = nn.Linear(cfg.merged_dim, cfg.n_types)
-        self.period_head = nn.Linear(cfg.merged_dim, 1)
+        # Separate heads for primary and secondary periods
+        self.period1_head = nn.Linear(cfg.merged_dim, 1)  # Primary period
+        self.period2_head = nn.Linear(cfg.merged_dim, 1)  # Secondary period
+    
+    def normalize_period(self, period: torch.Tensor) -> torch.Tensor:
+        """
+        Normalize period to log10 days.
+        """
+        return (torch.log10(period) - self.cfg.logP_mean) / (self.cfg.logP_std + 1e-8)
+    
+    def denormalize_period(self, logP: torch.Tensor) -> torch.Tensor:
+        """
+        Denormalize log10 period to original scale.
+        """
+        return torch.pow(10, logP * (self.cfg.logP_std + 1e-8) + self.cfg.logP_mean)
 
     def _add_constant_channel(self, x: torch.Tensor, const: torch.Tensor) -> torch.Tensor:
         B, _, L = x.shape
         ch = const.view(B, 1, 1).expand(B, 1, L)
         return torch.cat([x, ch], dim=1)
 
-    def _add_two_period_channels(self, x: torch.Tensor, logP1: torch.Tensor, logP2: torch.Tensor) -> torch.Tensor:
-        """
-        x: (B, C, L)
-        logP1, logP2: (B,) -> broadcast to (B, 1, L) each, concatenated as last 2 channels
-        """
-        B, _, L = x.shape
-        ch1 = logP1.view(B, 1, 1).expand(B, 1, L)
-        ch2 = logP2.view(B, 1, 1).expand(B, 1, L)
-        return torch.cat([x, ch1, ch2], dim=1)
-
     def encode_folded_candidates(
         self,
-        folded_list: list[FoldedCandidate]
+        folded_data: torch.Tensor,
+        folded_periods: torch.Tensor
     ) -> CandidateEncodingOutput:
-        assert isinstance(folded_list, list) and len(folded_list) > 0
-        N = len(folded_list)
-        cand_embs = []
-        
-        # Normalize periods
-
-        for folded in folded_list:
-            xi, logP1, logP2 = folded.process()  # (B, C, L_i), primary and secondary periods
-            norm_logP1 = (logP1 - self.cfg.logP_mean) / (self.cfg.logP_std + 1e-8)
-            norm_logP2 = (logP2 - self.cfg.logP_mean) / (self.cfg.logP_std + 1e-8)
-            # Add both period channels to each folded candidate
-            xi_with_periods = self._add_two_period_channels(xi, norm_logP1, norm_logP2)  # (B, C+2, L_i)
-            ei = self.folded_enc(xi_with_periods)  # (B, D)
-            cand_embs.append(ei)
-
-        E = torch.stack(cand_embs, dim=1)  # (B, N, D)
-        attn_output = self.cand_attn(E)
+        """
+        Encode folded candidates with single period channel.
+        folded_data: Tensor of shape (B, N, L_i)
+        folded_periods: Tensor of shape (B, N) - single input period for each candidate
+        """
+        B, N, L = folded_data.shape
+        candidate_embeddings = []
+        for i in range(N):
+            folded_lc = folded_data[:, i, :].unsqueeze(1)
+            folded_period = folded_periods[:, i].unsqueeze(1)  # Shape (B, 1)
+            folded_lc = self._add_constant_channel(folded_lc, folded_period)
+            folded_lc = self.folded_enc(folded_lc)
+            candidate_embeddings.append(folded_lc)
+        candidate_embeddings = torch.stack(candidate_embeddings, dim=1)
+        # Apply attention pooling over candidate embeddings
+        cand_output = self.cand_attn(candidate_embeddings)
         return CandidateEncodingOutput(
-            folded_pooled=attn_output.pooled,
-            cand_logits=attn_output.logits,
-            cand_weights=attn_output.weights,
-            embeddings=E
+            folded_pooled=cand_output.pooled,
+            cand_logits=cand_output.logits,
+            cand_weights=cand_output.weights,
+            embeddings=candidate_embeddings
         )
 
     def forward(
         self,
-        lc: LightCurve,
-        pgram: Periodogram,
-        folded_list: list[FoldedCandidate]
+        lc: torch.Tensor,
+        pgram: torch.Tensor,
+        folded_data: torch.Tensor,
+        folded_periods: torch.Tensor
     ) -> ModelOutput:
-        z_lc = self.lc_enc(lc.process())
-        z_pg = self.pgram_enc(pgram.process())
-        cand_output = self.encode_folded_candidates(folded_list)
+        normalized_periods = self.normalize_period(folded_periods)
+
+        z_lc = self.lc_enc(lc)
+        z_pg = self.pgram_enc(pgram)
+        cand_output = self.encode_folded_candidates(folded_data, normalized_periods)
 
         z = torch.cat([z_lc, z_pg, cand_output.folded_pooled], dim=-1)
         z = self.fuse(z)
 
         type_logits = self.type_head(z)
-        logP_pred_norm = self.period_head(z).squeeze(-1)
-        logP_pred = logP_pred_norm * (self.cfg.logP_std + 1e-8) + self.cfg.logP_mean
+        
+        # Predict both primary and secondary periods
+        logP1_pred_norm = self.period1_head(z).squeeze(-1)
+        logP2_pred_norm = self.period2_head(z).squeeze(-1)
+        
+        # Denormalize predictions
+        logP1_pred = self.denormalize_period(logP1_pred_norm)
+        logP2_pred = self.denormalize_period(logP2_pred_norm)
 
         return ModelOutput(
             type_logits=type_logits,
-            logP_pred=logP_pred,
+            logP1_pred=logP1_pred,
+            logP2_pred=logP2_pred,
             cand_logits=cand_output.cand_logits,
             cand_weights=cand_output.cand_weights,
             cand_embs=cand_output.embeddings,
@@ -253,87 +269,75 @@ class MultiBranchStarModelHybrid(nn.Module):
 def multitask_loss(
     out: ModelOutput,
     y_type: torch.Tensor,               # (B,) class indices
-    true_logP: torch.Tensor,            # (B,) log10 days
+    true_logP1: torch.Tensor,           # (B,) primary period log10 days
+    true_logP2: torch.Tensor,           # (B,) secondary period log10 days
     cand_labels: Optional[torch.Tensor] = None,   # (B, N) binary labels for candidates
     cfg: Optional[StarModelConfig] = None,
-    lambda_period: float = 1.0,
+    lambda_period1: float = 1.0,
+    lambda_period2: float = 1.0,
     lambda_cand: float = 0.5,
 ) -> LossOutput:
     loss_type = F.cross_entropy(out.type_logits, y_type)
 
     if cfg is None:
         raise ValueError("Provide cfg to normalize period targets")
-    true_logP_norm = (true_logP - cfg.logP_mean) / (cfg.logP_std + 1e-8)
-    pred_logP_norm = (out.logP_pred - cfg.logP_mean) / (cfg.logP_std + 1e-8)
-    loss_period = F.smooth_l1_loss(pred_logP_norm, true_logP_norm)
+    
+    # Normalize targets for both periods
+    true_logP1_norm = (true_logP1 - cfg.logP_mean) / (cfg.logP_std + 1e-8)
+    true_logP2_norm = (true_logP2 - cfg.logP_mean) / (cfg.logP_std + 1e-8)
+    
+    pred_logP1_norm = (out.logP1_pred - cfg.logP_mean) / (cfg.logP_std + 1e-8)
+    pred_logP2_norm = (out.logP2_pred - cfg.logP_mean) / (cfg.logP_std + 1e-8)
+    
+    loss_period1 = F.smooth_l1_loss(pred_logP1_norm, true_logP1_norm)
+    loss_period2 = F.smooth_l1_loss(pred_logP2_norm, true_logP2_norm)
 
     loss_cand = torch.tensor(0.0, device=out.type_logits.device)
     if cand_labels is not None:
         loss_cand = F.binary_cross_entropy_with_logits(out.cand_logits, cand_labels)
 
-    loss = loss_type + lambda_period * loss_period + lambda_cand * loss_cand
+    loss = loss_type + lambda_period1 * loss_period1 + lambda_period2 * loss_period2 + lambda_cand * loss_cand
     
     logs = LossLogs(
         loss=float(loss.detach().cpu()),
         loss_type=float(loss_type.detach().cpu()),
-        loss_period=float(loss_period.detach().cpu()),
+        loss_period1=float(loss_period1.detach().cpu()),
+        loss_period2=float(loss_period2.detach().cpu()),
         loss_cand=float(loss_cand.detach().cpu())
     )
     
     return LossOutput(total_loss=loss, loss_logs=logs)
 
+def torch_interp(
+    x: torch.Tensor,
+    xp: torch.Tensor,
+    fp: torch.Tensor
+) -> torch.Tensor:
+    """
+    A torch equivalent of np.interp.
 
-if __name__ == "__main__":
-    torch.manual_seed(0)
+    Args:
+        x: The x-coordinates at which to evaluate the interpolated values.
+        xp: The x-coordinates of the data points, must be increasing.
+        fp: The y-coordinates of the data points.
 
-    B = 8
-    N = 4  # number of folded candidates
-    n_types = 13
+    Returns:
+        The interpolated values, with the same shape as x.
+    """
+    # Find the indices of the two points to interpolate between
+    indices = torch.searchsorted(xp, x)
 
-    cfg = StarModelConfig(
-        n_types=n_types,
-        lc_in_channels=1,
-        pgram_in_channels=1,
-        folded_in_channels=1,
-        emb_dim=128,
-        merged_dim=256,
-        cnn_hidden=64,
-        d_model=128,
-        n_heads=4,
-        n_layers=2,
-        dropout=0.1,
-        logP_mean=0.0,
-        logP_std=1.0,
-    )
+    # Clamp the indices to prevent out-of-bounds access
+    indices = torch.clamp(indices, 1, len(xp) - 1)
 
-    model = MultiBranchStarModelHybrid(cfg)
+    # Gather the corresponding xp and fp values
+    x0 = torch.gather(xp, 0, indices - 1)
+    x1 = torch.gather(xp, 0, indices)
+    y0 = torch.gather(fp, 0, indices - 1)
+    y1 = torch.gather(fp, 0, indices)
 
-    # Input tensors
-    lc = torch.randn(B, cfg.lc_in_channels, 1200)
-    pgram = torch.randn(B, cfg.pgram_in_channels, 900)
-    folded_list = [
-        torch.randn(B, cfg.folded_in_channels, 200 + 25 * i) for i in range(N)
-    ]
-    logP1 = torch.randn(B)  # First period for all samples
-    logP2 = torch.randn(B)  # Second period for all samples
-
-    out = model(lc, pgram, folded_list, logP1, logP2)
-    print("type_logits:", out.type_logits.shape)
-    print("logP_pred:", out.logP_pred.shape)
-    print("cand_logits:", out.cand_logits.shape)  # Should be (B, N)
-    print("cand_weights (row sums):", out.cand_weights.sum(dim=1))
-
-    # Fake labels
-    y_type = torch.randint(0, n_types, (B,))
-    true_logP = torch.randn(B)
-    cand_labels = torch.zeros(B, N)  # Binary labels for N candidates
-    cand_labels[:, 0] = 1.0  # First candidate is correct
-
-    loss_output = multitask_loss(out, y_type, true_logP, cand_labels=cand_labels, cfg=cfg)
-    print("loss logs:", loss_output.loss_logs)
-
-    loss_output.total_loss.backward()
-    print("Backward OK.")
+    # Perform linear interpolation
+    return y0 + (x - x0) * (y1 - y0) / (x1 - x0)
 
 def interpolate(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     """
@@ -349,14 +353,14 @@ def interpolate(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     # Create a uniform grid based on the minimum and maximum x values
     min_x = y.min(dim=1, keepdim=True).values
     max_x = y.max(dim=1, keepdim=True).values
-    uniform_x = torch.linspace(min_x.item(), max_x.item(), steps=1000).to(y.device)
+    uniform_x = torch.stack([torch.linspace(min_x[i].item(), max_x[i].item(), steps=x.size(1)) for i in range(x.size(0))], dim=0)
 
     # Interpolate y values for each sample in the batch
-    interpolated_y = torch.zeros((x.size(0), uniform_x.size(0)), device=x.device)
+    interpolated_y = torch.zeros((x.size(0), uniform_x.size(1)), device=x.device)
     for i in range(x.size(0)):
-        interpolated_y[i] = torch.interp(uniform_x, y[i], x[i])
+        interpolated_y[i] = torch_interp(uniform_x[i], y[i], x[i])
 
-    return interpolated_y
+    return interpolated_y 
 
 def normalize(x: torch.Tensor) -> torch.Tensor:
     """
@@ -383,7 +387,7 @@ class Periodogram(NamedTuple):
     
     def process(self) -> torch.Tensor:
         """Interpolate the periodogram to a uniform frequency grid."""
-        return normalize(interpolate(self.power, self.frequencies))
+        return normalize(interpolate(self.power, self.frequencies)).unsqueeze(1)  # Add channel dimension
 
 class LightCurve(NamedTuple):
     time: torch.Tensor  # Shape (B, L)
@@ -391,17 +395,144 @@ class LightCurve(NamedTuple):
 
     def process(self) -> torch.Tensor:
         """Interpolate the light curve to a uniform time grid."""
-        return normalize(interpolate(self.flux, self.time))
+        return normalize(interpolate(self.flux, self.time)).unsqueeze(1)  # Add channel dimension
 
 class FoldedCandidate(NamedTuple):
     time: torch.Tensor  # Shape (B, L)
     flux: torch.Tensor  # Shape (B, L)
-    primary_period: torch.Tensor  # Shape (B,)
-    secondary_period: torch.Tensor  # Shape (B,)
+    period: torch.Tensor  # Shape (B,) - single input period
 
-    def process(self) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def process(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Interpolate the folded candidate light curve to a uniform time grid."""
-        return normalize(interpolate(self.flux, self.time)), self.primary_period, self.secondary_period
+        return normalize(interpolate(self.flux, self.time)).unsqueeze(1), self.period.unsqueeze(1)  # Add channel dimension for period
 
 import numpy as np
-from data_processing import generate_candidate_periods, calculate_lomb_scargle, phase_fold_data
+from data_processing import generate_candidate_periods, phase_fold_data, calculate_lomb_scargle
+
+def prepare_input(lc_datas: list[np.ndarray]) -> tuple[LightCurve, Periodogram, list[FoldedCandidate]]:
+    """
+    Prepare model inputs from raw light curve data.
+    
+    Args:
+        lc_datas: List of numpy arrays, each with shape (L, 2) for time and flux.
+        
+    Returns:
+        Tuple of LightCurve, Periodogram, and list of FoldedCandidate.
+    """
+    lc_list = []
+    pgram_list = []
+    folded_list = []
+
+    for data in lc_datas:
+        time = torch.tensor(data[:, 0], dtype=torch.float32).unsqueeze(0)  # (1, L)
+        flux = torch.tensor(data[:, 1], dtype=torch.float32).unsqueeze(0)  # (1, L)
+        lc = LightCurve(time=time, flux=flux)
+        lc_list.append(lc)
+
+        # Calculate periodogram
+        frequencies, power = calculate_lomb_scargle(data)
+        frequencies = torch.tensor(frequencies, dtype=torch.float32).unsqueeze(0)  # (1, L)
+        power = torch.tensor(power, dtype=torch.float32).unsqueeze(0)  # (1, L)
+        pgram = Periodogram(frequencies=frequencies, power=power)
+        pgram_list.append(pgram)
+
+        # Generate candidate periods
+        candidate_periods = generate_candidate_periods(frequencies.squeeze(0).numpy(), power.squeeze(0).numpy(), num_candidates=4)
+        
+        folded_candidates = []
+        for period in candidate_periods:
+            folded_time, folded_flux = phase_fold_data(time.squeeze(0).numpy(), flux.squeeze(0).numpy(), period)
+            folded_time_tensor = torch.tensor(folded_time, dtype=torch.float32).unsqueeze(0)  # (1, L')
+            folded_flux_tensor = torch.tensor(folded_flux, dtype=torch.float32).unsqueeze(0)  # (1, L')
+            period_tensor = torch.tensor([period], dtype=torch.float32)  # (1,)
+            folded_candidate = FoldedCandidate(time=folded_time_tensor, flux=folded_flux_tensor, period=period_tensor)
+            folded_candidates.append(folded_candidate)
+
+        folded_list.append(folded_candidates)
+    # Add padding to make batch
+    B = len(lc_list)
+    lc_batch = LightCurve(
+        time=torch.nn.utils.rnn.pad_sequence([lc.time.squeeze(0) for lc in lc_list], batch_first=True),
+        flux=torch.nn.utils.rnn.pad_sequence([lc.flux.squeeze(0) for lc in lc_list], batch_first=True)
+    )
+    pgram_batch = Periodogram(
+        frequencies=torch.nn.utils.rnn.pad_sequence([pg.frequencies.squeeze(0) for pg in pgram_list], batch_first=True),
+        power=torch.nn.utils.rnn.pad_sequence([pg.power.squeeze(0) for pg in pgram_list], batch_first=True)
+    )
+    # Assume all have same number of candidates for simplicity
+    N = len(folded_list[0])
+    folded_batch = []
+    for i in range(N):
+        folded_batch.append(
+            FoldedCandidate(
+                time=torch.nn.utils.rnn.pad_sequence([folded_list[b][i].time.squeeze(0) for b in range(B)], batch_first=True),
+                flux=torch.nn.utils.rnn.pad_sequence([folded_list[b][i].flux.squeeze(0) for b in range(B)], batch_first=True),
+                period=torch.tensor([folded_list[b][i].period.item() for b in range(B)], dtype=torch.float32)
+            )
+        )
+    return lc_batch, pgram_batch, folded_batch
+
+if __name__ == "__main__":
+    torch.manual_seed(0)
+
+    B = 8
+    N = 4  # number of folded candidates
+    n_types = 13
+
+    cfg = StarModelConfig(
+        n_types=n_types,
+        lc_in_channels=1,
+        pgram_in_channels=1,
+        folded_in_channels=1,
+        emb_dim=128,
+        merged_dim=256,
+        cnn_hidden=64,
+        d_model=128,
+        n_heads=4,
+        n_layers=2,
+        dropout=0.1,
+        logP_mean=0.0,
+        logP_std=1.0,
+    )
+
+    model = MultiBranchStarModelHybrid(cfg)
+
+    # Create mock data structures
+    lc = LightCurve(
+        time=torch.randn(B, 1200),
+        flux=torch.randn(B, 1200)
+    )
+    pgram = Periodogram(
+        frequencies=torch.randn(B, 900),
+        power=torch.randn(B, 900)
+    )
+    folded_list = [
+        FoldedCandidate(
+            time=torch.randn(B, 200 + 25 * i),
+            flux=torch.randn(B, 200 + 25 * i),
+            period=torch.randn(B)  # Single period per candidate
+        ) for i in range(N)
+    ]
+
+    out = model(lc, pgram, folded_list)
+    print("type_logits:", out.type_logits.shape)
+    print("logP1_pred:", out.logP1_pred.shape)
+    print("logP2_pred:", out.logP2_pred.shape)
+    print("cand_logits:", out.cand_logits.shape)  # Should be (B, N)
+    print("cand_weights (row sums):", out.cand_weights.sum(dim=1))
+
+    # Fake labels
+    y_type = torch.randint(0, n_types, (B,))
+    true_logP1 = torch.randn(B)  # Primary period targets
+    true_logP2 = torch.randn(B)  # Secondary period targets
+    cand_labels = torch.zeros(B, N)  # Binary labels for N candidates
+    cand_labels[:, 0] = 1.0  # First candidate is correct
+
+    loss_output = multitask_loss(
+        out, y_type, true_logP1, true_logP2, 
+        cand_labels=cand_labels, cfg=cfg
+    )
+    print("loss logs:", loss_output.loss_logs)
+
+    loss_output.total_loss.backward()
+    print("Backward OK.")

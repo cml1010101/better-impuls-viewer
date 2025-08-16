@@ -1,486 +1,621 @@
-#!/usr/bin/env python3
-"""
-Training script for Better Impuls Viewer MultiBranchStarModelHybrid model.
-Trains the multi-branch CNN+Transformer model in periodizer.py using the sample data.
-
-This script:
-1. Loads light curve data from sample_data/*.tbl files
-2. Processes the data (removes outliers, detects periods)
-3. Creates multi-branch training samples: raw light curve, periodogram, folded candidates
-4. Trains a hybrid CNN+Transformer model for period prediction and star classification
-5. Saves the trained model as 'trained_multi_branch_model.pth'
-
-Usage:
-    python backend/train.py
-
-Requirements:
-    - sample_data/ directory with .tbl files (relative to project root)
-    - All dependencies from backend/requirements.txt
-
-The script will create training data from all .tbl files in sample_data/,
-generating multiple samples per file with different periods detected via
-Lomb-Scargle periodogram analysis.
-
-Output:
-    - trained_multi_branch_model.pth: Saved PyTorch model with metadata
-    - Console output showing training progress
-
-Model Architecture:
-    - Multi-branch inputs: raw light curve, periodogram, folded candidates with periods
-    - Hybrid CNN+Transformer feature extraction per branch
-    - Attention pooling over period candidates
-    - Multi-task outputs: period regression + star type classification
-    - Classes: 13 variability types (sinusoidal, double dip, eclipsing binaries, etc.)
-"""
+# train.py
+# Training script for the multi-branch stellar classification model
 
 import os
-import sys
+import json
+import argparse
+from typing import Dict, List, Tuple, Optional
+from pathlib import Path
+
 import numpy as np
-import pandas as pd
 import torch
 import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
-from typing import List, Tuple, Dict, Optional
-import random
-from scipy.interpolate import interp1d
-import glob
+from torch.utils.data import Dataset, DataLoader, random_split
+from torch.optim import AdamW
+from torch.optim.lr_scheduler import CosineAnnealingLR
+import matplotlib.pyplot as plt
+from sklearn.metrics import classification_report, confusion_matrix
+from tqdm import tqdm
 
-# Import backend modules (now we're in backend directory)
-from periodizer import MultiBranchStarModelHybrid, StarModelConfig, multitask_loss
-from config import Config
-from data_processing import calculate_lomb_scargle, remove_y_outliers
+from generator import generate_dataset, LC_GENERATORS
+from periodizer import (
+    MultiBranchStarModelHybrid, StarModelConfig, multitask_loss,
+    LightCurve, Periodogram, FoldedCandidate, prepare_input
+)
 
-class MultiBranchDataset(Dataset):
-    """Dataset for multi-branch star model training data."""
+# ===== Dataset Class =====
+
+class StellarDataset(Dataset):
+    """Dataset class for stellar light curves with synthetic data generation."""
     
-    def __init__(self, training_samples: List[Dict], 
-                 lc_length: int = 1200, pgram_length: int = 900, folded_length: int = 200):
-        self.data = training_samples
-        self.lc_length = lc_length
-        self.pgram_length = pgram_length
-        self.folded_length = folded_length
+    def __init__(
+        self,
+        n_per_class: int = 1000,
+        max_days: float = 30.0,
+        noise_level: float = 0.02,
+        n_candidates: int = 4,
+        seed: Optional[int] = None
+    ):
+        self.n_per_class = n_per_class
+        self.max_days = max_days
+        self.noise_level = noise_level
+        self.n_candidates = n_candidates
+        
+        # Set up RNG for reproducibility
+        self.rng = np.random.default_rng(seed)
+        
+        # Class mapping
+        self.class_names = list(LC_GENERATORS.keys())
+        self.class_to_idx = {cls: idx for idx, cls in enumerate(self.class_names)}
+        self.idx_to_class = {idx: cls for cls, idx in self.class_to_idx.items()}
+        
+        # Generate synthetic dataset
+        print(f"Generating synthetic dataset: {n_per_class} samples per class...")
+        self.light_curves = generate_dataset(
+            n_per_class=n_per_class,
+            max_days=max_days,
+            noise_level=noise_level,
+            rng=self.rng
+        )
+        print(f"Generated {len(self.light_curves)} total light curves")
+        
+        # Compute period statistics for normalization
+        self._compute_period_stats()
     
-    def __len__(self):
-        return len(self.data)
+    def _compute_period_stats(self):
+        """Compute period statistics for normalization."""
+        periods = []
+        for lc in self.light_curves:
+            if lc.primary_period is not None:
+                periods.append(lc.primary_period)
+            if lc.secondary_period is not None:
+                periods.append(lc.secondary_period)
+        
+        if periods:
+            log_periods = np.log10(periods)
+            self.logP_mean = float(np.mean(log_periods))
+            self.logP_std = float(np.std(log_periods))
+        else:
+            self.logP_mean = 0.0
+            self.logP_std = 1.0
+        
+        print(f"Period statistics: mean={self.logP_mean:.3f}, std={self.logP_std:.3f}")
     
-    def __getitem__(self, idx):
-        item = self.data[idx]
+    def __len__(self) -> int:
+        return len(self.light_curves)
+    
+    def __getitem__(self, idx: int) -> Dict:
+        lc = self.light_curves[idx]
         
-        # Get raw light curve data
-        lc = torch.tensor(item['raw_lc'], dtype=torch.float32)
-        lc = self._resample_data(lc, self.lc_length)
-        lc = lc.unsqueeze(0)  # Shape: (1, lc_length)
+        # Prepare model inputs
+        lc_data = np.column_stack([lc.time, lc.flux])
+        lc_input, pgram_input, folded_candidates = prepare_input([lc_data])
         
-        # Get periodogram data
-        pgram = torch.tensor(item['periodogram'], dtype=torch.float32)
-        pgram = self._resample_data(pgram, self.pgram_length)
-        pgram = pgram.unsqueeze(0)  # Shape: (1, pgram_length)
+        # Ensure we have the right number of candidates
+        if len(folded_candidates) < self.n_candidates:
+            # Pad with copies if needed
+            while len(folded_candidates) < self.n_candidates:
+                folded_candidates.append(folded_candidates[-1])
+        elif len(folded_candidates) > self.n_candidates:
+            # Truncate if too many
+            folded_candidates = folded_candidates[:self.n_candidates]
         
-        # Get folded candidates (list of tensors)
-        folded_list = []
-        logP_list = []
-        for folded_data, period in zip(item['folded_candidates'], item['candidate_periods']):
-            folded_tensor = torch.tensor(folded_data, dtype=torch.float32)
-            folded_tensor = self._resample_data(folded_tensor, self.folded_length)
-            folded_tensor = folded_tensor.unsqueeze(0)  # Shape: (1, folded_length)
-            folded_list.append(folded_tensor)
-            
-            logP_list.append(torch.tensor(np.log10(period), dtype=torch.float32))
+        # Create labels
+        type_label = self.class_to_idx[lc.label]
         
-        # Get labels
-        true_logP = torch.tensor(np.log10(item['true_period']), dtype=torch.float32)
-        star_class = torch.tensor(item['class_idx'], dtype=torch.long)
+        # Handle periods (use NaN for missing periods, will be handled in loss)
+        primary_period = lc.primary_period if lc.primary_period is not None else float('nan')
+        secondary_period = lc.secondary_period if lc.secondary_period is not None else float('nan')
+        
+        # Create candidate labels (simplified: first candidate is "correct")
+        candidate_labels = torch.zeros(self.n_candidates)
+        if not np.isnan(primary_period):
+            candidate_labels[0] = 1.0  # Mark first candidate as correct
         
         return {
-            'lc': lc,
-            'pgram': pgram,
-            'folded_list': folded_list,
-            'logP_list': logP_list,
-            'true_logP': true_logP,
-            'star_class': star_class
+            'light_curve': lc_input,
+            'periodogram': pgram_input,
+            'folded_candidates': folded_candidates,
+            'type_label': type_label,
+            'primary_period': primary_period,
+            'secondary_period': secondary_period,
+            'candidate_labels': candidate_labels,
+            'raw_data': {
+                'time': lc.time,
+                'flux': lc.flux,
+                'label': lc.label,
+                'slope': lc.slope
+            }
         }
-    
-    def _resample_data(self, data: torch.Tensor, target_length: int) -> torch.Tensor:
-        """Resample data to target length using interpolation."""
-        current_length = len(data)
-        
-        if current_length == target_length:
-            return data
-        
-        # Create original and target indices
-        orig_indices = np.linspace(0, 1, current_length)
-        target_indices = np.linspace(0, 1, target_length)
-        
-        # Interpolate
-        data_np = data.numpy()
-        interp_func = interp1d(orig_indices, data_np, kind='linear', 
-                              bounds_error=False, fill_value='extrapolate')
-        resampled_data = interp_func(target_indices)
-        
-        return torch.tensor(resampled_data, dtype=torch.float32)
 
 
-def load_light_curve_data(file_path: str) -> np.ndarray:
-    """Load light curve data from .tbl file."""
-    try:
-        # Read the file, skipping the header
-        data = pd.read_csv(file_path, sep='\t', comment='#', header=0)
-        
-        # Extract time and flux columns
-        time = data.iloc[:, 0].values  # Time (days)
-        flux = data.iloc[:, 1].values  # Flux
-        
-        # Create numpy array
-        lc_data = np.column_stack([time, flux])
-        
-        return lc_data
-    except Exception as e:
-        print(f"Error loading {file_path}: {e}")
-        return np.array([])
-
-
-def phase_fold_data(time: np.ndarray, flux: np.ndarray, period: float) -> Tuple[np.ndarray, np.ndarray]:
-    """Phase fold the light curve data."""
-    phase = (time % period) / period
+def collate_fn(batch: List[Dict]) -> Dict:
+    """Custom collate function for variable-length sequences."""
     
-    # Sort by phase
-    sort_indices = np.argsort(phase)
-    phase_sorted = phase[sort_indices]
-    flux_sorted = flux[sort_indices]
+    # Extract batch components
+    light_curves = [item['light_curve'] for item in batch]
+    periodograms = [item['periodogram'] for item in batch]
+    folded_candidates_list = [item['folded_candidates'] for item in batch]
     
-    return phase_sorted, flux_sorted
-
-
-def detect_period_lomb_scargle(lc_data: np.ndarray) -> Tuple[float, np.ndarray, np.ndarray]:
-    """Detect period using Lomb-Scargle periodogram and return periodogram data."""
-    try:
-        frequency, power = calculate_lomb_scargle(lc_data)
-        
-        # Find the peak frequency
-        peak_idx = np.argmax(power)
-        peak_frequency = frequency[peak_idx]
-        
-        # Convert to period
-        period = 1.0 / peak_frequency
-        
-        # Ensure period is in reasonable range
-        period = np.clip(period, Config.MIN_PERIOD, Config.MAX_PERIOD)
-        
-        return period, frequency, power
-    except Exception as e:
-        print(f"Error in period detection: {e}")
-        # Return default values
-        frequency = np.linspace(0.1, 1.0, 900)
-        power = np.random.normal(0.5, 0.1, 900)
-        return 2.0, frequency, power
-
-
-def generate_candidate_periods(true_period: float, num_candidates: int = 4) -> List[float]:
-    """Generate multiple period candidates around the true period."""
-    candidates = [true_period]  # Include true period
+    # Stack fixed-size tensors
+    type_labels = torch.tensor([item['type_label'] for item in batch], dtype=torch.long)
+    primary_periods = torch.tensor([item['primary_period'] for item in batch], dtype=torch.float32)
+    secondary_periods = torch.tensor([item['secondary_period'] for item in batch], dtype=torch.float32)
+    candidate_labels = torch.stack([item['candidate_labels'] for item in batch])
     
-    # Add some variations
-    for i in range(num_candidates - 1):
-        # Add some noise and harmonics
-        variation = np.random.uniform(0.8, 1.2)
-        harmonic = np.random.choice([0.5, 2.0]) if i % 2 == 0 else 1.0
-        candidate = true_period * variation * harmonic
-        candidate = np.clip(candidate, Config.MIN_PERIOD, Config.MAX_PERIOD)
-        candidates.append(candidate)
-    
-    return candidates
-
-
-def create_multi_branch_sample(lc_data: np.ndarray, star_class: int) -> Dict:
-    """Create a multi-branch training sample from light curve data."""
-    time = lc_data[:, 0]
-    flux = lc_data[:, 1]
-    
-    # Remove outliers
-    cleaned_data = remove_y_outliers(lc_data)
-    time_clean = cleaned_data[:, 0]
-    flux_clean = cleaned_data[:, 1]
-    
-    # Detect period and get periodogram
-    true_period, frequency, power = detect_period_lomb_scargle(cleaned_data)
-    
-    # Normalize raw light curve (subtract mean, divide by std)
-    flux_norm = (flux_clean - np.mean(flux_clean)) / (np.std(flux_clean) + 1e-8)
-    
-    # Create periodogram (use power as the signal)
-    pgram_data = power / (np.max(power) + 1e-8)  # Normalize to [0, 1]
-    
-    # Generate period candidates
-    candidate_periods = generate_candidate_periods(true_period, num_candidates=4)
-    
-    # Create folded candidates
-    folded_candidates = []
-    for period in candidate_periods:
-        phase, flux_folded = phase_fold_data(time_clean, flux_norm, period)
-        # Resample folded data to consistent phase grid
-        phase_grid = np.linspace(0, 1, 200)
-        flux_interp = np.interp(phase_grid, phase, flux_folded)
-        folded_candidates.append(flux_interp)
-    
-    return {
-        'raw_lc': flux_norm,  # Normalized flux time series
-        'periodogram': pgram_data,  # Normalized periodogram power
-        'folded_candidates': folded_candidates,  # List of phase-folded curves
-        'candidate_periods': candidate_periods,  # Corresponding periods
-        'true_period': true_period,  # Ground truth period
-        'class_idx': star_class  # Star variability class
-    }
-
-
-def assign_random_class() -> int:
-    """Assign a random class for demonstration purposes."""
-    return random.randint(0, len(Config.CLASS_NAMES) - 1)
-
-
-def create_training_data(sample_data_dir: str, num_samples_per_star: int = 3) -> List[Dict]:
-    """Create multi-branch training data from sample files."""
-    training_data = []
-    
-    # Get all .tbl files
-    tbl_files = glob.glob(os.path.join(sample_data_dir, "*.tbl"))
-    print(f"Found {len(tbl_files)} sample files")
-    
-    for file_path in tbl_files:
-        print(f"Processing {os.path.basename(file_path)}...")
-        
-        # Extract star number and telescope from filename
-        filename = os.path.basename(file_path)
-        parts = filename.replace('.tbl', '').split('-')
-        if len(parts) != 2:
-            continue
-            
-        star_num = int(parts[0])
-        telescope = parts[1]
-        
-        # Load light curve data
-        lc_data = load_light_curve_data(file_path)
-        if len(lc_data) < 10:  # Skip files with too little data
-            continue
-        
-        # Generate multiple training samples per file
-        for sample_idx in range(num_samples_per_star):
-            try:
-                # Assign a class (for demonstration, we'll use star number as proxy)
-                # In real scenario, this would come from labeled data
-                class_idx = (star_num - 1) % 13  # Map to 13 classes (0-12)
-                
-                # Create multi-branch sample
-                training_sample = create_multi_branch_sample(lc_data, class_idx)
-                
-                # Add sample to training data
-                training_data.append(training_sample)
-                
-            except Exception as e:
-                print(f"  Error creating sample {sample_idx} for {filename}: {e}")
-                continue
-    
-    print(f"Created {len(training_data)} training samples")
-    return training_data
-
-def collate_multi_branch(batch):
-    """Custom collate function for multi-branch data."""
-    lc_batch = torch.stack([item['lc'] for item in batch])
-    pgram_batch = torch.stack([item['pgram'] for item in batch])
-    
-    # For folded_list, we need to batch each position separately
+    # Batch variable-length light curves and periodograms
     batch_size = len(batch)
-    num_candidates = len(batch[0]['folded_list'])
     
-    folded_list_batch = []
-    logP_list_batch = []
+    # For light curves - pad sequences
+    lc_times = [lc.time.squeeze(0) for lc in light_curves]
+    lc_fluxes = [lc.flux.squeeze(0) for lc in light_curves]
     
-    for cand_idx in range(num_candidates):
-        folded_cand_batch = torch.stack([item['folded_list'][cand_idx] for item in batch])
-        logP_cand_batch = torch.stack([item['logP_list'][cand_idx] for item in batch])
+    max_lc_len = max(len(t) for t in lc_times)
+    batched_lc_times = torch.zeros(batch_size, max_lc_len)
+    batched_lc_fluxes = torch.zeros(batch_size, max_lc_len)
+    
+    for i, (time, flux) in enumerate(zip(lc_times, lc_fluxes)):
+        length = len(time)
+        batched_lc_times[i, :length] = time
+        batched_lc_fluxes[i, :length] = flux
+    
+    batched_lc = LightCurve(time=batched_lc_times, flux=batched_lc_fluxes)
+    
+    # For periodograms - pad sequences
+    pg_freqs = [pg.frequencies.squeeze(0) for pg in periodograms]
+    pg_powers = [pg.power.squeeze(0) for pg in periodograms]
+    
+    max_pg_len = max(len(f) for f in pg_freqs)
+    batched_pg_freqs = torch.zeros(batch_size, max_pg_len)
+    batched_pg_powers = torch.zeros(batch_size, max_pg_len)
+    
+    for i, (freq, power) in enumerate(zip(pg_freqs, pg_powers)):
+        length = len(freq)
+        batched_pg_freqs[i, :length] = freq
+        batched_pg_powers[i, :length] = power
+    
+    batched_pg = Periodogram(frequencies=batched_pg_freqs, power=batched_pg_powers)
+    
+    # For folded candidates - handle variable lengths
+    n_candidates = len(folded_candidates_list[0])
+    batched_folded = []
+    
+    for cand_idx in range(n_candidates):
+        cand_times = [batch_folded[cand_idx].time.squeeze(0) for batch_folded in folded_candidates_list]
+        cand_fluxes = [batch_folded[cand_idx].flux.squeeze(0) for batch_folded in folded_candidates_list]
+        cand_periods = torch.stack([batch_folded[cand_idx].period for batch_folded in folded_candidates_list])
         
-        folded_list_batch.append(folded_cand_batch)
-        logP_list_batch.append(logP_cand_batch)
-    
-    true_logP_batch = torch.stack([item['true_logP'] for item in batch])
-    star_class_batch = torch.stack([item['star_class'] for item in batch])
+        max_cand_len = max(len(t) for t in cand_times)
+        batched_cand_times = torch.zeros(batch_size, max_cand_len)
+        batched_cand_fluxes = torch.zeros(batch_size, max_cand_len)
+        
+        for i, (time, flux) in enumerate(zip(cand_times, cand_fluxes)):
+            length = len(time)
+            batched_cand_times[i, :length] = time
+            batched_cand_fluxes[i, :length] = flux
+        
+        batched_folded.append(FoldedCandidate(
+            time=batched_cand_times,
+            flux=batched_cand_fluxes,
+            period=cand_periods
+        ))
     
     return {
-        'lc': lc_batch,
-        'pgram': pgram_batch,
-        'folded_list': folded_list_batch,
-        'logP_list': logP_list_batch,
-        'true_logP': true_logP_batch,
-        'star_class': star_class_batch
+        'light_curve': batched_lc,
+        'periodogram': batched_pg,
+        'folded_candidates': batched_folded,
+        'type_labels': type_labels,
+        'primary_periods': primary_periods,
+        'secondary_periods': secondary_periods,
+        'candidate_labels': candidate_labels
     }
 
 
-def train_model(model: MultiBranchStarModelHybrid, train_loader: DataLoader, cfg: StarModelConfig,
-                num_epochs: int = 50, learning_rate: float = 0.001,
-                device: str = 'cpu') -> MultiBranchStarModelHybrid:
-    """Train the MultiBranchStarModelHybrid model."""
-    
-    model = model.to(device)
+# ===== Training Functions =====
+
+def train_epoch(
+    model: nn.Module,
+    dataloader: DataLoader,
+    optimizer: torch.optim.Optimizer,
+    cfg: StarModelConfig,
+    device: torch.device,
+    lambda_period1: float = 1.0,
+    lambda_period2: float = 1.0,
+    lambda_cand: float = 0.5
+) -> Dict[str, float]:
+    """Train for one epoch."""
     model.train()
+    total_loss = 0.0
+    total_samples = 0
+    all_losses = []
     
-    # Optimizer
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-    
-    print(f"Training on {device} for {num_epochs} epochs...")
-    
-    for epoch in range(num_epochs):
-        total_loss = 0.0
-        total_type_loss = 0.0
-        total_period_loss = 0.0
-        total_cand_loss = 0.0
-        num_batches = 0
+    pbar = tqdm(dataloader, desc="Training")
+    for batch in pbar:
+        # Move to device
+        lc = LightCurve(
+            time=batch['light_curve'].time.to(device),
+            flux=batch['light_curve'].flux.to(device)
+        )
+        pg = Periodogram(
+            frequencies=batch['periodogram'].frequencies.to(device),
+            power=batch['periodogram'].power.to(device)
+        )
+        folded_list = [
+            FoldedCandidate(
+                time=fc.time.to(device),
+                flux=fc.flux.to(device),
+                period=fc.period.to(device)
+            ) for fc in batch['folded_candidates']
+        ]
         
-        for batch_idx, batch in enumerate(train_loader):
-            # Move data to device
-            lc = batch['lc'].to(device)
-            pgram = batch['pgram'].to(device)
-            folded_list = [f.to(device) for f in batch['folded_list']]
-            logP_list = [p.to(device) for p in batch['logP_list']]
-            true_logP = batch['true_logP'].to(device)
-            star_class = batch['star_class'].to(device)
+        type_labels = batch['type_labels'].to(device)
+        primary_periods = batch['primary_periods'].to(device)
+        secondary_periods = batch['secondary_periods'].to(device)
+        candidate_labels = batch['candidate_labels'].to(device)
+        
+        # Handle NaN periods (mask them out in loss computation)
+        primary_mask = ~torch.isnan(primary_periods)
+        secondary_mask = ~torch.isnan(secondary_periods)
+        
+        # Replace NaN with zeros for computation (will be masked in loss)
+        primary_periods = torch.where(primary_mask, primary_periods, torch.zeros_like(primary_periods))
+        secondary_periods = torch.where(secondary_mask, secondary_periods, torch.zeros_like(secondary_periods))
+        
+        optimizer.zero_grad()
+        
+        # Forward pass
+        output = model(lc, pg, folded_list)
+        
+        # Compute loss
+        loss_output = multitask_loss(
+            output,
+            type_labels,
+            primary_periods,
+            secondary_periods,
+            candidate_labels,
+            cfg,
+            lambda_period1=lambda_period1,
+            lambda_period2=lambda_period2,
+            lambda_cand=lambda_cand
+        )
+        
+        loss = loss_output.total_loss
+        loss.backward()
+        
+        # Gradient clipping
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        
+        optimizer.step()
+        
+        # Accumulate losses
+        batch_size = type_labels.size(0)
+        total_loss += loss.item() * batch_size
+        total_samples += batch_size
+        all_losses.append(loss_output.loss_logs)
+        
+        # Update progress bar
+        pbar.set_postfix({
+            'loss': f"{loss.item():.4f}",
+            'type': f"{loss_output.loss_logs.loss_type:.4f}",
+            'period1': f"{loss_output.loss_logs.loss_period1:.4f}",
+            'period2': f"{loss_output.loss_logs.loss_period2:.4f}",
+        })
+    
+    # Compute average losses
+    avg_loss = total_loss / total_samples
+    avg_type_loss = np.mean([l.loss_type for l in all_losses])
+    avg_period1_loss = np.mean([l.loss_period1 for l in all_losses])
+    avg_period2_loss = np.mean([l.loss_period2 for l in all_losses])
+    avg_cand_loss = np.mean([l.loss_cand for l in all_losses])
+    
+    return {
+        'loss': avg_loss,
+        'type_loss': avg_type_loss,
+        'period1_loss': avg_period1_loss,
+        'period2_loss': avg_period2_loss,
+        'cand_loss': avg_cand_loss
+    }
+
+
+def validate_epoch(
+    model: nn.Module,
+    dataloader: DataLoader,
+    cfg: StarModelConfig,
+    device: torch.device,
+    lambda_period1: float = 1.0,
+    lambda_period2: float = 1.0,
+    lambda_cand: float = 0.5
+) -> Tuple[Dict[str, float], np.ndarray, np.ndarray]:
+    """Validate for one epoch."""
+    model.eval()
+    total_loss = 0.0
+    total_samples = 0
+    all_losses = []
+    all_preds = []
+    all_labels = []
+    
+    with torch.no_grad():
+        pbar = tqdm(dataloader, desc="Validation")
+        for batch in pbar:
+            # Move to device
+            lc = LightCurve(
+                time=batch['light_curve'].time.to(device),
+                flux=batch['light_curve'].flux.to(device)
+            )
+            pg = Periodogram(
+                frequencies=batch['periodogram'].frequencies.to(device),
+                power=batch['periodogram'].power.to(device)
+            )
+            folded_list = [
+                FoldedCandidate(
+                    time=fc.time.to(device),
+                    flux=fc.flux.to(device),
+                    period=fc.period.to(device)
+                ) for fc in batch['folded_candidates']
+            ]
+            
+            type_labels = batch['type_labels'].to(device)
+            primary_periods = batch['primary_periods'].to(device)
+            secondary_periods = batch['secondary_periods'].to(device)
+            candidate_labels = batch['candidate_labels'].to(device)
+            
+            # Handle NaN periods
+            primary_mask = ~torch.isnan(primary_periods)
+            secondary_mask = ~torch.isnan(secondary_periods)
+            primary_periods = torch.where(primary_mask, primary_periods, torch.zeros_like(primary_periods))
+            secondary_periods = torch.where(secondary_mask, secondary_periods, torch.zeros_like(secondary_periods))
             
             # Forward pass
-            outputs = model(lc, pgram, folded_list, logP_list)
+            output = model(lc, pg, folded_list)
             
-            # Create candidate labels (first candidate is always correct for simplicity)
-            batch_size = lc.shape[0]
-            num_candidates = len(folded_list)
-            cand_labels = torch.zeros(batch_size, num_candidates, device=device)
-            cand_labels[:, 0] = 1.0  # First candidate is correct
-            
-            # Calculate loss
-            loss, logs = multitask_loss(
-                outputs, star_class, true_logP, cand_labels=cand_labels, cfg=cfg,
-                lambda_period=1.0, lambda_cand=0.5
+            # Compute loss
+            loss_output = multitask_loss(
+                output,
+                type_labels,
+                primary_periods,
+                secondary_periods,
+                candidate_labels,
+                cfg,
+                lambda_period1=lambda_period1,
+                lambda_period2=lambda_period2,
+                lambda_cand=lambda_cand
             )
             
-            # Backward pass
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
+            loss = loss_output.total_loss
             
-            total_loss += logs['loss']
-            total_type_loss += logs['loss_type']
-            total_period_loss += logs['loss_period']
-            total_cand_loss += logs['loss_cand']
-            num_batches += 1
-        
-        # Print epoch statistics
-        avg_loss = total_loss / num_batches
-        avg_type_loss = total_type_loss / num_batches
-        avg_period_loss = total_period_loss / num_batches
-        avg_cand_loss = total_cand_loss / num_batches
-        
-        print(f"Epoch {epoch+1}/{num_epochs}: "
-              f"Loss={avg_loss:.4f}, Type={avg_type_loss:.4f}, "
-              f"Period={avg_period_loss:.4f}, Cand={avg_cand_loss:.4f}")
+            # Accumulate losses and predictions
+            batch_size = type_labels.size(0)
+            total_loss += loss.item() * batch_size
+            total_samples += batch_size
+            all_losses.append(loss_output.loss_logs)
+            
+            # Store predictions for metrics
+            preds = torch.argmax(output.type_logits, dim=1).cpu().numpy()
+            labels = type_labels.cpu().numpy()
+            all_preds.extend(preds)
+            all_labels.extend(labels)
+            
+            # Update progress bar
+            pbar.set_postfix({'loss': f"{loss.item():.4f}"})
     
-    return model
-def save_model(model: MultiBranchStarModelHybrid, cfg: StarModelConfig, save_path: str):
-    """Save the trained multi-branch model."""
-    model_state = {
-        'model_state_dict': model.state_dict(),
-        'config': cfg,
-        'class_names': Config.CLASS_NAMES
+    # Compute average losses
+    avg_loss = total_loss / total_samples
+    avg_type_loss = np.mean([l.loss_type for l in all_losses])
+    avg_period1_loss = np.mean([l.loss_period1 for l in all_losses])
+    avg_period2_loss = np.mean([l.loss_period2 for l in all_losses])
+    avg_cand_loss = np.mean([l.loss_cand for l in all_losses])
+    
+    metrics = {
+        'loss': avg_loss,
+        'type_loss': avg_type_loss,
+        'period1_loss': avg_period1_loss,
+        'period2_loss': avg_period2_loss,
+        'cand_loss': avg_cand_loss
     }
     
-    torch.save(model_state, save_path)
-    print(f"Model saved to {save_path}")
+    return metrics, np.array(all_preds), np.array(all_labels)
+
+
+def save_checkpoint(
+    model: nn.Module,
+    optimizer: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler._LRScheduler,
+    epoch: int,
+    train_metrics: Dict[str, float],
+    val_metrics: Dict[str, float],
+    cfg: StarModelConfig,
+    save_path: Path
+):
+    """Save model checkpoint."""
+    checkpoint = {
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'scheduler_state_dict': scheduler.state_dict(),
+        'train_metrics': train_metrics,
+        'val_metrics': val_metrics,
+        'config': cfg,
+    }
+    torch.save(checkpoint, save_path)
 
 
 def main():
-    """Main training function."""
-    print("Better Impuls Viewer - Multi-Branch Model Training")
-    print("=" * 50)
+    parser = argparse.ArgumentParser(description='Train stellar classification model')
+    parser.add_argument('--output-dir', type=str, default='./runs', help='Output directory')
+    parser.add_argument('--batch-size', type=int, default=16, help='Batch size')
+    parser.add_argument('--epochs', type=int, default=100, help='Number of epochs')
+    parser.add_argument('--lr', type=float, default=1e-3, help='Learning rate')
+    parser.add_argument('--n-per-class', type=int, default=1000, help='Samples per class')
+    parser.add_argument('--val-split', type=float, default=0.2, help='Validation split')
+    parser.add_argument('--seed', type=int, default=42, help='Random seed')
+    parser.add_argument('--device', type=str, default='auto', help='Device (cuda/cpu/auto)')
     
-    # Set random seeds for reproducibility
-    torch.manual_seed(42)
-    np.random.seed(42)
-    random.seed(42)
+    args = parser.parse_args()
     
-    # Configuration
-    # Determine correct sample data path based on current working directory
-    if os.path.basename(os.getcwd()) == "backend":
-        sample_data_dir = "../sample_data"
+    # Set random seeds
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
+    
+    # Setup device
+    if args.device == 'auto':
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     else:
-        sample_data_dir = "sample_data"
+        device = torch.device(args.device)
+    print(f"Using device: {device}")
     
-    batch_size = 8  # Smaller batch size for multi-branch model
-    num_epochs = 30
-    learning_rate = 0.0001  # Lower learning rate for complex model
-    save_path = Config.MODEL_PATH  # Use configured model path
+    # Create output directory
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Model configuration
-    n_types = 13  # Reduced from 14 to 13 as per new model
+    # Create dataset
+    print("Creating dataset...")
+    dataset = StellarDataset(
+        n_per_class=args.n_per_class,
+        max_days=30.0,
+        noise_level=0.02,
+        n_candidates=4,
+        seed=args.seed
+    )
+    
+    # Split dataset
+    val_size = int(args.val_split * len(dataset))
+    train_size = len(dataset) - val_size
+    train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
+    
+    print(f"Train size: {len(train_dataset)}, Val size: {len(val_dataset)}")
+    
+    # Create data loaders
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        collate_fn=collate_fn,
+        num_workers=4 if device.type == 'cuda' else 0
+    )
+    
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=args.batch_size,
+        shuffle=False,
+        collate_fn=collate_fn,
+        num_workers=4 if device.type == 'cuda' else 0
+    )
+    
+    # Create model
     cfg = StarModelConfig(
-        n_types=n_types,
-        lc_in_channels=1,
-        pgram_in_channels=1,
-        folded_in_channels=1,
-        add_period_channel=True,
+        n_types=len(dataset.class_names),
+        logP_mean=dataset.logP_mean,
+        logP_std=dataset.logP_std,
         emb_dim=128,
         merged_dim=256,
         cnn_hidden=64,
         d_model=128,
         n_heads=4,
         n_layers=2,
-        dropout=0.1,
-        logP_mean=0.0,  # Will be computed from data
-        logP_std=1.0   # Will be computed from data
+        dropout=0.1
     )
     
-    # Check if sample data directory exists
-    if not os.path.exists(sample_data_dir):
-        print(f"Error: Sample data directory '{sample_data_dir}' not found!")
-        print("Please run this script from the project root or ensure sample_data/ exists.")
-        return
+    model = MultiBranchStarModelHybrid(cfg).to(device)
     
-    # Create training data
-    print("Creating multi-branch training data from sample files...")
-    training_data = create_training_data(sample_data_dir, num_samples_per_star=3)
+    # Setup optimizer and scheduler
+    optimizer = AdamW(model.parameters(), lr=args.lr, weight_decay=1e-4)
+    scheduler = CosineAnnealingLR(optimizer, T_max=args.epochs, eta_min=1e-6)
     
-    if len(training_data) == 0:
-        print("Error: No training data created!")
-        return
+    # Training loop
+    train_losses = []
+    val_losses = []
+    best_val_loss = float('inf')
     
-    # Compute period statistics for normalization
-    periods = [sample['true_period'] for sample in training_data]
-    log_periods = np.log10(periods)
-    cfg.logP_mean = np.mean(log_periods)
-    cfg.logP_std = np.std(log_periods)
+    print(f"\nStarting training for {args.epochs} epochs...")
     
-    print(f"Period statistics: logP_mean={cfg.logP_mean:.3f}, logP_std={cfg.logP_std:.3f}")
+    for epoch in range(args.epochs):
+        print(f"\nEpoch {epoch+1}/{args.epochs}")
+        
+        # Train
+        train_metrics = train_epoch(
+            model, train_loader, optimizer, cfg, device,
+            lambda_period1=1.0, lambda_period2=1.0, lambda_cand=0.5
+        )
+        
+        # Validate
+        val_metrics, val_preds, val_labels = validate_epoch(
+            model, val_loader, cfg, device,
+            lambda_period1=1.0, lambda_period2=1.0, lambda_cand=0.5
+        )
+        
+        scheduler.step()
+        
+        # Record losses
+        train_losses.append(train_metrics['loss'])
+        val_losses.append(val_metrics['loss'])
+        
+        # Print metrics
+        print(f"Train Loss: {train_metrics['loss']:.4f}")
+        print(f"Val Loss: {val_metrics['loss']:.4f}")
+        print(f"Val Accuracy: {np.mean(val_preds == val_labels):.4f}")
+        
+        # Save best model
+        if val_metrics['loss'] < best_val_loss:
+            best_val_loss = val_metrics['loss']
+            save_checkpoint(
+                model, optimizer, scheduler, epoch,
+                train_metrics, val_metrics, cfg,
+                output_dir / 'best_model.pth'
+            )
+        
+        # Save regular checkpoint
+        if (epoch + 1) % 10 == 0:
+            save_checkpoint(
+                model, optimizer, scheduler, epoch,
+                train_metrics, val_metrics, cfg,
+                output_dir / f'checkpoint_epoch_{epoch+1}.pth'
+            )
     
-    # Create dataset and dataloader
-    dataset = MultiBranchDataset(training_data, lc_length=1200, pgram_length=900, folded_length=200)
-    train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_multi_branch)
+    # Final evaluation
+    print("\nFinal evaluation...")
+    val_metrics, val_preds, val_labels = validate_epoch(
+        model, val_loader, cfg, device
+    )
     
-    print(f"Created dataset with {len(dataset)} samples")
-    print(f"Batch size: {batch_size}, Number of batches: {len(train_loader)}")
+    # Classification report
+    class_names = [dataset.idx_to_class[i] for i in range(len(dataset.class_names))]
+    report = classification_report(val_labels, val_preds, target_names=class_names)
+    print("\nClassification Report:")
+    print(report)
     
-    # Create model
-    model = MultiBranchStarModelHybrid(cfg)
+    # Save training history
+    history = {
+        'train_losses': train_losses,
+        'val_losses': val_losses,
+        'class_names': class_names,
+        'config': vars(args)
+    }
     
-    print(f"Model created with {n_types} classes")
-    print(f"Class names: {Config.CLASS_NAMES[:n_types]}")
+    with open(output_dir / 'training_history.json', 'w') as f:
+        json.dump(history, f, indent=2)
     
-    # Train model
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Using device: {device}")
+    # Plot training curves
+    plt.figure(figsize=(10, 4))
     
-    trained_model = train_model(model, train_loader, cfg, num_epochs=num_epochs, 
-                               learning_rate=learning_rate, device=device)
+    plt.subplot(1, 2, 1)
+    plt.plot(train_losses, label='Train')
+    plt.plot(val_losses, label='Validation')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.title('Training and Validation Loss')
     
-    # Save model
-    save_model(trained_model, cfg, save_path)
+    plt.subplot(1, 2, 2)
+    cm = confusion_matrix(val_labels, val_preds)
+    plt.imshow(cm, interpolation='nearest', cmap=plt.cm.Blues)
+    plt.title('Confusion Matrix')
+    plt.colorbar()
     
-    print("Training completed successfully!")
-    print(f"Trained multi-branch model saved as '{save_path}'")
+    plt.tight_layout()
+    plt.savefig(output_dir / 'training_plots.png', dpi=300, bbox_inches='tight')
+    plt.show()
+    
+    print(f"\nTraining completed! Results saved to {output_dir}")
 
 
 if __name__ == "__main__":
