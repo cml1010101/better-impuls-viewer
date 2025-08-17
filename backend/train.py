@@ -296,16 +296,16 @@ class SyntheticLightCurveDataset(Dataset):
                 for fc in sample['folded_candidates']
             ])  # (N, L)
             
-            # Candidate periods (log-transformed for model)
+            # Candidate periods (not log-transformed - model will handle this)
             candidate_periods = torch.tensor(
-                [np.log10(max(p, 0.1)) for p in sample['candidate_periods']], 
+                [max(p, 0.1) for p in sample['candidate_periods']], 
                 dtype=torch.float32
             )  # (N,)
         
         # Ground truth
         class_label = torch.tensor(sample['class_idx'], dtype=torch.long)
         
-        # Primary and secondary periods (log-transformed)
+        # Primary and secondary periods (not log-transformed - model will handle this)
         primary_period = sample['true_primary_period'] if sample['true_primary_period'] is not None else 1.0
         secondary_period = sample['true_secondary_period'] if sample['true_secondary_period'] is not None else 1.0
         
@@ -313,7 +313,7 @@ class SyntheticLightCurveDataset(Dataset):
         primary_period = max(primary_period, 0.1)
         secondary_period = max(secondary_period, 0.1)
         
-        target_periods = torch.tensor([np.log10(primary_period), np.log10(secondary_period)], dtype=torch.float32)
+        target_periods = torch.tensor([primary_period, secondary_period], dtype=torch.float32)
         
         return {
             'raw_lc': raw_lc,
