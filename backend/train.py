@@ -373,7 +373,7 @@ def load_model(model_path: str, device: str = 'cpu') -> Tuple[MultiBranchStarMod
         raise FileNotFoundError(f"Model file not found: {model_path}")
     
     print(f"Loading model from {model_path}...")
-    checkpoint = torch.load(model_path, map_location=device)
+    checkpoint = torch.load(model_path, map_location=device, weights_only=False)
     
     # Extract model configuration
     config = checkpoint['config']
