@@ -2,6 +2,7 @@
 """
 Training script for the MultiBranchStarModelHybrid model.
 Uses generator.py to create synthetic training data and trains the periodizer model.
+Enhanced with ability to load and continue training from existing models.
 """
 
 import os
@@ -288,7 +289,7 @@ class SyntheticLightCurveDataset(Dataset):
         # Stack folded candidates
         if len(sample['folded_candidates']) == 0:
             # Fallback if no candidates 
-            folded_candidates = torch.randn(4, folded_length)  # Default 4 candidates
+            folded_candidates = torch.randn(4, self.folded_length)  # Default 4 candidates
             candidate_periods = torch.randn(4)
         else:
             folded_candidates = torch.stack([
@@ -357,7 +358,80 @@ def collate_fn(batch):
     }
 
 
+def load_model(model_path: str, device: str = 'cpu') -> Tuple[MultiBranchStarModelHybrid, dict, int]:
+    """
+    Load a pre-trained model from file.
+    
+    Args:
+        model_path: Path to the saved model file
+        device: Device to load model on
+        
+    Returns:
+        Tuple of (model, training_info, start_epoch)
+    """
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"Model file not found: {model_path}")
+    
+    print(f"Loading model from {model_path}...")
+    checkpoint = torch.load(model_path, map_location=device)
+    
+    # Extract model configuration
+    config = checkpoint['config']
+    
+    # Create model with loaded configuration
+    model = MultiBranchStarModelHybrid(config)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model = model.to(device)
+    
+    # Extract training information
+    training_info = checkpoint.get('training_info', {})
+    
+    # Determine starting epoch (if available)
+    start_epoch = training_info.get('completed_epochs', 0)
+    
+    print(f"Model loaded successfully!")
+    print(f"Configuration: {len(checkpoint.get('class_names', []))} classes")
+    print(f"Previous training: {training_info}")
+    
+    return model, training_info, start_epoch
+
+
+def save_model_checkpoint(
+    model: MultiBranchStarModelHybrid, 
+    config: StarModelConfig,
+    save_path: str, 
+    training_info: dict,
+    epoch: int,
+    loss: float
+):
+    """
+    Save model checkpoint with training information.
+    
+    Args:
+        model: The model to save
+        config: Model configuration
+        save_path: Path to save the model
+        training_info: Training information dictionary
+        epoch: Current epoch number
+        loss: Current loss value
+    """
+    # Update training info
+    training_info['completed_epochs'] = epoch + 1
+    training_info['final_loss'] = loss
+    
+    model_state = {
+        'model_state_dict': model.state_dict(),
+        'config': config,
+        'class_names': list(LC_GENERATORS.keys()),
+        'training_info': training_info
+    }
+    
+    torch.save(model_state, save_path)
+    print(f"Model checkpoint saved to {save_path}")
+
+
 def train_model(
+    model_path: Optional[str] = None,
     model_config: Optional[StarModelConfig] = None,
     n_per_class: int = 100,
     batch_size: int = 16,
@@ -365,13 +439,17 @@ def train_model(
     num_epochs: int = 50,
     device: str = 'cpu',
     save_path: str = 'model.pth',
-    seed: Optional[int] = 42
+    seed: Optional[int] = 42,
+    save_every: int = 10,
+    resume_training: bool = True
 ) -> MultiBranchStarModelHybrid:
     """
     Train the MultiBranchStarModelHybrid model on synthetic data.
+    Can load existing model and continue training.
     
     Args:
-        model_config: Model configuration, uses default if None
+        model_path: Path to existing model to load (if None, creates new model)
+        model_config: Model configuration, uses default if None and no model loaded
         n_per_class: Number of synthetic samples per class
         batch_size: Training batch size
         learning_rate: Learning rate for optimizer
@@ -379,6 +457,8 @@ def train_model(
         device: Device to train on ('cpu' or 'cuda')
         save_path: Path to save trained model
         seed: Random seed for reproducibility
+        save_every: Save checkpoint every N epochs
+        resume_training: Whether to resume from existing model if available
         
     Returns:
         Trained model
@@ -390,23 +470,50 @@ def train_model(
         if torch.cuda.is_available():
             torch.cuda.manual_seed(seed)
     
-    # Default model configuration
-    if model_config is None:
-        model_config = StarModelConfig(
-            n_types=len(LC_GENERATORS),  # 13 classes
-            lc_in_channels=1,
-            pgram_in_channels=1, 
-            folded_in_channels=1,
-            emb_dim=128,
-            merged_dim=256,
-            cnn_hidden=64,
-            d_model=128,
-            n_heads=4,
-            n_layers=2,
-            dropout=0.1,
-            logP_mean=0.0,
-            logP_std=1.0,
-        )
+    # Try to load existing model if resume_training is True
+    model = None
+    training_info = {}
+    start_epoch = 0
+    
+    if resume_training and model_path and os.path.exists(model_path):
+        try:
+            model, training_info, start_epoch = load_model(model_path, device)
+            print(f"Resuming training from epoch {start_epoch}")
+        except Exception as e:
+            print(f"Failed to load model from {model_path}: {e}")
+            print("Starting training with new model...")
+            model = None
+    
+    # Create new model if not loaded
+    if model is None:
+        # Default model configuration
+        if model_config is None:
+            model_config = StarModelConfig(
+                n_types=len(LC_GENERATORS),  # 13 classes
+                lc_in_channels=1,
+                pgram_in_channels=1, 
+                folded_in_channels=1,
+                emb_dim=128,
+                merged_dim=256,
+                cnn_hidden=64,
+                d_model=128,
+                n_heads=4,
+                n_layers=2,
+                dropout=0.1,
+                logP_mean=0.0,
+                logP_std=1.0,
+            )
+        
+        model = MultiBranchStarModelHybrid(model_config)
+        model = model.to(device)
+        
+        # Initialize training info for new model
+        training_info = {
+            'n_per_class': n_per_class,
+            'batch_size': batch_size,
+            'learning_rate': learning_rate,
+            'completed_epochs': 0
+        }
     
     # Create dataset and dataloader
     print("Creating synthetic dataset...")
@@ -422,23 +529,20 @@ def train_model(
         collate_fn=collate_fn
     )
     
-    # Create model
-    model = MultiBranchStarModelHybrid(model_config)
-    model = model.to(device)
-    
     # Loss function and optimizer
     loss_fn = MultiTaskLoss(cls_weight=1.0, period_weight=1.0)
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=5)
     
     print(f"Starting training for {num_epochs} epochs on {device}...")
+    print(f"Starting from epoch: {start_epoch}")
     print(f"Dataset size: {len(dataset)} samples")
     print(f"Batch size: {batch_size}")
     print(f"Batches per epoch: {len(dataloader)}")
     
     # Training loop
     model.train()
-    for epoch in range(num_epochs):
+    for epoch in range(start_epoch, start_epoch + num_epochs):
         epoch_loss = 0.0
         epoch_cls_loss = 0.0
         epoch_period_loss = 0.0
@@ -507,27 +611,22 @@ def train_model(
         scheduler.step(avg_loss)
         
         # Print progress
-        if epoch % 10 == 0 or epoch == num_epochs - 1:
-            print(f"Epoch {epoch+1}/{num_epochs}:")
+        if epoch % 10 == 0 or epoch == start_epoch + num_epochs - 1:
+            print(f"Epoch {epoch+1}/{start_epoch + num_epochs}:")
             print(f"  Total Loss: {avg_loss:.4f}")
             print(f"  Classification Loss: {avg_cls_loss:.4f}")
             print(f"  Period Loss: {avg_period_loss:.4f}")
             print(f"  Learning Rate: {optimizer.param_groups[0]['lr']:.6f}")
+        
+        # Save checkpoint periodically
+        if (epoch + 1) % save_every == 0:
+            checkpoint_path = save_path.replace('.pth', f'_epoch_{epoch+1}.pth')
+            save_model_checkpoint(model, model.config, checkpoint_path, training_info, epoch, avg_loss)
     
-    # Save model
-    model_state = {
-        'model_state_dict': model.state_dict(),
-        'config': model_config,
-        'class_names': list(LC_GENERATORS.keys()),
-        'training_info': {
-            'n_per_class': n_per_class,
-            'num_epochs': num_epochs,
-            'final_loss': avg_loss
-        }
-    }
-    
-    torch.save(model_state, save_path)
-    print(f"Model saved to {save_path}")
+    # Save final model
+    save_model_checkpoint(model, model.config, save_path, training_info, 
+                         start_epoch + num_epochs - 1, avg_loss)
+    print(f"Final model saved to {save_path}")
     
     return model
 
@@ -537,6 +636,8 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description='Train MultiBranchStarModelHybrid')
+    parser.add_argument('--model-path', type=str, default='model.pth', 
+                       help='Path to existing model to load/resume from')
     parser.add_argument('--n-per-class', type=int, default=100, help='Samples per class')
     parser.add_argument('--batch-size', type=int, default=16, help='Batch size')
     parser.add_argument('--epochs', type=int, default=50, help='Number of epochs')
@@ -544,18 +645,40 @@ def main():
     parser.add_argument('--device', type=str, default='cpu', help='Device (cpu/cuda)')
     parser.add_argument('--save-path', type=str, default='model.pth', help='Save path')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
+    parser.add_argument('--save-every', type=int, default=10, help='Save checkpoint every N epochs')
+    parser.add_argument('--no-resume', action='store_true', help='Don\'t resume from existing model')
     
     args = parser.parse_args()
     
+    # Determine if we should resume training
+    resume_training = not args.no_resume
+    
+    # Use model_path as save_path if save_path not explicitly set differently
+    if args.save_path == 'model.pth' and args.model_path != 'model.pth':
+        save_path = args.model_path
+    else:
+        save_path = args.save_path
+    
+    print(f"Training configuration:")
+    print(f"  Model path: {args.model_path}")
+    print(f"  Save path: {save_path}")
+    print(f"  Resume training: {resume_training}")
+    print(f"  Samples per class: {args.n_per_class}")
+    print(f"  Epochs: {args.epochs}")
+    print(f"  Device: {args.device}")
+    
     # Train model
     model = train_model(
+        model_path=args.model_path,
         n_per_class=args.n_per_class,
         batch_size=args.batch_size,
         learning_rate=args.lr,
         num_epochs=args.epochs,
         device=args.device,
-        save_path=args.save_path,
-        seed=args.seed
+        save_path=save_path,
+        seed=args.seed,
+        save_every=args.save_every,
+        resume_training=resume_training
     )
     
     print("Training completed successfully!")
