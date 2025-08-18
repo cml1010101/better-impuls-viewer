@@ -621,10 +621,10 @@ def train_model(
         # Save checkpoint periodically
         if (epoch + 1) % save_every == 0:
             checkpoint_path = save_path.replace('.pth', f'_epoch_{epoch+1}.pth')
-            save_model_checkpoint(model, model.config, checkpoint_path, training_info, epoch, avg_loss)
+            save_model_checkpoint(model, model_config, checkpoint_path, training_info, epoch, avg_loss)
     
     # Save final model
-    save_model_checkpoint(model, model.config, save_path, training_info, 
+    save_model_checkpoint(model, model_config, save_path, training_info, 
                          start_epoch + num_epochs - 1, avg_loss)
     print(f"Final model saved to {save_path}")
     
