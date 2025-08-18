@@ -1,0 +1,11 @@
+Performance Report for quick_test_model.pth
+Generated: 2025-08-18 16:29:53
+
+Classification Accuracy: 18.4%
+Period MAE: 4.7021
+Inference Time: 34.75 ms
+Parameters: 1,513,105
+
+Optimization Suggestions:
+  1. Low classification accuracy - consider more training epochs or data
+  2. High period prediction error - review period normalization

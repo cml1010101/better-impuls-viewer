@@ -32,8 +32,7 @@ out/
 .DS_Store
 Thumbs.db
 
-# Trained models
-*.pth
-trained_cnn_model.pth
+# Trained models (now tracked via Git LFS - see .gitattributes)
+# Note: .pth files are now tracked with Git LFS, not ignored
 
 .env

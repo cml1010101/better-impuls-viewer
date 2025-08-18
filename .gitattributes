@@ -1,0 +1,11 @@
+# Track model files with Git LFS
+*.pth filter=lfs diff=lfs merge=lfs -text
+model.pth filter=lfs diff=lfs merge=lfs -text
+*_model.pth filter=lfs diff=lfs merge=lfs -text
+*_checkpoint.pth filter=lfs diff=lfs merge=lfs -text
+trained_*.pth filter=lfs diff=lfs merge=lfs -text
+
+# Track other large binary files that might be added later
+*.pkl filter=lfs diff=lfs merge=lfs -text
+*.h5 filter=lfs diff=lfs merge=lfs -text
+*.hdf5 filter=lfs diff=lfs merge=lfs -text
