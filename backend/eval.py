@@ -23,7 +23,6 @@ def test_model_creation():
         lc_in_channels=1,
         pgram_in_channels=1,
         folded_in_channels=1,
-        add_period_channel=True,
         emb_dim=128,
         merged_dim=256,
         cnn_hidden=64,
@@ -42,27 +41,27 @@ def test_model_creation():
     lc = torch.randn(batch_size, 1, 1200)  # Raw light curve
     pgram = torch.randn(batch_size, 1, 900)  # Periodogram
     
-    # Folded candidates: list of tensors
-    folded_list = [
-        torch.randn(batch_size, 1, 200),
-        torch.randn(batch_size, 1, 200),
-        torch.randn(batch_size, 1, 200),
-        torch.randn(batch_size, 1, 200)
-    ]
+    # Folded candidates data as a single tensor
+    folded_data = torch.randn(batch_size, 4, 200)  # 4 candidates
     
-    # Corresponding log periods
-    logP_list = [
-        torch.randn(batch_size),
-        torch.randn(batch_size),
-        torch.randn(batch_size),
-        torch.randn(batch_size)
-    ]
+    # Corresponding log periods 
+    folded_periods = torch.randn(batch_size, 4)
     
-    outputs = model(lc, pgram, folded_list, logP_list)
+    # Create ModelInput
+    from periodizer import ModelInput
+    model_input = ModelInput(
+        lc=lc,
+        pgram=pgram,
+        folded_data=folded_data,
+        folded_periods=folded_periods
+    )
     
-    assert outputs["type_logits"].shape == (batch_size, 13), f"Expected type shape ({batch_size}, 13), got {outputs['type_logits'].shape}"
-    assert outputs["logP_pred"].shape == (batch_size,), f"Expected period shape ({batch_size},), got {outputs['logP_pred'].shape}"
-    assert outputs["cand_logits"].shape == (batch_size, 4), f"Expected candidate shape ({batch_size}, 4), got {outputs['cand_logits'].shape}"
+    outputs = model(model_input)
+    
+    assert outputs.type_logits.shape == (batch_size, 13), f"Expected type shape ({batch_size}, 13), got {outputs.type_logits.shape}"
+    assert outputs.logP1_pred.shape == (batch_size,), f"Expected primary period shape ({batch_size},), got {outputs.logP1_pred.shape}"
+    assert outputs.logP2_pred.shape == (batch_size,), f"Expected secondary period shape ({batch_size},), got {outputs.logP2_pred.shape}"
+    assert outputs.cand_logits.shape == (batch_size, 4), f"Expected candidate shape ({batch_size}, 4), got {outputs.cand_logits.shape}"
     
     print("✓ Multi-branch model creation test passed")
 
@@ -71,36 +70,34 @@ def test_multitask_loss():
     """Test the multitask loss function."""
     print("Testing multitask loss function...")
     
-    cfg = StarModelConfig(
-        n_types=13,
-        logP_mean=0.0,
-        logP_std=1.0,
-    )
-    
     batch_size = 2
     
     # Create fake model outputs
-    outputs = {
-        "type_logits": torch.randn(batch_size, 13),
-        "logP_pred": torch.randn(batch_size),
-        "cand_logits": torch.randn(batch_size, 4),
-    }
+    from periodizer import ModelOutput
+    outputs = ModelOutput(
+        type_logits=torch.randn(batch_size, 13),
+        logP1_pred=torch.randn(batch_size),
+        logP2_pred=torch.randn(batch_size),
+        cand_logits=torch.randn(batch_size, 4),
+        cand_weights=torch.randn(batch_size, 4),
+        cand_embs=torch.randn(batch_size, 4, 128),
+        z_fused=torch.randn(batch_size, 256),
+        z_lc=torch.randn(batch_size, 128),
+        z_pg=torch.randn(batch_size, 128),
+        z_folded=torch.randn(batch_size, 128)
+    )
     
     # Create fake labels
     y_type = torch.randint(0, 13, (batch_size,))
-    true_logP = torch.randn(batch_size)
-    cand_labels = torch.zeros(batch_size, 4)
-    cand_labels[:, 0] = 1.0  # First candidate is correct
+    true_periods = torch.randn(batch_size, 2)  # [primary, secondary]
     
     # Compute loss
-    loss, logs = multitask_loss(outputs, y_type, true_logP, cand_labels=cand_labels, cfg=cfg)
+    loss_output = multitask_loss(outputs, y_type, true_periods)
     
-    assert isinstance(loss, torch.Tensor), "Loss should be a tensor"
-    assert loss.numel() == 1, "Loss should be a scalar"
-    assert "loss" in logs, "Loss logs should contain 'loss'"
-    assert "loss_type" in logs, "Loss logs should contain 'loss_type'"
-    assert "loss_period" in logs, "Loss logs should contain 'loss_period'"
-    assert "loss_cand" in logs, "Loss logs should contain 'loss_cand'"
+    assert isinstance(loss_output.total, torch.Tensor), "Total loss should be a tensor"
+    assert loss_output.total.numel() == 1, "Total loss should be a scalar"
+    assert isinstance(loss_output.cls, torch.Tensor), "Classification loss should be a tensor"
+    assert isinstance(loss_output.period, torch.Tensor), "Period loss should be a tensor"
     
     print("✓ Multitask loss test passed")
 
@@ -114,7 +111,6 @@ def test_model_save_load():
         lc_in_channels=1,
         pgram_in_channels=1,
         folded_in_channels=1,
-        add_period_channel=True,
         emb_dim=64,  # Smaller for faster testing
         merged_dim=128,
         cnn_hidden=32,
@@ -151,13 +147,23 @@ def test_model_save_load():
         batch_size = 1
         lc = torch.randn(batch_size, 1, 100)
         pgram = torch.randn(batch_size, 1, 50)
-        folded_list = [torch.randn(batch_size, 1, 25) for _ in range(2)]
-        logP_list = [torch.randn(batch_size) for _ in range(2)]
+        folded_data = torch.randn(batch_size, 2, 25)  # 2 candidates
+        folded_periods = torch.randn(batch_size, 2)
         
-        outputs = loaded_model(lc, pgram, folded_list, logP_list)
+        # Create ModelInput
+        from periodizer import ModelInput
+        model_input = ModelInput(
+            lc=lc,
+            pgram=pgram,
+            folded_data=folded_data,
+            folded_periods=folded_periods
+        )
         
-        assert outputs["type_logits"].shape == (batch_size, 13)
-        assert outputs["logP_pred"].shape == (batch_size,)
+        outputs = loaded_model(model_input)
+        
+        assert outputs.type_logits.shape == (batch_size, 13)
+        assert outputs.logP1_pred.shape == (batch_size,)
+        assert outputs.logP2_pred.shape == (batch_size,)
         
         print("✓ Model save/load test passed")
     
