@@ -249,6 +249,49 @@ python backend/csv_data_loader.py --csv-input training_data.csv --stars "1:3"
 
 See [CSV_TRAINING_GUIDE.md](CSV_TRAINING_GUIDE.md) for detailed documentation.
 
+### Synthetic Training Data Generation
+Generate realistic synthetic astronomical datasets for training and testing:
+
+```bash
+# Generate training dataset with synthetic light curves
+python backend/generate_training_data.py --n-stars 100 --output-dir synthetic_training
+
+# Customize parameters
+python backend/generate_training_data.py \
+  --n-stars 50 \
+  --surveys hubble kepler tess \
+  --max-days 100 \
+  --noise-level 0.02 \
+  --output-dir custom_dataset
+
+# Use the generator directly in Python
+python backend/generator.py --action generate-tbl --n-stars 20
+
+# Demo the synthetic generator
+python backend/generator.py --action demo
+```
+
+**Synthetic Data Features:**
+- **14 Variability Classes**: Sinusoidal, eclipsing binaries, pulsators, bursters, dippers, and more
+- **Realistic Noise**: Photometric errors based on flux levels and observational characteristics  
+- **Multiple Surveys**: Generate data for different telescope/survey combinations
+- **Period Diversity**: Logarithmic period distribution from 0.1 to 20 days
+- **Metadata Export**: Includes CSV file with star catalog and classification information
+- **.tbl Format**: Compatible with existing data pipeline and training code
+
+**Supported Variability Classes:**
+- Sinusoidal (stellar rotation/spots)
+- Double dip (binary with two eclipses)
+- Shape changer (spot evolution)
+- Beater patterns (beat frequencies)
+- Resolved close/distant peaks
+- Eclipsing binaries
+- Pulsating variables
+- Bursters and dippers
+- Co-rotating material
+- Long-term trends
+- Stochastic variability
+
 ### CSV Training Pipeline
 Train the CNN model using real astronomical data:
 

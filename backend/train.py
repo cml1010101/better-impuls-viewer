@@ -16,14 +16,28 @@ import glob
 from pathlib import Path
 
 # Import project modules
-from generator import generate_light_curve, LC_GENERATORS, SyntheticLightCurve
-from periodizer import (
-    MultiBranchStarModelHybrid, 
-    StarModelConfig, 
-    ModelInput, 
-    ModelOutput,
-    MultiTaskLoss
-)
+try:
+    from generator import generate_light_curve, LC_GENERATORS, SyntheticLightCurve
+except ImportError:
+    from .generator import generate_light_curve, LC_GENERATORS, SyntheticLightCurve
+    
+try:
+    from periodizer import (
+        MultiBranchStarModelHybrid, 
+        StarModelConfig, 
+        ModelInput, 
+        ModelOutput,
+        MultiTaskLoss
+    )
+except ImportError:
+    from .periodizer import (
+        MultiBranchStarModelHybrid, 
+        StarModelConfig, 
+        ModelInput, 
+        ModelOutput,
+        MultiTaskLoss
+    )
+
 from data_processing import (
     detect_period_lomb_scargle, 
     phase_fold_data, 

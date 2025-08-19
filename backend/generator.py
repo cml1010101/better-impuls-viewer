@@ -1,7 +1,9 @@
 # generator.py
 
 import numpy as np
+import os
 from typing import Tuple, List, Optional, NamedTuple
+from pathlib import Path
 
 # ===== Utility Functions =====
 def random_time(n_points=500, days=100, rng=None):
@@ -20,6 +22,27 @@ def add_noise(flux, noise_level=0.02, rng=None):
 def add_linear_trend(time, flux, slope=0.0):
     """Add linear brightening/dimming trend"""
     return flux + slope * (time - time[0])
+
+def add_realistic_errors(flux, time=None, rng=None):
+    """Add realistic photometric errors based on flux levels and observational characteristics"""
+    rng = rng or np.random.default_rng()
+    
+    # Base error level varies with flux (typical for CCD photometry)
+    base_error = 0.001 + 0.0005 / np.sqrt(flux)
+    
+    # Add systematic errors (temperature variations, etc.)
+    systematic_error = 0.0003 * rng.random(len(flux))
+    
+    # Total error
+    error = np.sqrt(base_error**2 + systematic_error**2)
+    
+    # Add some scatter to make it more realistic
+    error *= rng.uniform(0.8, 1.2, len(flux))
+    
+    # Typical range 0.001 to 0.003 for good quality photometry
+    error = np.clip(error, 0.001, 0.003)
+    
+    return error
 
 def sinewave(time, period, amp=1.0, phase=0):
     """Basic sinusoidal function"""
@@ -397,6 +420,7 @@ LC_SLOPE_RANGES = {
 class SyntheticLightCurve(NamedTuple):
     time: np.ndarray
     flux: np.ndarray
+    error: np.ndarray  # Add error array
     label: int
     label_str: str
     slope: float
@@ -458,9 +482,13 @@ def generate_light_curve(
     # Add observational noise
     flux = add_noise(flux, noise_level=noise_level, rng=rng)
     
+    # Generate realistic errors
+    error = add_realistic_errors(flux, time, rng)
+    
     return SyntheticLightCurve(
         time=time,
         flux=flux,
+        error=error,
         label=class_type,
         label_str=class_type_str,
         slope=slope,
@@ -500,36 +528,221 @@ def generate_dataset(
     return dataset
 
 
+# ===== .tbl File Generation =====
+
+def save_lightcurve_to_tbl(lightcurve: SyntheticLightCurve, filepath: str):
+    """
+    Save a SyntheticLightCurve to a .tbl file in the standard format.
+    
+    Parameters
+    ----------
+    lightcurve : SyntheticLightCurve
+        The synthetic light curve to save
+    filepath : str
+        Path where to save the .tbl file
+    """
+    # Create directory if it doesn't exist
+    Path(filepath).parent.mkdir(parents=True, exist_ok=True)
+    
+    # Write to file in standard .tbl format
+    with open(filepath, 'w') as f:
+        f.write("# Time (days)\tFlux\tError\n")
+        for t, flux, error in zip(lightcurve.time, lightcurve.flux, lightcurve.error):
+            f.write(f"{t:.6f}\t{flux:.6f}\t{error:.6f}\n")
+
+
+def generate_training_dataset_tbl(
+    output_dir: str = "training_dataset",
+    n_stars: int = 50,
+    surveys: List[str] = ["hubble", "kepler", "tess"],
+    n_per_class: int = 10,
+    **kwargs
+):
+    """
+    Generate a training dataset of .tbl files using the synthetic light curve generator.
+    
+    Parameters
+    ----------
+    output_dir : str
+        Directory where to save the generated .tbl files
+    n_stars : int
+        Number of stars (star IDs) to generate
+    surveys : List[str]
+        List of survey names to simulate
+    n_per_class : int
+        Number of light curves per variability class
+    **kwargs
+        Additional arguments passed to generate_light_curve()
+    
+    Returns
+    -------
+    dict
+        Summary of generated files with metadata
+    """
+    
+    # Create output directory
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+    
+    # Create CSV metadata file for star catalog
+    csv_filepath = Path(output_dir) / "training_stars.csv"
+    
+    generated_files = []
+    csv_data = []
+    
+    # Set different random seeds for different surveys to get variety
+    survey_seeds = {"hubble": 42, "kepler": 123, "tess": 456}
+    
+    print(f"Generating training dataset in {output_dir}/")
+    print(f"Stars: {n_stars}, Surveys: {surveys}")
+    print(f"Light curves per class: {n_per_class}")
+    
+    for star_id in range(1, n_stars + 1):
+        # Generate different light curve class for each star
+        class_names = list(LC_GENERATORS.keys())
+        star_class = class_names[(star_id - 1) % len(class_names)]
+        star_class_idx = list(LC_GENERATORS.keys()).index(star_class)
+        
+        for survey in surveys:
+            # Set seed for reproducibility but vary by survey
+            np.random.seed(survey_seeds[survey] + star_id)
+            
+            # Generate synthetic light curve
+            lc = generate_light_curve(
+                star_class_idx, 
+                star_class,
+                **kwargs
+            )
+            
+            # Save as .tbl file
+            filename = f"{star_id}-{survey}.tbl"
+            filepath = Path(output_dir) / filename
+            save_lightcurve_to_tbl(lc, str(filepath))
+            
+            generated_files.append({
+                'star_id': star_id,
+                'survey': survey,
+                'filename': filename,
+                'class': star_class,
+                'class_idx': star_class_idx,
+                'primary_period': lc.primary_period,
+                'secondary_period': lc.secondary_period,
+                'slope': lc.slope,
+                'n_points': len(lc.time)
+            })
+        
+        # Add star to CSV data (once per star, not per survey)
+        csv_data.append({
+            'star_number': star_id,
+            'name': f"synthetic_star_{star_id}",
+            'ra': f"{(star_id * 15) % 360:.6f}",  # Spread stars across sky
+            'dec': f"{((star_id * 7) % 180) - 90:.6f}",
+            'class': star_class,
+            'primary_period': lc.primary_period if lc.primary_period else -9,
+            'secondary_period': lc.secondary_period if lc.secondary_period else -9
+        })
+    
+    # Write CSV metadata file
+    with open(csv_filepath, 'w') as f:
+        f.write("star_number,name,ra,dec,class,primary_period,secondary_period\n")
+        for data in csv_data:
+            f.write(f"{data['star_number']},{data['name']},{data['ra']},{data['dec']},{data['class']},{data['primary_period']},{data['secondary_period']}\n")
+    
+    summary = {
+        'output_dir': output_dir,
+        'n_files': len(generated_files),
+        'n_stars': n_stars,
+        'surveys': surveys,
+        'files': generated_files,
+        'csv_file': str(csv_filepath)
+    }
+    
+    print(f"\nGenerated {len(generated_files)} .tbl files")
+    print(f"Metadata saved to {csv_filepath}")
+    
+    return summary
+
+
 # ===== Example Usage =====
 
 if __name__ == "__main__":
-    # Generate example dataset
-    np.random.seed(42)
-    dataset = generate_dataset(n_per_class=10, max_days=50)
+    import argparse
     
-    print(f"Generated {len(dataset)} light curves across {len(LC_GENERATORS)} classes")
+    parser = argparse.ArgumentParser(description="Generate synthetic light curve datasets")
+    parser.add_argument("--action", choices=["demo", "generate-tbl"], default="demo",
+                       help="Action to perform (default: demo)")
+    parser.add_argument("--output-dir", default="training_dataset",
+                       help="Output directory for .tbl files (default: training_dataset)")
+    parser.add_argument("--n-stars", type=int, default=20,
+                       help="Number of stars to generate (default: 20)")
+    parser.add_argument("--surveys", nargs="+", default=["hubble", "kepler", "tess"],
+                       help="Survey names to simulate (default: hubble kepler tess)")
+    parser.add_argument("--n-per-class", type=int, default=5,
+                       help="Number of light curves per class for demo (default: 5)")
+    parser.add_argument("--max-days", type=float, default=50,
+                       help="Maximum observation duration in days (default: 50)")
     
-    # Show statistics from the dataset
-    labels = [lc.label for lc in dataset]
-    slopes = [lc.slope for lc in dataset]
-    periods = [lc.primary_period for lc in dataset if lc.primary_period is not None]
+    args = parser.parse_args()
     
-    print(f"\nClasses: {set(labels)}")
-    print(f"\nPeriodic curves: {len(periods)}/{len(labels)}")
-    if periods:
-        print(f"Primary Period range: {min(periods):.2f} - {max(periods):.2f} days")
-    
-    # Show slope statistics
-    print(f"Slope range: {min(slopes):.6f} - {max(slopes):.6f} flux/day")
+    if args.action == "demo":
+        # Generate example dataset
+        print("=== Synthetic Light Curve Generator Demo ===")
+        np.random.seed(42)
+        dataset = generate_dataset(n_per_class=args.n_per_class, max_days=args.max_days)
+        
+        print(f"Generated {len(dataset)} light curves across {len(LC_GENERATORS)} classes")
+        
+        # Show statistics from the dataset
+        labels = [lc.label for lc in dataset]
+        slopes = [lc.slope for lc in dataset]
+        periods = [lc.primary_period for lc in dataset if lc.primary_period is not None]
+        
+        print(f"\nClasses: {set(labels)}")
+        print(f"\nPeriodic curves: {len(periods)}/{len(labels)}")
+        if periods:
+            print(f"Primary Period range: {min(periods):.2f} - {max(periods):.2f} days")
+        
+        # Show slope statistics
+        print(f"Slope range: {min(slopes):.6f} - {max(slopes):.6f} flux/day")
 
-    # Example of accessing data from a single generated light curve
-    example_lc = dataset[0]
-    print(f"\nExample Light Curve:")
-    print(f"  Class: {example_lc.label}")
-    print(f"  Primary Period: {example_lc.primary_period:.2f} days" if example_lc.primary_period is not None else "  Primary Period: None")
-    print(f"  Secondary Period: {example_lc.secondary_period:.2f} days" if example_lc.secondary_period is not None else "  Secondary Period: None")
-    print(f"  Slope: {example_lc.slope:.6f} flux/day")
-    print(f"  Time array shape: {example_lc.time.shape}")
-    print(f"  Flux array shape: {example_lc.flux.shape}")
-    print(f"  First 5 flux values: {example_lc.flux[:5]}")
-    # Note: Visualization and further analysis can be done using libraries like matplotlib or pandas
+        # Example of accessing data from a single generated light curve
+        example_lc = dataset[0]
+        print(f"\nExample Light Curve:")
+        print(f"  Class: {example_lc.label_str}")
+        print(f"  Primary Period: {example_lc.primary_period:.2f} days" if example_lc.primary_period is not None else "  Primary Period: None")
+        print(f"  Secondary Period: {example_lc.secondary_period:.2f} days" if example_lc.secondary_period is not None else "  Secondary Period: None")
+        print(f"  Slope: {example_lc.slope:.6f} flux/day")
+        print(f"  Time array shape: {example_lc.time.shape}")
+        print(f"  Flux array shape: {example_lc.flux.shape}")
+        print(f"  Error array shape: {example_lc.error.shape}")
+        print(f"  First 5 flux values: {example_lc.flux[:5]}")
+        print(f"  First 5 error values: {example_lc.error[:5]}")
+        
+    elif args.action == "generate-tbl":
+        # Generate training dataset as .tbl files
+        print("=== Generating Training Dataset .tbl Files ===")
+        summary = generate_training_dataset_tbl(
+            output_dir=args.output_dir,
+            n_stars=args.n_stars,
+            surveys=args.surveys,
+            max_days=args.max_days
+        )
+        
+        print(f"\n=== Summary ===")
+        print(f"Output directory: {summary['output_dir']}")
+        print(f"Total files generated: {summary['n_files']}")
+        print(f"Stars: {summary['n_stars']}")
+        print(f"Surveys: {summary['surveys']}")
+        print(f"CSV metadata file: {summary['csv_file']}")
+        
+        # Show class distribution
+        class_counts = {}
+        for file_info in summary['files']:
+            cls = file_info['class']
+            class_counts[cls] = class_counts.get(cls, 0) + 1
+        
+        print(f"\nClass distribution:")
+        for cls, count in class_counts.items():
+            print(f"  {cls}: {count} files")
+        
+        print(f"\nGeneration complete! You can now use the .tbl files in {summary['output_dir']} for training.")
+        # Note: Visualization and further analysis can be done using libraries like matplotlib or pandas
