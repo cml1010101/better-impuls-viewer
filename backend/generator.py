@@ -584,7 +584,7 @@ def generate_training_dataset_tbl(
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     
     # Create CSV metadata file for star catalog
-    csv_filepath = Path(output_dir) / "training_stars.csv"
+    csv_filepath = Path(output_dir) / "synthetic_stars.csv"
     
     generated_files = []
     csv_data = []

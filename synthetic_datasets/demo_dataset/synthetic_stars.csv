@@ -1,0 +1,4 @@
+star_number,name,ra,dec,class,primary_period,secondary_period
+1,synthetic_star_1,15.000000,-83.000000,sinusoidal,1.1473841732135184,-9
+2,synthetic_star_2,30.000000,-76.000000,double dip,0.5597688251494304,0.2798844125747152
+3,synthetic_star_3,45.000000,-69.000000,shape changer,0.18983029996145645,18.812060409677503
