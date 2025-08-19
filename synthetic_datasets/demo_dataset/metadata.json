@@ -1,0 +1,93 @@
+{
+  "created_at": "2025-08-19T02:25:30.714533",
+  "parameters": {
+    "name": "demo_dataset",
+    "n_stars": 3,
+    "surveys": [
+      "hubble",
+      "kepler"
+    ],
+    "max_days": 20.0,
+    "min_days": 10.0,
+    "noise_level": 0.02,
+    "seed": 123
+  },
+  "summary": {
+    "output_dir": "synthetic_datasets/demo_dataset",
+    "n_files": 6,
+    "n_stars": 3,
+    "surveys": [
+      "hubble",
+      "kepler"
+    ],
+    "files": [
+      {
+        "star_id": 1,
+        "survey": "hubble",
+        "filename": "1-hubble.tbl",
+        "class": "sinusoidal",
+        "class_idx": 0,
+        "primary_period": 2.490959780339166,
+        "secondary_period": null,
+        "slope": -0.00011231432251475695,
+        "n_points": 915
+      },
+      {
+        "star_id": 1,
+        "survey": "kepler",
+        "filename": "1-kepler.tbl",
+        "class": "sinusoidal",
+        "class_idx": 0,
+        "primary_period": 1.1473841732135184,
+        "secondary_period": null,
+        "slope": 0.00023872629115890523,
+        "n_points": 1466
+      },
+      {
+        "star_id": 2,
+        "survey": "hubble",
+        "filename": "2-hubble.tbl",
+        "class": "double dip",
+        "class_idx": 1,
+        "primary_period": 1.3224974091239647,
+        "secondary_period": 0.6612487045619824,
+        "slope": -0.0002761727210829138,
+        "n_points": 1192
+      },
+      {
+        "star_id": 2,
+        "survey": "kepler",
+        "filename": "2-kepler.tbl",
+        "class": "double dip",
+        "class_idx": 1,
+        "primary_period": 0.5597688251494304,
+        "secondary_period": 0.2798844125747152,
+        "slope": -0.00039080846532380664,
+        "n_points": 1299
+      },
+      {
+        "star_id": 3,
+        "survey": "hubble",
+        "filename": "3-hubble.tbl",
+        "class": "shape changer",
+        "class_idx": 2,
+        "primary_period": 2.0390657200101483,
+        "secondary_period": 6.049899900874065,
+        "slope": 0.0005038086943562469,
+        "n_points": 1385
+      },
+      {
+        "star_id": 3,
+        "survey": "kepler",
+        "filename": "3-kepler.tbl",
+        "class": "shape changer",
+        "class_idx": 2,
+        "primary_period": 0.18983029996145645,
+        "secondary_period": 18.812060409677503,
+        "slope": 0.000587986539935562,
+        "n_points": 897
+      }
+    ],
+    "csv_file": "synthetic_datasets/demo_dataset/synthetic_stars.csv"
+  }
+}

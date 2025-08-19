@@ -1,0 +1,95 @@
+{
+  "created_at": "2025-08-19T02:36:35.721420",
+  "parameters": {
+    "name": "test_ui_dataset",
+    "n_stars": 2,
+    "surveys": [
+      "hubble",
+      "kepler",
+      "tess"
+    ],
+    "max_days": 50.0,
+    "min_days": 10.0,
+    "noise_level": 0.02,
+    "seed": 42
+  },
+  "summary": {
+    "output_dir": "synthetic_datasets/test_ui_dataset",
+    "n_files": 6,
+    "n_stars": 2,
+    "surveys": [
+      "hubble",
+      "kepler",
+      "tess"
+    ],
+    "files": [
+      {
+        "star_id": 1,
+        "survey": "hubble",
+        "filename": "1-hubble.tbl",
+        "class": "sinusoidal",
+        "class_idx": 0,
+        "primary_period": 0.42081736259422375,
+        "secondary_period": null,
+        "slope": -0.00013755500829482428,
+        "n_points": 2681
+      },
+      {
+        "star_id": 1,
+        "survey": "kepler",
+        "filename": "1-kepler.tbl",
+        "class": "sinusoidal",
+        "class_idx": 0,
+        "primary_period": 4.63027338775898,
+        "secondary_period": null,
+        "slope": 0.0002844735754263868,
+        "n_points": 2332
+      },
+      {
+        "star_id": 1,
+        "survey": "tess",
+        "filename": "1-tess.tbl",
+        "class": "sinusoidal",
+        "class_idx": 0,
+        "primary_period": 0.12817104531966633,
+        "secondary_period": null,
+        "slope": -0.00019223694550519576,
+        "n_points": 1020
+      },
+      {
+        "star_id": 2,
+        "survey": "hubble",
+        "filename": "2-hubble.tbl",
+        "class": "double dip",
+        "class_idx": 1,
+        "primary_period": 1.5820915877312824,
+        "secondary_period": 0.7910457938656412,
+        "slope": 0.0002069436102339606,
+        "n_points": 1908
+      },
+      {
+        "star_id": 2,
+        "survey": "kepler",
+        "filename": "2-kepler.tbl",
+        "class": "double dip",
+        "class_idx": 1,
+        "primary_period": 0.19867188077286224,
+        "secondary_period": 0.09933594038643112,
+        "slope": -0.0004410935808735279,
+        "n_points": 2047
+      },
+      {
+        "star_id": 2,
+        "survey": "tess",
+        "filename": "2-tess.tbl",
+        "class": "double dip",
+        "class_idx": 1,
+        "primary_period": 7.095187475116761,
+        "secondary_period": 3.5475937375583806,
+        "slope": 0.00035206909837204325,
+        "n_points": 2949
+      }
+    ],
+    "csv_file": "synthetic_datasets/test_ui_dataset/synthetic_stars.csv"
+  }
+}

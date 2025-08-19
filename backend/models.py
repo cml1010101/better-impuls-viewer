@@ -55,6 +55,35 @@ class PeriodizationResult(BaseModel):
     candidate_periods: List[CandidatePeriod]
 
 
+class DatasetInfo(BaseModel):
+    name: str
+    path: str
+    n_stars: int
+    n_files: int
+    surveys: List[str]
+    created_at: Optional[str] = None
+    total_data_points: int
+
+
+class SyntheticStarInfo(BaseModel):
+    star_id: int
+    name: str
+    variability_class: str
+    primary_period: Optional[float]
+    secondary_period: Optional[float]
+    surveys: List[str]
+
+
+class DatasetGenerationRequest(BaseModel):
+    name: str
+    n_stars: int = 50
+    surveys: List[str] = ["hubble", "kepler", "tess"]
+    max_days: float = 50.0
+    min_days: float = 10.0
+    noise_level: float = 0.02
+    seed: Optional[int] = None
+
+
 class SEDData(BaseModel):
     url: str
     available: bool

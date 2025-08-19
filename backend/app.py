@@ -430,6 +430,297 @@ async def get_auto_periodization_classification(star_number: int, survey_name: s
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error in auto analysis: {str(e)}")
 
+# ===== Synthetic Dataset Management Endpoints =====
+
+import json
+from datetime import datetime
+from pathlib import Path
+from models import DatasetInfo, SyntheticStarInfo, DatasetGenerationRequest
+from generator import generate_training_dataset_tbl
+import pandas as pd
+import glob
+import shutil
+
+SYNTHETIC_DATASETS_DIR = "synthetic_datasets"
+
+def ensure_synthetic_datasets_dir():
+    """Ensure the synthetic datasets directory exists."""
+    Path(SYNTHETIC_DATASETS_DIR).mkdir(exist_ok=True)
+
+def load_dataset_metadata(dataset_path: str) -> dict:
+    """Load metadata from a synthetic dataset directory."""
+    metadata_file = Path(dataset_path) / "metadata.json"
+    if metadata_file.exists():
+        with open(metadata_file, 'r') as f:
+            return json.load(f)
+    return {}
+
+def save_dataset_metadata(dataset_path: str, metadata: dict):
+    """Save metadata to a synthetic dataset directory."""
+    metadata_file = Path(dataset_path) / "metadata.json"
+    with open(metadata_file, 'w') as f:
+        json.dump(metadata, f, indent=2)
+
+@app.get("/api/datasets")
+async def list_synthetic_datasets() -> List[DatasetInfo]:
+    """List all available synthetic datasets."""
+    ensure_synthetic_datasets_dir()
+    datasets = []
+    
+    for dataset_dir in Path(SYNTHETIC_DATASETS_DIR).iterdir():
+        if dataset_dir.is_dir():
+            try:
+                # Count .tbl files
+                tbl_files = list(dataset_dir.glob("*.tbl"))
+                csv_file = dataset_dir / "synthetic_stars.csv"
+                
+                if csv_file.exists():
+                    # Read CSV to get star count and surveys
+                    df = pd.read_csv(csv_file)
+                    n_stars = len(df)
+                    
+                    # Get surveys from filenames
+                    surveys = set()
+                    for tbl_file in tbl_files:
+                        parts = tbl_file.stem.split('-')
+                        if len(parts) >= 2:
+                            surveys.add(parts[1])
+                    
+                    # Get metadata
+                    metadata = load_dataset_metadata(str(dataset_dir))
+                    
+                    # Count total data points
+                    total_points = 0
+                    for tbl_file in tbl_files:
+                        try:
+                            tbl_data = pd.read_csv(tbl_file, delimiter='\t')
+                            total_points += len(tbl_data)
+                        except:
+                            pass
+                    
+                    datasets.append(DatasetInfo(
+                        name=dataset_dir.name,
+                        path=str(dataset_dir),
+                        n_stars=n_stars,
+                        n_files=len(tbl_files),
+                        surveys=list(surveys),
+                        created_at=metadata.get('created_at'),
+                        total_data_points=total_points
+                    ))
+            except Exception as e:
+                print(f"Error reading dataset {dataset_dir.name}: {e}")
+                continue
+    
+    return sorted(datasets, key=lambda x: x.name)
+
+@app.post("/api/datasets/generate")
+async def generate_synthetic_dataset(request: DatasetGenerationRequest) -> DatasetInfo:
+    """Generate a new synthetic dataset."""
+    ensure_synthetic_datasets_dir()
+    
+    # Create dataset directory
+    dataset_path = Path(SYNTHETIC_DATASETS_DIR) / request.name
+    if dataset_path.exists():
+        raise HTTPException(status_code=400, detail=f"Dataset '{request.name}' already exists")
+    
+    try:
+        # Set random seed if provided
+        if request.seed:
+            np.random.seed(request.seed)
+        
+        # Generate the dataset
+        summary = generate_training_dataset_tbl(
+            output_dir=str(dataset_path),
+            n_stars=request.n_stars,
+            surveys=request.surveys,
+            max_days=request.max_days,
+            min_days=request.min_days,
+            noise_level=request.noise_level
+        )
+        
+        # Save metadata
+        metadata = {
+            'created_at': datetime.now().isoformat(),
+            'parameters': request.dict(),
+            'summary': summary
+        }
+        save_dataset_metadata(str(dataset_path), metadata)
+        
+        # Count total data points
+        total_points = 0
+        for tbl_file in dataset_path.glob("*.tbl"):
+            try:
+                tbl_data = pd.read_csv(tbl_file, delimiter='\t')
+                total_points += len(tbl_data)
+            except:
+                pass
+        
+        return DatasetInfo(
+            name=request.name,
+            path=str(dataset_path),
+            n_stars=request.n_stars,
+            n_files=summary['n_files'],
+            surveys=request.surveys,
+            created_at=metadata['created_at'],
+            total_data_points=total_points
+        )
+        
+    except Exception as e:
+        # Clean up on failure
+        if dataset_path.exists():
+            shutil.rmtree(dataset_path)
+        raise HTTPException(status_code=500, detail=f"Failed to generate dataset: {str(e)}")
+
+@app.get("/api/datasets/{dataset_name}")
+async def get_dataset_info(dataset_name: str) -> DatasetInfo:
+    """Get information about a specific synthetic dataset."""
+    dataset_path = Path(SYNTHETIC_DATASETS_DIR) / dataset_name
+    if not dataset_path.exists():
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_name}' not found")
+    
+    # Count files and get metadata
+    tbl_files = list(dataset_path.glob("*.tbl"))
+    csv_file = dataset_path / "synthetic_stars.csv"
+    
+    if not csv_file.exists():
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_name}' metadata not found")
+    
+    df = pd.read_csv(csv_file)
+    n_stars = len(df)
+    
+    # Get surveys from filenames
+    surveys = set()
+    for tbl_file in tbl_files:
+        parts = tbl_file.stem.split('-')
+        if len(parts) >= 2:
+            surveys.add(parts[1])
+    
+    metadata = load_dataset_metadata(str(dataset_path))
+    
+    # Count total data points
+    total_points = 0
+    for tbl_file in tbl_files:
+        try:
+            tbl_data = pd.read_csv(tbl_file, delimiter='\t')
+            total_points += len(tbl_data)
+        except:
+            pass
+    
+    return DatasetInfo(
+        name=dataset_name,
+        path=str(dataset_path),
+        n_stars=n_stars,
+        n_files=len(tbl_files),
+        surveys=list(surveys),
+        created_at=metadata.get('created_at'),
+        total_data_points=total_points
+    )
+
+@app.get("/api/datasets/{dataset_name}/stars")
+async def list_dataset_stars(dataset_name: str) -> List[SyntheticStarInfo]:
+    """List all stars in a synthetic dataset."""
+    dataset_path = Path(SYNTHETIC_DATASETS_DIR) / dataset_name
+    csv_file = dataset_path / "synthetic_stars.csv"
+    
+    if not csv_file.exists():
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_name}' not found")
+    
+    df = pd.read_csv(csv_file)
+    stars = []
+    
+    for _, row in df.iterrows():
+        star_id = int(row['star_number'])
+        
+        # Find available surveys for this star
+        star_surveys = []
+        for tbl_file in dataset_path.glob(f"{star_id}-*.tbl"):
+            parts = tbl_file.stem.split('-')
+            if len(parts) >= 2:
+                star_surveys.append(parts[1])
+        
+        stars.append(SyntheticStarInfo(
+            star_id=star_id,
+            name=row['name'],
+            variability_class=row['class'],
+            primary_period=None if row['primary_period'] == -9 else float(row['primary_period']),
+            secondary_period=None if row['secondary_period'] == -9 else float(row['secondary_period']),
+            surveys=star_surveys
+        ))
+    
+    return sorted(stars, key=lambda x: x.star_id)
+
+@app.get("/api/datasets/{dataset_name}/star/{star_id}/survey/{survey_name}")
+async def get_synthetic_star_data(dataset_name: str, star_id: int, survey_name: str) -> ProcessedData:
+    """Get light curve data for a synthetic star in a specific survey."""
+    dataset_path = Path(SYNTHETIC_DATASETS_DIR) / dataset_name
+    tbl_file = dataset_path / f"{star_id}-{survey_name}.tbl"
+    
+    if not tbl_file.exists():
+        raise HTTPException(status_code=404, detail=f"Data file not found for star {star_id} in survey {survey_name}")
+    
+    try:
+        # Read .tbl file, handling comment header properly
+        with open(tbl_file, 'r') as f:
+            lines = f.readlines()
+        
+        # Find the first non-comment line (should be header)
+        data_start = 0
+        header_line = None
+        for i, line in enumerate(lines):
+            line = line.strip()
+            if line.startswith('#'):
+                # Extract header from comment line
+                if 'Time' in line and 'Flux' in line:
+                    header_line = line[1:].strip()  # Remove '#' and whitespace
+                continue
+            else:
+                data_start = i
+                break
+        
+        if header_line:
+            # Use the header from comment
+            col_names = [col.strip() for col in header_line.split('\t')]
+            # Simplify column names
+            col_names = [col.split(' ')[0] for col in col_names]  # Take first word (remove units)
+        else:
+            col_names = ['Time', 'Flux', 'Error']
+        
+        # Read the data starting from data_start
+        df = pd.read_csv(tbl_file, delimiter='\t', skiprows=data_start, names=col_names)
+        
+        # Expected columns: Time, Flux, Error
+        if 'Time' not in df.columns or 'Flux' not in df.columns:
+            raise HTTPException(status_code=500, detail=f"Invalid .tbl file format. Found columns: {df.columns.tolist()}")
+        
+        time = df['Time'].tolist()
+        flux = df['Flux'].tolist()
+        error = df['Error'].tolist() if 'Error' in df.columns else [0.002] * len(flux)
+        
+        return ProcessedData(
+            time=time,
+            flux=flux,
+            error=error
+        )
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading data file: {str(e)}")
+
+@app.delete("/api/datasets/{dataset_name}")
+async def delete_synthetic_dataset(dataset_name: str) -> dict:
+    """Delete a synthetic dataset."""
+    dataset_path = Path(SYNTHETIC_DATASETS_DIR) / dataset_name
+    
+    if not dataset_path.exists():
+        raise HTTPException(status_code=404, detail=f"Dataset '{dataset_name}' not found")
+    
+    try:
+        shutil.rmtree(dataset_path)
+        return {"message": f"Dataset '{dataset_name}' deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete dataset: {str(e)}")
+
+# ===== End Synthetic Dataset Management =====
+
 import argparse
 import uvicorn
 
@@ -438,7 +729,12 @@ def main(args = None):
     parser.add_argument('-h,--help', action='help', help='Show this help message and exit')
     parser.add_argument('--port', type=int, default=8000, help='Port to run the API on (default: 8000)')
     args = parser.parse_args(args)
-    star_list.load_from_file(config.Config.IMPULS_STARS_PATH)
+    # Skip loading star file for now due to coordinate parsing issues
+    try:
+        star_list.load_from_file(config.Config.IMPULS_STARS_PATH)
+    except Exception as e:
+        print(f"Warning: Failed to load star file: {e}")
+        print("Continuing without star data...")
     uvicorn.run(app, host='0.0.0.0', port=args.port, log_level="info")
 
 if __name__ == "__main__":
