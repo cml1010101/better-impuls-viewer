@@ -31,7 +31,7 @@ interface SEDData {
   message?: string;
 }
 
-const API_BASE = 'http://localhost:8000/api';
+export const API_BASE = `${window.location.protocol}//${window.location.host}/api`;
 
 // Mock data for when API is not available
 const getMockSurveys = () => [
@@ -241,10 +241,11 @@ export const fetchSEDData = async (starNumber: number): Promise<SEDData> => {
       };
     }
     const data = await response.json();
-    
-    // If the URL is relative, convert it to absolute URL using API_BASE
-    if (data.url && data.url.startsWith('/api/')) {
-      data.url = `${API_BASE.replace('/api', '')}${data.url}`;
+
+    console.log('Fetched SED data:', data);
+
+    if (data.url && data.available) {
+      data.url = `${API_BASE}${data.url}`;
     }
     
     return data;

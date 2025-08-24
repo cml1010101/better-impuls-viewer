@@ -37,3 +37,5 @@ Thumbs.db
 trained_cnn_model.pth
 
 .env
+
+impuls-data/

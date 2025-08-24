@@ -1,0 +1,46 @@
+# Docker ignore file for Better Impuls Viewer Backend
+# Exclude frontend and development files
+
+# Frontend directory (not needed for backend container)
+frontend/
+
+# Development files
+.git/
+.github/
+*.md
+.gitignore
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.env
+
+# Development tools
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Sample data (keep only impuls-data)
+sample_data/
+
+# Jupyter notebooks
+*.ipynb
+
+# OS files
+.DS_Store
+Thumbs.db
