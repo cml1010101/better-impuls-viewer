@@ -31,7 +31,7 @@ interface SEDData {
   message?: string;
 }
 
-const API_BASE = 'http://localhost:8000/api';
+const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000/api`;
 
 // Mock data for when API is not available
 const getMockSurveys = () => [

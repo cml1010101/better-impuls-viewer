@@ -48,7 +48,7 @@ sudo cp -r frontend/dist/* "$TARGET_DIR/"
 
 # Set proper permissions
 echo "Setting permissions..."
-sudo chown -R www-data:www-data "$TARGET_DIR"
+# sudo chown -R www-data:www-data "$TARGET_DIR"
 sudo chmod -R 755 "$TARGET_DIR"
 
 # Verify deployment
