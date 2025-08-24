@@ -19,7 +19,7 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
-@app.get("/api/")
+@app.get("/")
 async def read_root():
     return {"message": "Welcome to the Better IMPULS Viewer API!"}
 
@@ -32,12 +32,12 @@ mast_star_db = MASTStarDatabase()
 
 from models import StarInfo, StarSurveys, Coordinates, SEDData
 
-@app.get("/api/stars")
+@app.get("/stars")
 async def list_stars() -> list[int]:
     """List all stars in the database."""
     return star_list.list_stars()
 
-@app.get("/api/star/{star_number}")
+@app.get("/star/{star_number}")
 async def get_star(star_number: int) -> StarInfo:
     """Get metadata for a specific star."""
     star_metadata = star_list.get_star(star_number)
@@ -49,7 +49,7 @@ async def get_star(star_number: int) -> StarInfo:
         coordinates=Coordinates(ra=star_metadata.coordinates.ra.deg, dec=star_metadata.coordinates.dec.deg)
     )
 
-@app.get("/api/star/{star_number}/sed")
+@app.get("/star/{star_number}/sed")
 async def get_star_sed(star_number: int) -> SEDData:
     """Get SED information for a specific star."""
     star_metadata = star_list.get_star(star_number)
@@ -65,7 +65,7 @@ async def get_star_sed(star_number: int) -> SEDData:
         )
     
     # Return local backend URL that will serve the image
-    local_sed_url = f"/api/star/{star_number}/sed/image"
+    local_sed_url = f"/star/{star_number}/sed/image"
     
     return SEDData(
         url=local_sed_url,
@@ -73,7 +73,7 @@ async def get_star_sed(star_number: int) -> SEDData:
         message="SED data available"
     )
 
-@app.get("/api/star/{star_number}/sed/image")
+@app.get("/star/{star_number}/sed/image")
 async def get_star_sed_image(star_number: int):
     """Serve the SED PNG image for a specific star."""
     star_metadata = star_list.get_star(star_number)
@@ -108,7 +108,7 @@ async def get_star_sed_image(star_number: int):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error serving SED image: {str(e)}")
 
-@app.get("/api/star/{star_number}/surveys")
+@app.get("/star/{star_number}/surveys")
 async def get_star_surveys(star_number: int, use_mast: bool = False) -> StarSurveys:
     """Get survey data for a specific star."""
     star_metadata = star_list.get_star(star_number)
@@ -128,7 +128,7 @@ async def get_star_surveys(star_number: int, use_mast: bool = False) -> StarSurv
 from fastapi import HTTPException
 from models import ProcessedData
 
-@app.get("/api/star/{star_number}/survey/{survey_name}/raw")
+@app.get("/star/{star_number}/survey/{survey_name}/raw")
 async def get_star_survey_data_by_name(star_number: int, survey_name: str, use_mast: bool = False) -> ProcessedData:
     """Get survey data for a specific star and survey."""
     star_metadata = star_list.get_star(star_number)
@@ -183,7 +183,7 @@ def get_campaigns_for_survey(star_number: int, survey_name: str, use_mast: bool 
         campaign_infos.append((campaign_info, clean_campaign_data))
     return campaign_infos
 
-@app.get("/api/star/{star_number}/survey/{survey_name}/campaigns")
+@app.get("/star/{star_number}/survey/{survey_name}/campaigns")
 async def get_star_survey_campaigns(star_number: int, survey_name: str, use_mast: bool = False) -> list[CampaignInfo]:
     """Get campaigns for a specific star and survey."""
     star_metadata = star_list.get_star(star_number)
@@ -197,7 +197,7 @@ async def get_star_survey_campaigns(star_number: int, survey_name: str, use_mast
     
     return [campaign_info[0] for campaign_info in campaigns]
 
-@app.get("/api/star/{star_number}/survey/{survey_name}/campaigns/{campaign_id}/raw")
+@app.get("/star/{star_number}/survey/{survey_name}/campaigns/{campaign_id}/raw")
 async def get_star_survey_campaign(star_number: int, survey_name: str, campaign_id: int, use_mast: bool = False) -> ProcessedData:
     """Get a specific campaign for a star and survey."""
     star_metadata = star_list.get_star(star_number)
@@ -219,7 +219,7 @@ async def get_star_survey_campaign(star_number: int, survey_name: str, campaign_
 
 from models import PeriodogramData, PhaseFoldedData
 
-@app.get("/api/star/{star_number}/survey/{survey_name}/campaigns/{campaign_id}/periodogram")
+@app.get("/star/{star_number}/survey/{survey_name}/campaigns/{campaign_id}/periodogram")
 async def get_star_survey_campaign_periodogram(star_number: int, survey_name: str, campaign_id: int, use_mast: bool = False) -> PeriodogramData:
     """Get periodogram data for a specific campaign."""
     star_metadata = star_list.get_star(star_number)
@@ -241,7 +241,7 @@ async def get_star_survey_campaign_periodogram(star_number: int, survey_name: st
         powers=powers.tolist()
     )
 
-@app.get("/api/star/{star_number}/survey/{survey_name}/campaigns/{campaign_id}/phase_folded")
+@app.get("/star/{star_number}/survey/{survey_name}/campaigns/{campaign_id}/phase_folded")
 async def get_star_survey_campaign_phase_folded(star_number: int, survey_name: str, campaign_id: int, period: float, use_mast: bool = False) -> PhaseFoldedData:
     """Get phase-folded data for a specific campaign."""
     star_metadata = star_list.get_star(star_number)
@@ -359,7 +359,7 @@ def prepare_model_input(multi_branch_data: dict) -> tuple:
     
     return lc, pgram, folded_list, logP_list
 
-@app.get("/api/star/{star_number}/survey/{survey_name}/campaigns/{campaign_id}/auto_analysis")
+@app.get("/star/{star_number}/survey/{survey_name}/campaigns/{campaign_id}/auto_analysis")
 async def get_auto_periodization_classification(star_number: int, survey_name: str, campaign_id: int, use_mast: bool = False) -> PeriodizationResult:
     """Get automatic periodization and classification for a campaign using the trained ML model."""
     

@@ -31,7 +31,7 @@ interface SEDData {
   message?: string;
 }
 
-const API_BASE = `${window.location.protocol}//${window.location.hostname}:8000/api`;
+export const API_BASE = `${window.location.protocol}//${window.location.hostname}/api`;
 
 // Mock data for when API is not available
 const getMockSurveys = () => [

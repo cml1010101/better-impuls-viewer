@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { PeriodCache } from '../../utils/periodCache';
 import styles from './StarList.module.css';
+import { API_BASE } from '../../utils/api';
 
 interface StarListProps {
   onSelectStar: (starNumber: number) => void;
@@ -15,8 +16,6 @@ interface StarWithPeriods {
   } | null;
   totalCachedPeriods: number;
 }
-
-const API_BASE = 'http://localhost:8000/api';
 
 const StarList: React.FC<StarListProps> = ({ onSelectStar }) => {
   const [stars, setStars] = useState<number[]>([]);

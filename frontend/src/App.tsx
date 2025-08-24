@@ -3,8 +3,12 @@ import StarList from './components/StarList/StarList';
 import StarPage from './components/StarPage/StarPage';
 import styles from './App.module.css';
 
+const API_BASE = 'http://localhost:8000/api';
+
 function App() {
   const [selectedStar, setSelectedStar] = useState<number | null>(null);
+
+  console.log('API_BASE:', API_BASE);
 
   const handleSelectStar = (starNumber: number) => {
     setSelectedStar(starNumber);
