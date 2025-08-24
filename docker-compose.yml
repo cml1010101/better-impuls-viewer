@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  backend:
+    build: .
+    container_name: better-impuls-viewer-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATA_DIR=/app/impuls-data
+      - PYTHONPATH=/app
+    volumes:
+      # Optional: mount external data directory if needed
+      # - ./impuls-data:/app/impuls-data:ro
+      - /tmp/impuls-logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/api/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  default:
+    name: better-impuls-viewer-network
