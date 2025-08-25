@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 import httpx
 import io
+import os
 
 import config
 
@@ -23,11 +24,32 @@ app.add_middleware(
 async def read_root():
     return {"message": "Welcome to the Better IMPULS Viewer API!"}
 
-from database import StarList, PinputStarDatabase, MASTStarDatabase
+from dataset import StarDataset, DatasetStarDatabase, StarMetadata, DEFAULT_SURVEYS
+from database import MASTStarDatabase  # Keep MAST functionality for now
 
-star_list = StarList()
+# Try to load from dataset file, fall back to CSV if needed
+dataset_path = os.path.join(config.Config.DATA_DIR, 'stars_dataset.pkl')
+# Convert to absolute path if relative (no need to adjust if running from project root)
+if not os.path.isabs(dataset_path):
+    # Check if we're running from backend directory
+    if os.path.basename(os.getcwd()) == 'backend':
+        dataset_path = os.path.join('..', dataset_path)
 
-pinput_star_db = PinputStarDatabase(config.Config.DATA_DIR)
+star_dataset = StarDataset(dataset_path if os.path.exists(dataset_path) else None)
+
+# If no dataset file exists, load from CSV (backward compatibility)
+if not star_dataset.stars:
+    csv_path = config.Config.IMPULS_STARS_PATH
+    if not os.path.isabs(csv_path):
+        # Check if we're running from backend directory
+        if os.path.basename(os.getcwd()) == 'backend':
+            csv_path = os.path.join('..', csv_path)
+    if os.path.exists(csv_path):
+        star_dataset.load_from_csv(csv_path)
+    else:
+        print(f"Warning: No star data found at {csv_path}")
+
+dataset_star_db = DatasetStarDatabase(star_dataset)
 mast_star_db = MASTStarDatabase()
 
 from models import StarInfo, StarSurveys, Coordinates, SEDData
@@ -35,12 +57,12 @@ from models import StarInfo, StarSurveys, Coordinates, SEDData
 @app.get("/stars")
 async def list_stars() -> list[int]:
     """List all stars in the database."""
-    return star_list.list_stars()
+    return star_dataset.list_stars()
 
 @app.get("/star/{star_number}")
 async def get_star(star_number: int) -> StarInfo:
     """Get metadata for a specific star."""
-    star_metadata = star_list.get_star(star_number)
+    star_metadata = star_dataset.get_star(star_number)
     if star_metadata is None:
         return {"error": "Star not found"}
     return StarInfo(
@@ -52,7 +74,7 @@ async def get_star(star_number: int) -> StarInfo:
 @app.get("/star/{star_number}/sed")
 async def get_star_sed(star_number: int) -> SEDData:
     """Get SED information for a specific star."""
-    star_metadata = star_list.get_star(star_number)
+    star_metadata = star_dataset.get_star(star_number)
     if star_metadata is None:
         raise HTTPException(status_code=404, detail="Star not found")
     
@@ -76,7 +98,7 @@ async def get_star_sed(star_number: int) -> SEDData:
 @app.get("/star/{star_number}/sed/image")
 async def get_star_sed_image(star_number: int):
     """Serve the SED PNG image for a specific star."""
-    star_metadata = star_list.get_star(star_number)
+    star_metadata = star_dataset.get_star(star_number)
     if star_metadata is None:
         raise HTTPException(status_code=404, detail="Star not found")
     
@@ -111,14 +133,14 @@ async def get_star_sed_image(star_number: int):
 @app.get("/star/{star_number}/surveys")
 async def get_star_surveys(star_number: int, use_mast: bool = False) -> StarSurveys:
     """Get survey data for a specific star."""
-    star_metadata = star_list.get_star(star_number)
+    star_metadata = star_dataset.get_star(star_number)
     if star_metadata is None:
         return {"error": "Star not found"}
     
     if use_mast:
         survey_data = mast_star_db.get_survey_data(star_metadata)
     else:
-        survey_data = pinput_star_db.get_survey_data(star_metadata)
+        survey_data = dataset_star_db.get_survey_data(star_metadata)
     
     return StarSurveys(
         star_number=star_number,
@@ -131,14 +153,14 @@ from models import ProcessedData
 @app.get("/star/{star_number}/survey/{survey_name}/raw")
 async def get_star_survey_data_by_name(star_number: int, survey_name: str, use_mast: bool = False) -> ProcessedData:
     """Get survey data for a specific star and survey."""
-    star_metadata = star_list.get_star(star_number)
+    star_metadata = star_dataset.get_star(star_number)
     if star_metadata is None:
         return {"error": "Star not found"}
     
     if use_mast:
         survey_data = mast_star_db.get_survey_data(star_metadata)
     else:
-        survey_data = pinput_star_db.get_survey_data(star_metadata)
+        survey_data = dataset_star_db.get_survey_data(star_metadata)
     
     if survey_name not in survey_data:
         raise HTTPException(status_code=404, detail=f"Survey '{survey_name}' not found for star {star_number}")
@@ -161,13 +183,13 @@ import numpy as np
 @lru_cache(maxsize=128)
 def get_campaigns_for_survey(star_number: int, survey_name: str, use_mast: bool = False) -> list[tuple[CampaignInfo, np.ndarray]]:
     """Get all campaigns for a specific survey."""
-    star_metadata = star_list.get_star(star_number)
+    star_metadata = star_dataset.get_star(star_number)
     if star_metadata is None:
         raise ValueError("Star not found")
     if use_mast:
         survey_data = mast_star_db.get_survey_data(star_metadata)
     else:
-        survey_data = pinput_star_db.get_survey_data(star_metadata)
+        survey_data = dataset_star_db.get_survey_data(star_metadata)
     campaigns = find_all_campaigns(survey_data[survey_name], config.Config.DEFAULT_THRESHOLD)
     campaign_infos = []
     for i, campaign in enumerate(campaigns):
@@ -186,7 +208,7 @@ def get_campaigns_for_survey(star_number: int, survey_name: str, use_mast: bool 
 @app.get("/star/{star_number}/survey/{survey_name}/campaigns")
 async def get_star_survey_campaigns(star_number: int, survey_name: str, use_mast: bool = False) -> list[CampaignInfo]:
     """Get campaigns for a specific star and survey."""
-    star_metadata = star_list.get_star(star_number)
+    star_metadata = star_dataset.get_star(star_number)
     if star_metadata is None:
         raise HTTPException(status_code=404, detail="Star not found")
     
@@ -200,7 +222,7 @@ async def get_star_survey_campaigns(star_number: int, survey_name: str, use_mast
 @app.get("/star/{star_number}/survey/{survey_name}/campaigns/{campaign_id}/raw")
 async def get_star_survey_campaign(star_number: int, survey_name: str, campaign_id: int, use_mast: bool = False) -> ProcessedData:
     """Get a specific campaign for a star and survey."""
-    star_metadata = star_list.get_star(star_number)
+    star_metadata = star_dataset.get_star(star_number)
     if star_metadata is None:
         raise HTTPException(status_code=404, detail="Star not found")
     
@@ -222,7 +244,7 @@ from models import PeriodogramData, PhaseFoldedData
 @app.get("/star/{star_number}/survey/{survey_name}/campaigns/{campaign_id}/periodogram")
 async def get_star_survey_campaign_periodogram(star_number: int, survey_name: str, campaign_id: int, use_mast: bool = False) -> PeriodogramData:
     """Get periodogram data for a specific campaign."""
-    star_metadata = star_list.get_star(star_number)
+    star_metadata = star_dataset.get_star(star_number)
     if star_metadata is None:
         raise HTTPException(status_code=404, detail="Star not found")
     
@@ -244,7 +266,7 @@ async def get_star_survey_campaign_periodogram(star_number: int, survey_name: st
 @app.get("/star/{star_number}/survey/{survey_name}/campaigns/{campaign_id}/phase_folded")
 async def get_star_survey_campaign_phase_folded(star_number: int, survey_name: str, campaign_id: int, period: float, use_mast: bool = False) -> PhaseFoldedData:
     """Get phase-folded data for a specific campaign."""
-    star_metadata = star_list.get_star(star_number)
+    star_metadata = star_dataset.get_star(star_number)
     if star_metadata is None:
         raise HTTPException(status_code=404, detail="Star not found")
     
@@ -369,7 +391,7 @@ async def get_auto_periodization_classification(star_number: int, survey_name: s
         raise HTTPException(status_code=503, detail="Trained model not available. Please train the model first using the training script.")
     
     # Get campaign data (same as other endpoints)
-    star_metadata = star_list.get_star(star_number)
+    star_metadata = star_dataset.get_star(star_number)
     if star_metadata is None:
         raise HTTPException(status_code=404, detail="Star not found")
     
@@ -438,7 +460,7 @@ def main(args = None):
     parser.add_argument('-h,--help', action='help', help='Show this help message and exit')
     parser.add_argument('--port', type=int, default=8000, help='Port to run the API on (default: 8000)')
     args = parser.parse_args(args)
-    star_list.load_from_file(config.Config.IMPULS_STARS_PATH)
+    # Dataset loading is now handled during initialization
     uvicorn.run(app, host='0.0.0.0', port=args.port, log_level="info")
 
 if __name__ == "__main__":
