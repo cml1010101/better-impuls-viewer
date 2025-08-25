@@ -68,9 +68,6 @@ if star_dataset is None:
         print(f"Warning: No star data found at {data_dir}")
         star_dataset = StarDataset([])  # Initialize empty dataset
 
-# Global star dataset
-star_dataset = None
-
 from models import StarInfo, StarSurveys, Coordinates, SEDData
 
 @app.get("/stars")
