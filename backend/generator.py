@@ -5,12 +5,36 @@ from typing import Tuple, List, Optional, NamedTuple
 
 # ===== Utility Functions =====
 def random_time(n_points=500, days=100, rng=None):
-    """Generate random time sampling to mimic real surveys"""
-    uniform_time = np.linspace(0, days, n_points)
-    # Randomly perturb time points to avoid perfect regularity
+    """Generate random time sampling to mimic real surveys with observational gaps"""
     rng = rng or np.random.default_rng()
-    uniform_time += np.random.normal(0, days/(n_points*10), n_points)
-    return np.sort(uniform_time)
+    
+    # Create multiple observing sessions with gaps between them
+    n_sessions = rng.integers(2, 5)  # 2-4 observing sessions
+    session_points = np.array_split(np.arange(n_points), n_sessions)
+    
+    time = np.array([])
+    current_time = 0
+    
+    for i, session in enumerate(session_points):
+        # Ensure session duration is reasonable
+        max_session_duration = days * 0.8 / n_sessions  # Don't use more than 80% of time for sessions
+        session_duration = rng.uniform(1, max(2, max_session_duration))  # At least 1 day per session
+        session_time = np.linspace(current_time, current_time + session_duration, len(session))
+        
+        # Add small random variations within the session
+        if len(session) > 1:
+            session_time += rng.normal(0, session_duration/(len(session)*20), len(session))
+        
+        time = np.concatenate([time, session_time])
+        
+        # Add gap to next session (except for the last one)
+        if i < n_sessions - 1:
+            gap_duration = rng.uniform(0.5, 2)  # 0.5-2 day gaps between sessions
+            current_time = session_time[-1] + gap_duration
+        else:
+            current_time = session_time[-1]
+    
+    return np.sort(time)
 
 def add_noise(flux, noise_level=0.02, rng=None):
     """Add Gaussian observational noise"""
@@ -500,36 +524,197 @@ def generate_dataset(
     return dataset
 
 
+def convert_synthetic_to_star_format(synthetic_lcs: List[SyntheticLightCurve], base_star_number: int = 1000) -> List:
+    """
+    Convert synthetic light curves to Star format compatible with StarDataset.
+    
+    Parameters
+    ----------
+    synthetic_lcs : List[SyntheticLightCurve]
+        List of synthetic light curves from generate_dataset()
+    base_star_number : int
+        Starting star number for synthetic stars
+        
+    Returns
+    -------
+    List[Star]
+        List of Star objects compatible with StarDataset
+    """
+    # Import here to avoid circular imports
+    from utils.dataset import Star, LightCurve, Campaign, create_star_from_raw_light_curve
+    
+    stars = []
+    current_star_number = base_star_number
+    
+    # Group synthetic light curves by class for diversity
+    by_class = {}
+    for lc in synthetic_lcs:
+        if lc.label_str not in by_class:
+            by_class[lc.label_str] = []
+        by_class[lc.label_str].append(lc)
+    
+    # Convert each class group to stars
+    for class_name, class_lcs in by_class.items():
+        for i, syn_lc in enumerate(class_lcs):
+            # Create synthetic coordinates (spread around the sky)
+            ra = (current_star_number * 137.5) % 360  # Golden angle spacing
+            dec = -30 + (current_star_number * 23.7) % 60  # Vary declination
+            
+            # Convert synthetic data to raw light curve format
+            raw_data = np.column_stack((syn_lc.time, syn_lc.flux))
+            
+            # Create surveys dict - use "synthetic" as survey name with class info
+            survey_name = f"synthetic_{class_name.replace(' ', '_')}"
+            raw_light_curves = {survey_name: raw_data}
+            
+            # Create star name
+            star_name = f"Synthetic_{class_name.title().replace(' ', '')}_{i+1:03d}"
+            
+            # Create star using the dataset infrastructure
+            star = create_star_from_raw_light_curve(
+                star_number=current_star_number,
+                coordinates=(ra, dec),
+                raw_light_curves=raw_light_curves,
+                name=star_name,
+                min_length=10  # Lower threshold for synthetic data (in data points)
+            )
+            
+            # Add metadata about the synthetic nature
+            star.synthetic_metadata = {
+                'class_label': syn_lc.label,
+                'class_name': syn_lc.label_str,
+                'slope': syn_lc.slope,
+                'primary_period': syn_lc.primary_period,
+                'secondary_period': syn_lc.secondary_period,
+                'generated_days': syn_lc.time[-1] - syn_lc.time[0],
+                'n_points': len(syn_lc.time)
+            }
+            
+            stars.append(star)
+            current_star_number += 1
+    
+    return stars
+
+def generate_synthetic_dataset(n_per_class: int = 10, output_path: str = None, **kwargs):
+    """
+    Generate synthetic dataset and save as StarDataset format.
+    
+    Parameters
+    ----------
+    n_per_class : int
+        Number of light curves per variability class
+    output_path : str, optional
+        Path to save the dataset. If None, saves to 'synthetic_stars_dataset.pkl'
+    **kwargs
+        Additional arguments passed to generate_light_curve()
+        
+    Returns
+    -------
+    StarDataset
+        Dataset containing synthetic stars
+    """
+    from utils.dataset import StarDataset
+    
+    # Generate synthetic light curves
+    print(f"Generating {n_per_class} light curves per class...")
+    synthetic_lcs = generate_dataset(n_per_class=n_per_class, **kwargs)
+    
+    # Convert to Star format
+    print("Converting to Star format...")
+    stars = convert_synthetic_to_star_format(synthetic_lcs)
+    
+    # Create dataset
+    dataset = StarDataset(stars)
+    
+    # Save to file
+    if output_path is None:
+        output_path = 'synthetic_stars_dataset.pkl'
+    
+    print(f"Saving dataset to {output_path}...")
+    dataset.save_to_file(output_path)
+    
+    # Print summary
+    total_campaigns = sum(len(lc.campaigns) for star in dataset.stars for lc in star.surveys.values())
+    surveys = set()
+    for star in dataset.stars:
+        if star.surveys:
+            surveys.update(star.surveys.keys())
+    
+    print(f"\nSynthetic Dataset Summary:")
+    print(f"  Stars: {len(dataset)}")
+    print(f"  Total campaigns: {total_campaigns}")
+    print(f"  Classes: {len(LC_GENERATORS)}")
+    print(f"  Surveys: {sorted(surveys)}")
+    
+    return dataset
+
 # ===== Example Usage =====
 
 if __name__ == "__main__":
-    # Generate example dataset
-    np.random.seed(42)
-    dataset = generate_dataset(n_per_class=10, max_days=50)
+    import argparse
     
-    print(f"Generated {len(dataset)} light curves across {len(LC_GENERATORS)} classes")
-    
-    # Show statistics from the dataset
-    labels = [lc.label for lc in dataset]
-    slopes = [lc.slope for lc in dataset]
-    periods = [lc.primary_period for lc in dataset if lc.primary_period is not None]
-    
-    print(f"\nClasses: {set(labels)}")
-    print(f"\nPeriodic curves: {len(periods)}/{len(labels)}")
-    if periods:
-        print(f"Primary Period range: {min(periods):.2f} - {max(periods):.2f} days")
-    
-    # Show slope statistics
-    print(f"Slope range: {min(slopes):.6f} - {max(slopes):.6f} flux/day")
+    def main():
+        parser = argparse.ArgumentParser(description="Generate synthetic astronomical light curves")
+        parser.add_argument('command', choices=['generate', 'test'], 
+                          help='Command to execute')
+        parser.add_argument('--n-per-class', type=int, default=10,
+                          help='Number of light curves per class (default: 10)')
+        parser.add_argument('--output', '-o', default='synthetic_stars_dataset.pkl',
+                          help='Output dataset file path (default: synthetic_stars_dataset.pkl)')
+        parser.add_argument('--max-days', type=float, default=50,
+                          help='Maximum observation time span in days (default: 50)')
+        parser.add_argument('--min-days', type=float, default=5,
+                          help='Minimum observation time span in days (default: 5)')
+        parser.add_argument('--noise-level', type=float, default=0.02,
+                          help='Noise level as fraction of flux (default: 0.02)')
+        parser.add_argument('--seed', type=int, default=42,
+                          help='Random seed for reproducibility (default: 42)')
+        
+        args = parser.parse_args()
+        
+        # Set random seed
+        np.random.seed(args.seed)
+        
+        if args.command == 'generate':
+            # Generate and save synthetic dataset
+            dataset = generate_synthetic_dataset(
+                n_per_class=args.n_per_class,
+                output_path=args.output,
+                max_days=args.max_days,
+                min_days=args.min_days,
+                noise_level=args.noise_level
+            )
+            print(f"Successfully generated synthetic dataset: {args.output}")
+            
+        elif args.command == 'test':
+            # Generate example dataset for testing
+            print("Generating test dataset...")
+            dataset = generate_dataset(n_per_class=3, max_days=20)
+            
+            print(f"Generated {len(dataset)} light curves across {len(LC_GENERATORS)} classes")
+            
+            # Show statistics from the dataset
+            labels = [lc.label for lc in dataset]
+            slopes = [lc.slope for lc in dataset]
+            periods = [lc.primary_period for lc in dataset if lc.primary_period is not None]
+            
+            print(f"\nClasses: {set(labels)}")
+            print(f"\nPeriodic curves: {len(periods)}/{len(labels)}")
+            if periods:
+                print(f"Primary Period range: {min(periods):.2f} - {max(periods):.2f} days")
+            
+            # Show slope statistics
+            print(f"Slope range: {min(slopes):.6f} - {max(slopes):.6f} flux/day")
 
-    # Example of accessing data from a single generated light curve
-    example_lc = dataset[0]
-    print(f"\nExample Light Curve:")
-    print(f"  Class: {example_lc.label}")
-    print(f"  Primary Period: {example_lc.primary_period:.2f} days" if example_lc.primary_period is not None else "  Primary Period: None")
-    print(f"  Secondary Period: {example_lc.secondary_period:.2f} days" if example_lc.secondary_period is not None else "  Secondary Period: None")
-    print(f"  Slope: {example_lc.slope:.6f} flux/day")
-    print(f"  Time array shape: {example_lc.time.shape}")
-    print(f"  Flux array shape: {example_lc.flux.shape}")
-    print(f"  First 5 flux values: {example_lc.flux[:5]}")
-    # Note: Visualization and further analysis can be done using libraries like matplotlib or pandas
+            # Example of accessing data from a single generated light curve
+            example_lc = dataset[0]
+            print(f"\nExample Light Curve:")
+            print(f"  Class: {example_lc.label}")
+            print(f"  Primary Period: {example_lc.primary_period:.2f} days" if example_lc.primary_period is not None else "  Primary Period: None")
+            print(f"  Secondary Period: {example_lc.secondary_period:.2f} days" if example_lc.secondary_period is not None else "  Secondary Period: None")
+            print(f"  Slope: {example_lc.slope:.6f} flux/day")
+            print(f"  Time array shape: {example_lc.time.shape}")
+            print(f"  Flux array shape: {example_lc.flux.shape}")
+            print(f"  First 5 flux values: {example_lc.flux[:5]}")
+            
+    main()
