@@ -24,10 +24,10 @@ app.add_middleware(
 async def read_root():
     return {"message": "Welcome to the Better IMPULS Viewer API!"}
 
-from dataset import StarDataset, DatasetStarDatabase, StarMetadata, DEFAULT_SURVEYS
+from utils.dataset import StarDataset, Star, LightCurve, Campaign
 from database import MASTStarDatabase  # Keep MAST functionality for now
 
-# Try to load from dataset file, fall back to CSV if needed
+# Try to load from dataset file, fall back to CSV/folder loading if needed
 dataset_path = os.path.join(config.Config.DATA_DIR, 'stars_dataset.pkl')
 # Convert to absolute path if relative (no need to adjust if running from project root)
 if not os.path.isabs(dataset_path):
@@ -35,21 +35,36 @@ if not os.path.isabs(dataset_path):
     if os.path.basename(os.getcwd()) == 'backend':
         dataset_path = os.path.join('..', dataset_path)
 
-star_dataset = StarDataset(dataset_path if os.path.exists(dataset_path) else None)
+star_dataset = None
 
-# If no dataset file exists, load from CSV (backward compatibility)
-if not star_dataset.stars:
-    csv_path = config.Config.IMPULS_STARS_PATH
-    if not os.path.isabs(csv_path):
+# First try to load from the user's dataset file format
+if os.path.exists(dataset_path):
+    try:
+        star_dataset = StarDataset.load_from_file(dataset_path)
+        print(f"Loaded {len(star_dataset)} stars from dataset file: {dataset_path}")
+    except Exception as e:
+        print(f"Failed to load dataset from {dataset_path}: {e}")
+
+# If no dataset file exists, load from CSV/folder (backward compatibility)
+if star_dataset is None:
+    data_dir = config.Config.DATA_DIR
+    if not os.path.isabs(data_dir):
         # Check if we're running from backend directory
         if os.path.basename(os.getcwd()) == 'backend':
-            csv_path = os.path.join('..', csv_path)
-    if os.path.exists(csv_path):
-        star_dataset.load_from_csv(csv_path)
+            data_dir = os.path.join('..', data_dir)
+    
+    if os.path.exists(data_dir):
+        try:
+            # Use the user's load_from_folder method which expects directory path
+            star_dataset = StarDataset.load_from_folder(data_dir)
+            print(f"Loaded {len(star_dataset)} stars from folder: {data_dir}")
+        except Exception as e:
+            print(f"Failed to load from folder {data_dir}: {e}")
+            star_dataset = StarDataset([])  # Initialize empty dataset
     else:
-        print(f"Warning: No star data found at {csv_path}")
+        print(f"Warning: No star data found at {data_dir}")
+        star_dataset = StarDataset([])  # Initialize empty dataset
 
-dataset_star_db = DatasetStarDatabase(star_dataset)
 mast_star_db = MASTStarDatabase()
 
 from models import StarInfo, StarSurveys, Coordinates, SEDData
@@ -57,25 +72,25 @@ from models import StarInfo, StarSurveys, Coordinates, SEDData
 @app.get("/stars")
 async def list_stars() -> list[int]:
     """List all stars in the database."""
-    return star_dataset.list_stars()
+    return [star.star_number for star in star_dataset.stars]
 
 @app.get("/star/{star_number}")
 async def get_star(star_number: int) -> StarInfo:
     """Get metadata for a specific star."""
-    star_metadata = star_dataset.get_star(star_number)
-    if star_metadata is None:
+    star = star_dataset.get_star(star_number)
+    if star is None:
         return {"error": "Star not found"}
     return StarInfo(
-        star_number=star_metadata.star_number,
-        name=star_metadata.name,
-        coordinates=Coordinates(ra=star_metadata.coordinates.ra.deg, dec=star_metadata.coordinates.dec.deg)
+        star_number=star.star_number,
+        name=star.name,
+        coordinates=Coordinates(ra=star.coordinates[0], dec=star.coordinates[1])
     )
 
 @app.get("/star/{star_number}/sed")
 async def get_star_sed(star_number: int) -> SEDData:
     """Get SED information for a specific star."""
-    star_metadata = star_dataset.get_star(star_number)
-    if star_metadata is None:
+    star = star_dataset.get_star(star_number)
+    if star is None:
         raise HTTPException(status_code=404, detail="Star not found")
     
     # Check if SED configuration is available
@@ -98,8 +113,8 @@ async def get_star_sed(star_number: int) -> SEDData:
 @app.get("/star/{star_number}/sed/image")
 async def get_star_sed_image(star_number: int):
     """Serve the SED PNG image for a specific star."""
-    star_metadata = star_dataset.get_star(star_number)
-    if star_metadata is None:
+    star = star_dataset.get_star(star_number)
+    if star is None:
         raise HTTPException(status_code=404, detail="Star not found")
     
     # Check if SED configuration is available
@@ -133,18 +148,27 @@ async def get_star_sed_image(star_number: int):
 @app.get("/star/{star_number}/surveys")
 async def get_star_surveys(star_number: int, use_mast: bool = False) -> StarSurveys:
     """Get survey data for a specific star."""
-    star_metadata = star_dataset.get_star(star_number)
-    if star_metadata is None:
+    star = star_dataset.get_star(star_number)
+    if star is None:
         return {"error": "Star not found"}
     
     if use_mast:
+        # For MAST, we need to create a compatible metadata object 
+        from astropy.coordinates import SkyCoord
+        star_metadata = type('StarMetadata', (), {
+            'star_number': star.star_number,
+            'name': star.name,
+            'coordinates': SkyCoord(ra=star.coordinates[0], dec=star.coordinates[1], unit='deg')
+        })()
         survey_data = mast_star_db.get_survey_data(star_metadata)
+        surveys = list(survey_data.keys())
     else:
-        survey_data = dataset_star_db.get_survey_data(star_metadata)
+        # Use the user's Star object which has surveys as a dict
+        surveys = list(star.surveys.keys()) if star.surveys else []
     
     return StarSurveys(
         star_number=star_number,
-        surveys=list(survey_data.keys())
+        surveys=surveys
     )
 
 from fastapi import HTTPException
@@ -153,23 +177,37 @@ from models import ProcessedData
 @app.get("/star/{star_number}/survey/{survey_name}/raw")
 async def get_star_survey_data_by_name(star_number: int, survey_name: str, use_mast: bool = False) -> ProcessedData:
     """Get survey data for a specific star and survey."""
-    star_metadata = star_dataset.get_star(star_number)
-    if star_metadata is None:
+    star = star_dataset.get_star(star_number)
+    if star is None:
         return {"error": "Star not found"}
     
     if use_mast:
+        # For MAST, we need to create a compatible metadata object 
+        from astropy.coordinates import SkyCoord
+        star_metadata = type('StarMetadata', (), {
+            'star_number': star.star_number,
+            'name': star.name,
+            'coordinates': SkyCoord(ra=star.coordinates[0], dec=star.coordinates[1], unit='deg')
+        })()
         survey_data = mast_star_db.get_survey_data(star_metadata)
+        
+        if survey_name not in survey_data:
+            raise HTTPException(status_code=404, detail=f"Survey '{survey_name}' not found for star {star_number}")
+        
+        data = survey_data[survey_name]
     else:
-        survey_data = dataset_star_db.get_survey_data(star_metadata)
-    
-    if survey_name not in survey_data:
-        raise HTTPException(status_code=404, detail=f"Survey '{survey_name}' not found for star {star_number}")
+        # Use the user's Star object which has surveys as a dict of LightCurve objects
+        if not star.surveys or survey_name not in star.surveys:
+            raise HTTPException(status_code=404, detail=f"Survey '{survey_name}' not found for star {star_number}")
+        
+        # Get the raw data from the LightCurve object
+        data = star.surveys[survey_name].raw_data
     
     # Remove all NaN values from the survey data
     return ProcessedData(
-        time=survey_data[survey_name][:, 0],
-        flux=survey_data[survey_name][:, 1],
-        error=[0.0] * len(survey_data[survey_name])  # Placeholder for error values
+        time=data[:, 0],
+        flux=data[:, 1],
+        error=[0.0] * len(data)  # Placeholder for error values
     )
 
 from data_processing import *
@@ -183,33 +221,56 @@ import numpy as np
 @lru_cache(maxsize=128)
 def get_campaigns_for_survey(star_number: int, survey_name: str, use_mast: bool = False) -> list[tuple[CampaignInfo, np.ndarray]]:
     """Get all campaigns for a specific survey."""
-    star_metadata = star_dataset.get_star(star_number)
-    if star_metadata is None:
+    star = star_dataset.get_star(star_number)
+    if star is None:
         raise ValueError("Star not found")
+    
     if use_mast:
+        # For MAST, compute campaigns using original data processing
+        from astropy.coordinates import SkyCoord
+        star_metadata = type('StarMetadata', (), {
+            'star_number': star.star_number,
+            'name': star.name,
+            'coordinates': SkyCoord(ra=star.coordinates[0], dec=star.coordinates[1], unit='deg')
+        })()
         survey_data = mast_star_db.get_survey_data(star_metadata)
+        campaigns = find_all_campaigns(survey_data[survey_name], config.Config.DEFAULT_THRESHOLD)
+        campaign_infos = []
+        for i, campaign in enumerate(campaigns):
+            clean_campaign_data = remove_y_outliers(campaign)
+            duration = clean_campaign_data[-1, 0] - clean_campaign_data[0, 0] if len(clean_campaign_data) > 0 else 0
+            campaign_info = CampaignInfo(
+                campaign_id=i,
+                survey=survey_name,
+                star_number=star_number,
+                data_points=len(campaign),
+                duration=duration
+            )
+            campaign_infos.append((campaign_info, clean_campaign_data))
+        return campaign_infos
     else:
-        survey_data = dataset_star_db.get_survey_data(star_metadata)
-    campaigns = find_all_campaigns(survey_data[survey_name], config.Config.DEFAULT_THRESHOLD)
-    campaign_infos = []
-    for i, campaign in enumerate(campaigns):
-        clean_campaign_data = remove_y_outliers(campaign)
-        duration = clean_campaign_data[-1, 0] - clean_campaign_data[0, 0] if len(clean_campaign_data) > 0 else 0
-        campaign_info = CampaignInfo(
-            campaign_id=i,
-            survey=survey_name,
-            star_number=star_number,
-            data_points=len(campaign.data),
-            duration=duration
-        )
-        campaign_infos.append((campaign_info, clean_campaign_data))
-    return campaign_infos
+        # Use the user's pre-computed campaigns
+        if not star.surveys or survey_name not in star.surveys:
+            return []
+        
+        light_curve = star.surveys[survey_name]
+        campaign_infos = []
+        for i, campaign in enumerate(light_curve.campaigns):
+            campaign_info = CampaignInfo(
+                campaign_id=i,
+                survey=survey_name,
+                star_number=star_number,
+                data_points=len(campaign.data),
+                duration=campaign.length
+            )
+            campaign_infos.append((campaign_info, campaign.data))
+        return campaign_infos
 
 @app.get("/star/{star_number}/survey/{survey_name}/campaigns")
 async def get_star_survey_campaigns(star_number: int, survey_name: str, use_mast: bool = False) -> list[CampaignInfo]:
     """Get campaigns for a specific star and survey."""
-    star_metadata = star_dataset.get_star(star_number)
-    if star_metadata is None:
+    star = star_dataset.get_star(star_number)
+    if star is None:
         raise HTTPException(status_code=404, detail="Star not found")
     
     try:
@@ -222,8 +283,8 @@ async def get_star_survey_campaigns(star_number: int, survey_name: str, use_mast
 @app.get("/star/{star_number}/survey/{survey_name}/campaigns/{campaign_id}/raw")
 async def get_star_survey_campaign(star_number: int, survey_name: str, campaign_id: int, use_mast: bool = False) -> ProcessedData:
     """Get a specific campaign for a star and survey."""
-    star_metadata = star_dataset.get_star(star_number)
-    if star_metadata is None:
+    star = star_dataset.get_star(star_number)
+    if star is None:
         raise HTTPException(status_code=404, detail="Star not found")
     
     try:
@@ -244,17 +305,31 @@ from models import PeriodogramData, PhaseFoldedData
 @app.get("/star/{star_number}/survey/{survey_name}/campaigns/{campaign_id}/periodogram")
 async def get_star_survey_campaign_periodogram(star_number: int, survey_name: str, campaign_id: int, use_mast: bool = False) -> PeriodogramData:
     """Get periodogram data for a specific campaign."""
-    star_metadata = star_dataset.get_star(star_number)
-    if star_metadata is None:
+    star = star_dataset.get_star(star_number)
+    if star is None:
         raise HTTPException(status_code=404, detail="Star not found")
     
     try:
-        campaigns = get_campaigns_for_survey(star_number, survey_name, use_mast)
-        if campaign_id < 0 or campaign_id >= len(campaigns):
-            raise HTTPException(status_code=404, detail="Campaign not found")
-        campaign_data = campaigns[campaign_id][1]
-        frequencies, powers = calculate_lomb_scargle(campaign_data)
-        periods = 1 / frequencies
+        if use_mast:
+            # For MAST, compute periodogram using original method
+            campaigns = get_campaigns_for_survey(star_number, survey_name, use_mast)
+            if campaign_id < 0 or campaign_id >= len(campaigns):
+                raise HTTPException(status_code=404, detail="Campaign not found")
+            campaign_data = campaigns[campaign_id][1]
+            frequencies, powers = calculate_lomb_scargle(campaign_data)
+            periods = 1 / frequencies
+        else:
+            # Use the user's pre-computed periodogram
+            if not star.surveys or survey_name not in star.surveys:
+                raise HTTPException(status_code=404, detail="Survey not found")
+            
+            light_curve = star.surveys[survey_name]
+            if campaign_id < 0 or campaign_id >= len(light_curve.campaigns):
+                raise HTTPException(status_code=404, detail="Campaign not found")
+            
+            campaign = light_curve.campaigns[campaign_id]
+            frequencies, powers = campaign.periodogram
+            periods = 1 / frequencies
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
     
@@ -266,25 +341,55 @@ async def get_star_survey_campaign_periodogram(star_number: int, survey_name: st
 @app.get("/star/{star_number}/survey/{survey_name}/campaigns/{campaign_id}/phase_folded")
 async def get_star_survey_campaign_phase_folded(star_number: int, survey_name: str, campaign_id: int, period: float, use_mast: bool = False) -> PhaseFoldedData:
     """Get phase-folded data for a specific campaign."""
-    star_metadata = star_dataset.get_star(star_number)
-    if star_metadata is None:
+    star = star_dataset.get_star(star_number)
+    if star is None:
         raise HTTPException(status_code=404, detail="Star not found")
     
     try:
-        campaigns = get_campaigns_for_survey(star_number, survey_name, use_mast)
-        if campaign_id < 0 or campaign_id >= len(campaigns):
-            raise HTTPException(status_code=404, detail="Campaign not found")
-        campaign_data = campaigns[campaign_id][1]
-        
-        # Phase folding logic
-        time = campaign_data[:, 0]
-        flux = campaign_data[:, 1]
-        phase = (time % period) / period  # Normalize phase to [0, 1)
-        
-        return PhaseFoldedData(
-            phase=phase.tolist(),
-            flux=flux.tolist()
-        )
+        if use_mast:
+            # For MAST, compute phase folding using original method
+            campaigns = get_campaigns_for_survey(star_number, survey_name, use_mast)
+            if campaign_id < 0 or campaign_id >= len(campaigns):
+                raise HTTPException(status_code=404, detail="Campaign not found")
+            campaign_data = campaigns[campaign_id][1]
+            
+            # Phase folding logic
+            time = campaign_data[:, 0]
+            flux = campaign_data[:, 1]
+            phase = (time % period) / period  # Normalize phase to [0, 1)
+            
+            return PhaseFoldedData(
+                phase=phase.tolist(),
+                flux=flux.tolist()
+            )
+        else:
+            # Use the user's pre-computed phase-folded data or compute it
+            if not star.surveys or survey_name not in star.surveys:
+                raise HTTPException(status_code=404, detail="Survey not found")
+            
+            light_curve = star.surveys[survey_name]
+            if campaign_id < 0 or campaign_id >= len(light_curve.campaigns):
+                raise HTTPException(status_code=404, detail="Campaign not found")
+            
+            campaign = light_curve.campaigns[campaign_id]
+            
+            # Check if we have pre-computed phase-folded data for this period
+            for folded_period, folded_data in campaign.best_folded_data:
+                if abs(folded_period - period) < 0.001:  # Close match
+                    return PhaseFoldedData(
+                        phase=folded_data[:, 0].tolist(),
+                        flux=folded_data[:, 1].tolist()
+                    )
+            
+            # If no pre-computed data found, compute it on the fly
+            time = campaign.data[:, 0]
+            flux = campaign.data[:, 1]
+            phase = (time % period) / period
+            
+            return PhaseFoldedData(
+                phase=phase.tolist(),
+                flux=flux.tolist()
+            )
     except ValueError as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -391,8 +496,8 @@ async def get_auto_periodization_classification(star_number: int, survey_name: s
         raise HTTPException(status_code=503, detail="Trained model not available. Please train the model first using the training script.")
     
     # Get campaign data (same as other endpoints)
-    star_metadata = star_dataset.get_star(star_number)
-    if star_metadata is None:
+    star = star_dataset.get_star(star_number)
+    if star is None:
         raise HTTPException(status_code=404, detail="Star not found")
     
     try:
