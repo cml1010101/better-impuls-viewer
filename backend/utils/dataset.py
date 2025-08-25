@@ -300,8 +300,7 @@ def create_star_from_raw_light_curve(star_number: int, coordinates: tuple[float,
         star_number=star_number,
         coordinates=coordinates,
         name=name,
-        raw_light_curve=raw_light_curve,
-        cleaned_campaigns=campaigns
+        surveys=survey_data
     )
 
 
@@ -323,11 +322,11 @@ class StarDataset(Dataset):
         self.stars = stars
 
     def save_to_file(self, filepath: str):
-        torch.save(self.stars, filepath)
+        torch.save(self.stars, filepath, pickle_protocol=4)
     
     @classmethod
     def load_from_file(cls, filepath: str) -> "StarDataset":
-        stars = torch.load(filepath)
+        stars = torch.load(filepath, weights_only=False)
         return cls(stars)
 
     @classmethod
@@ -370,9 +369,19 @@ class StarDataset(Dataset):
     def load_from_folder(cls, path: str):
         """Load the star list from a file."""
         stars = []
-        data = pd.read_csv(path, header=None, names=['star_number', 'name', 'coordinates'])
+        # path should be the directory containing impuls_stars.csv
+        csv_path = os.path.join(path, 'impuls_stars.csv')
+        if not os.path.exists(csv_path):
+            raise FileNotFoundError(f"impuls_stars.csv not found in {path}")
+            
+        data = pd.read_csv(csv_path, header=None, names=['star_number', 'name', 'coordinates'])
         for _, row in data.iterrows():
-            star_number = int(row['star_number'])
+            # Handle different star number formats (e.g., "1.1" -> 1)
+            star_number_str = str(row['star_number'])
+            if '.' in star_number_str:
+                star_number = int(float(star_number_str))
+            else:
+                star_number = int(star_number_str)
             name = row['name'] if pd.notna(row['name']) else None
             coordinates = cls.str_to_coords(row['coordinates'])
             surveys = {}
@@ -403,9 +412,10 @@ class StarDataset(Dataset):
         assert 0 <= idx < len(self.stars)
         star: Star = self.stars[idx]
         inputs = []
-        for campaign in star.cleaned_campaigns:
-            for period, folded_data in campaign.best_folded_data:
-                inputs.append((period, torch.tensor(folded_data, dtype=torch.float32)))
+        for survey_name, light_curve in star.surveys.items():
+            for campaign in light_curve.campaigns:
+                for period, folded_data in campaign.best_folded_data:
+                    inputs.append((period, torch.tensor(folded_data, dtype=torch.float32)))
         return StarTrainingSample(inputs=inputs)
     
     def get_star(self, star_number: int) -> Star | None:
@@ -413,3 +423,84 @@ class StarDataset(Dataset):
             if star.star_number == star_number:
                 return star
         return None
+
+if __name__ == "__main__":
+    import argparse
+    import sys
+    
+    def main():
+        parser = argparse.ArgumentParser(description="Dataset utilities for astronomical data processing")
+        parser.add_argument('command', choices=['convert', 'info'], 
+                          help='Command to execute')
+        parser.add_argument('--input', '-i', required=True,
+                          help='Input directory path containing data files')
+        parser.add_argument('--output', '-o', 
+                          help='Output dataset file path (default: input_dir/stars_dataset.pkl)')
+        parser.add_argument('--min-length', type=int, default=50,
+                          help='Minimum campaign length for processing (default: 50)')
+        
+        args = parser.parse_args()
+        
+        if args.command == 'convert':
+            # Convert folder to dataset file
+            print(f"Loading data from folder: {args.input}")
+            try:
+                dataset = StarDataset.load_from_folder(args.input)
+                print(f"Successfully loaded {len(dataset)} stars")
+                
+                if args.output is None:
+                    output_path = os.path.join(args.input, 'stars_dataset.pkl')
+                else:
+                    output_path = args.output
+                
+                print(f"Saving dataset to: {output_path}")
+                dataset.save_to_file(output_path)
+                print("Dataset conversion completed successfully!")
+                
+                # Print summary
+                total_campaigns = sum(len(lc.campaigns) for star in dataset.stars for lc in star.surveys.values())
+                surveys = set()
+                for star in dataset.stars:
+                    if star.surveys:
+                        surveys.update(star.surveys.keys())
+                
+                print(f"\nSummary:")
+                print(f"  Stars: {len(dataset)}")
+                print(f"  Total campaigns: {total_campaigns}")
+                print(f"  Surveys found: {sorted(surveys)}")
+                
+            except Exception as e:
+                print(f"Error converting folder to dataset: {e}")
+                sys.exit(1)
+                
+        elif args.command == 'info':
+            # Show dataset information
+            dataset_path = os.path.join(args.input, 'stars_dataset.pkl')
+            if not os.path.exists(dataset_path):
+                print(f"No dataset file found at {dataset_path}")
+                sys.exit(1)
+            
+            try:
+                dataset = StarDataset.load_from_file(dataset_path)
+                print(f"Dataset file: {dataset_path}")
+                print(f"Stars: {len(dataset)}")
+                
+                total_campaigns = 0
+                surveys = set()
+                star_numbers = []
+                
+                for star in dataset.stars:
+                    star_numbers.append(star.star_number)
+                    if star.surveys:
+                        surveys.update(star.surveys.keys())
+                        total_campaigns += sum(len(lc.campaigns) for lc in star.surveys.values())
+                
+                print(f"Total campaigns: {total_campaigns}")
+                print(f"Surveys: {sorted(surveys)}")
+                print(f"Star numbers: {sorted(star_numbers)}")
+                
+            except Exception as e:
+                print(f"Error reading dataset: {e}")
+                sys.exit(1)
+    
+    main()

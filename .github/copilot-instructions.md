@@ -148,8 +148,9 @@ better-impuls-viewer/
 │   ├── app.py                # Main FastAPI application (start from root!)
 │   ├── config.py             # Configuration settings
 │   ├── models.py             # Pydantic data models
-│   ├── database.py           # Star database management
 │   ├── data_processing.py    # Data analysis functions
+│   ├── utils/               # Utility modules
+│   │   └── dataset.py       # Star dataset management and data structures
 │   ├── periodizer.py         # Period detection algorithms
 │   ├── train.py              # ML model training
 │   ├── eval.py               # Model evaluation
@@ -178,7 +179,7 @@ better-impuls-viewer/
 
 ### Coordinate parsing errors
 - **Cause**: Mismatch between coordinate format in CSV and parsing logic
-- **Solution**: Check the format of coordinates in `impuls-data/impuls_stars.csv` matches the expected format in `database.py`
+- **Solution**: Check the format of coordinates in `impuls-data/impuls_stars.csv` matches the expected format in `utils/dataset.py`
 
 ### Frontend build warnings about chunk size
 - **Expected behavior**: Plotly.js creates large bundles, warnings are normal
